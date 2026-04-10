@@ -318,7 +318,14 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
       setLoginForm(f => ({ ...f, error: 'Please fill all fields.' }));
       return;
     }
-    // Mock login: any valid email/password
+    
+    // Simulate a database check (Reject if password is not oneshot123)
+    if (loginForm.password !== 'oneshot123') {
+      setLoginForm(f => ({ ...f, error: 'Invalid email or password. Account not found.' }));
+      return;
+    }
+
+    // Success! Log them in
     const name = loginForm.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     setCurrentUser({ name, email: loginForm.email, referralCode: generateReferralCode(name) });
     setShowLoginModal(false);

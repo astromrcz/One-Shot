@@ -1,5 +1,9 @@
 import { useAppContext } from '../context/AppContext';
-import { Clock, Filter, Search, CheckCircle, XCircle, Bell, Users, Calendar, DollarSign, TableProperties, TrendingUp } from 'lucide-react';
+import { 
+  Clock, Filter, Search, CheckCircle, XCircle, Bell, Users, 
+  Calendar, DollarSign, TableProperties, TrendingUp, 
+  MessageSquare, Tag, Palette, ShieldAlert, Activity // Added new icons
+} from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { useState } from 'react';
 import type { ActivityType } from '../context/AppContext';
@@ -16,6 +20,11 @@ const activityIcons: Record<ActivityType, { icon: any; color: string; bgColor: s
   reservation_updated: { icon: TrendingUp, color: 'text-blue-400', bgColor: 'bg-blue-500/15' },
   payment_received: { icon: DollarSign, color: 'text-emerald-400', bgColor: 'bg-emerald-500/15' },
   reservation_cancelled: { icon: XCircle, color: 'text-rose-400', bgColor: 'bg-rose-500/15' },
+  // Added missing types:
+  feedback_received: { icon: MessageSquare, color: 'text-sky-400', bgColor: 'bg-sky-500/15' },
+  promo_created: { icon: Tag, color: 'text-fuchsia-400', bgColor: 'bg-fuchsia-500/15' },
+  tattoo_reservation_created: { icon: Palette, color: 'text-violet-400', bgColor: 'bg-violet-500/15' },
+  admin_action: { icon: ShieldAlert, color: 'text-orange-400', bgColor: 'bg-orange-500/15' },
 };
 
 const formatTimestamp = (date: Date) => {
@@ -37,7 +46,7 @@ export function ActivityLog() {
 
   const activityTypes: Array<ActivityType | 'all'> = [
     'all', 'table_assigned', 'table_freed', 'reservation_created', 'reservation_updated',
-    'payment_received', 'queue_added', 'reservation_cancelled'
+    'payment_received', 'queue_added', 'reservation_cancelled', 'admin_action'
   ];
 
   const typeLabels: Record<ActivityType | 'all', string> = {
@@ -53,6 +62,11 @@ export function ActivityLog() {
     reservation_updated: 'Reservation Updated',
     payment_received: 'Payment',
     reservation_cancelled: 'Cancelled',
+    // Added missing labels:
+    feedback_received: 'Feedback',
+    promo_created: 'Promo Created',
+    tattoo_reservation_created: 'Tattoo Booked',
+    admin_action: 'Admin Action',
   };
 
   return (
@@ -92,7 +106,7 @@ export function ActivityLog() {
             className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
           >
             {activityTypes.map(type => (
-              <option key={type} value={type}>{typeLabels[type]}</option>
+              <option key={type} value={type}>{typeLabels[type] || 'Unknown'}</option>
             ))}
           </select>
         </div>
@@ -107,19 +121,19 @@ export function ActivityLog() {
           </div>
         ) : (
           <div className="divide-y divide-neutral-800/50">
-            {filtered.map((activity, index) => {
-              const config = activityIcons[activity.type];
+            {filtered.map((activity) => {
+              // 🚨 THE FIX: Fallback to a generic icon if the type is unknown
+              const config = activityIcons[activity.type] || { icon: Activity, color: 'text-neutral-400', bgColor: 'bg-neutral-800' };
               const Icon = config.icon;
+              const label = typeLabels[activity.type] || 'Unknown Activity';
               
               return (
                 <div key={activity.id} className="px-5 py-4 hover:bg-neutral-900/40 transition-colors">
                   <div className="flex items-start gap-4">
-                    {/* Icon */}
                     <div className={`w-10 h-10 rounded-xl ${config.bgColor} flex items-center justify-center flex-none`}>
                       <Icon size={18} className={config.color} />
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-neutral-200 font-medium leading-relaxed">
                         {activity.description}
@@ -134,9 +148,8 @@ export function ActivityLog() {
                       </div>
                     </div>
 
-                    {/* Type badge */}
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-500 uppercase tracking-wider font-semibold flex-none">
-                      {typeLabels[activity.type]}
+                      {label}
                     </span>
                   </div>
                 </div>

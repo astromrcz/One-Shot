@@ -51,7 +51,6 @@ export const router = createBrowserRouter([
           { path: 'tables',               Component: Tables },
           { path: 'reservations',         Component: Reservations },
           { path: 'queue',                Component: Queue },
-          { path: 'activity',             Component: ActivityLog },
           { path: 'feedback',             Component: FeedbackPage },
           { path: 'promo-codes',          Component: PromoCodesPage },
           { path: 'tattoo-reservations',  Component: TattooReservationsPage },
@@ -64,6 +63,7 @@ export const router = createBrowserRouter([
         Component: AdminLayout,
         children: [
           { index: true,                    Component: AdminDashboard },
+          { path: 'activity',               Component: ActivityLog },
           { path: 'users',                  Component: AdminUsers },
           { path: 'tables',                 Component: AdminTableManagement },
           { path: 'tattoo-artists',         Component: AdminTattooArtists },
@@ -73,6 +73,7 @@ export const router = createBrowserRouter([
           { path: 'announcements',          Component: AdminAnnouncements },
           { path: 'calendar',               Component: AdminCalendar },
           { path: 'analytics',              Component: Analytics },
+          { path: 'settings',               Component: SettingsPage },
         ],
       },
       // ── Artist Portal ─────────────────────────────────────

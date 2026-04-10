@@ -4,8 +4,9 @@ import {
   LayoutDashboard, Users, Table2, Tag, BarChart3,
   DollarSign, FileText, Megaphone, CalendarX2,
   Palette, Menu, X, LogOut, ChevronRight,
-  ShieldCheck, Bell, Circle
+  ShieldCheck, Bell, Circle, Activity, Settings as SettingsIcon
 } from 'lucide-react';
+
 import { useAppContext } from './context/AppContext';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
@@ -20,6 +21,8 @@ const navItems = [
   { to: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
   { to: '/admin/calendar',      icon: CalendarX2,      label: 'Closing Calendar' },
   { to: '/admin/analytics',     icon: BarChart3,       label: 'Analytics' },
+  { to: '/admin/activity',      icon: Activity,        label: 'Activity Log' },
+  { to: '/admin/settings',      icon: SettingsIcon,    label: 'Account Settings' },
 ];
 
 const pageTitles: Record<string, string> = {
@@ -33,6 +36,7 @@ const pageTitles: Record<string, string> = {
   '/admin/announcements': 'Announcements',
   '/admin/calendar': 'Closing Calendar',
   '/admin/analytics': 'Analytics',
+  '/admin/activity': 'Activity Log',
 };
 
 export function AdminLayout() {

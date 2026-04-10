@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAppContext, StaffUser } from '../context/AppContext';
-import { Plus, X, User, Mail, Phone, ToggleLeft, ToggleRight, RefreshCw, Pencil, CheckCircle, Eye, EyeOff, ShieldCheck, Palette, BadgeDollarSign } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, X, User, Mail, Phone, ToggleLeft, ToggleRight, RefreshCw, Pencil, CheckCircle, ShieldCheck, Palette, BadgeDollarSign } from 'lucide-react';
 
 const ROLES: { value: StaffUser['role']; label: string; color: string; icon: React.ReactNode }[] = [
   { value: 'manager',       label: 'Manager',       color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',   icon: <User size={11} /> },
@@ -10,42 +9,48 @@ const ROLES: { value: StaffUser['role']; label: string; color: string; icon: Rea
 ];
 
 type FormState = {
-  username: string; password: string; fullName: string;
+  username: string; fullName: string;
   email: string; role: StaffUser['role']; isAdmin: boolean; artistId: string; phone: string; isActive: boolean;
 };
-const blankForm: FormState = { username: '', password: '', fullName: '', email: '', role: 'manager', isAdmin: false, artistId: '', phone: '', isActive: true };
+const blankForm: FormState = { username: '', fullName: '', email: '', role: 'manager', isAdmin: false, artistId: '', phone: '', isActive: true };
 
 export function AdminUsers() {
   const { staffUsers, tattooArtists, addStaffUser, updateStaffUser, toggleStaffUserActive, resetStaffUserPassword } = useAppContext();
   const [showForm, setShowForm]     = useState(false);
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [form, setForm]             = useState<FormState>(blankForm);
-  const [showPw, setShowPw]         = useState(false);
   const [resetMsg, setResetMsg]     = useState<string | null>(null);
   const [filterRole, setFilterRole] = useState<'all' | StaffUser['role']>('all');
 
-  const openAdd = () => { setEditingId(null); setForm(blankForm); setShowPw(false); setShowForm(true); };
+  const openAdd = () => { setEditingId(null); setForm(blankForm); setShowForm(true); };
   const openEdit = (u: StaffUser) => {
     setEditingId(u.id);
-    setForm({ username: u.username, password: u.password, fullName: u.fullName, email: u.email, role: u.role, isAdmin: u.isAdmin, artistId: u.artistId ?? '', phone: u.phone, isActive: u.isActive });
-    setShowPw(false); setShowForm(true);
+    setForm({ username: u.username, fullName: u.fullName, email: u.email, role: u.role, isAdmin: u.isAdmin, artistId: u.artistId ?? '', phone: u.phone, isActive: u.isActive });
+    setShowForm(true);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.username || !form.fullName || !form.email) return;
-    const payload: Omit<StaffUser, 'id' | 'createdAt'> = {
+    
+    const payload = {
       ...form,
       artistId: form.role === 'tattoo-artist' && form.artistId ? form.artistId : undefined,
     };
-    if (editingId) updateStaffUser(editingId, payload);
-    else addStaffUser(payload);
+    
+    if (editingId) {
+      updateStaffUser(editingId, payload);
+    } else {
+      // Automatically assign the default password for new users
+      addStaffUser({ ...payload, password: 'oneshotdefaultpw' });
+    }
+    
     setShowForm(false); setEditingId(null); setForm(blankForm);
   };
 
   const handleReset = (id: string, name: string) => {
     resetStaffUserPassword(id);
-    setResetMsg(`Password for "${name}" reset to: oneshot123`);
+    setResetMsg(`Password for "${name}" reset to: oneshotdefaultpw`);
     setTimeout(() => setResetMsg(null), 4000);
   };
 
@@ -134,7 +139,7 @@ export function AdminUsers() {
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   <button onClick={() => openEdit(u)} className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"><Pencil size={14} /></button>
-                  <button onClick={() => handleReset(u.id, u.fullName)} className="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 transition-colors"><RefreshCw size={14} /></button>
+                  <button onClick={() => handleReset(u.id, u.fullName)} title="Reset Password" className="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 transition-colors"><RefreshCw size={14} /></button>
                   <button onClick={() => toggleStaffUserActive(u.id)} className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
                     {u.isActive ? <ToggleRight size={18} className="text-emerald-400" /> : <ToggleLeft size={18} />}
                   </button>
@@ -168,19 +173,6 @@ export function AdminUsers() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">@</span>
                   <input type="text" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g,'') }))} required
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-7 pr-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 transition-colors placeholder-neutral-600" placeholder="username" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-neutral-400 mb-1.5 block font-medium">Password {!editingId && '*'}</label>
-                <div className="relative">
-                  <input type={showPw ? 'text' : 'password'} value={form.password}
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required={!editingId}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 pr-10 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 transition-colors placeholder-neutral-600"
-                    placeholder={editingId ? 'Leave blank to keep current' : 'Set password'} />
-                  <button type="button" tabIndex={-1} onClick={() => setShowPw(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300">
-                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
                 </div>
               </div>
               <div>

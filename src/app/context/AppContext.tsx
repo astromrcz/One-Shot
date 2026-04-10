@@ -583,18 +583,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshData();
   }, []);
 
+  // ── Auth ──────────────────────────────────────────────────────
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
-    const validUser = staffUsers.find(u => u.username === username && u.password === password && u.isActive);
-    const legacyValid = (username === staffProfile.username && password === staffProfile.password) || (username === 'staff' && password === 'staff123');
-    if (validUser || legacyValid) { setStaffLoggedIn(true); return true; }
+    // STRICT CHECK: Only look at the database
+    const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive);
+    
+    if (user) { 
+      setStaffLoggedIn(true); 
+      // Sync their profile to the app
+      setStaffProfile({
+        username: user.username,
+        password: user.password,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        joinedDate: user.createdAt.toISOString(),
+      });
+      return true; 
+    }
     return false;
   };
   const staffLogout = () => setStaffLoggedIn(false);
 
-  const adminLogin = async (username: string, password: string): Promise<boolean> => {
-    const valid = username === 'admin' && password === 'admin123';
-    if (valid) setAdminLoggedIn(true);
-    return valid;
+ const adminLogin = async (username: string, password: string): Promise<boolean> => {
+    // STRICT CHECK: Only look at the database for active admins
+    const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive && u.isAdmin);
+    
+    if (user) {
+      setAdminLoggedIn(true);
+      // Sync their profile to the app
+      setStaffProfile({
+        username: user.username,
+        password: user.password,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        joinedDate: user.createdAt.toISOString(),
+      });
+      return true;
+    }
+    return false;
   };
   const adminLogout = () => setAdminLoggedIn(false);
 
@@ -609,7 +639,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const artistLogout = () => { setArtistLoggedIn(false); setCurrentArtistId(null); };
 
-  const updateStaffProfile = (profile: Partial<StaffProfile>) => setStaffProfile(prev => ({ ...prev, ...profile }));
+ const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
+    // 1. Update the local screen memory immediately
+    setStaffProfile(prev => ({ ...prev, ...profile }));
+    
+    // 2. Find the actual user ID from the database array using their current username
+    const user = staffUsers.find(u => u.username === staffProfile.username);
+    
+    // 3. Push the changes securely to Supabase!
+    if (user) {
+      await updateStaffUser(user.id, {
+        ...(profile.username && { username: profile.username }),
+        ...(profile.password && { password: profile.password }),
+        ...(profile.fullName && { fullName: profile.fullName }),
+        ...(profile.email && { email: profile.email }),
+        ...(profile.phone && { phone: profile.phone }),
+      });
+    }
+  };
 
  const addActivity = async (type: ActivityType, description: string, metadata?: Record<string, any>) => {
     try {
@@ -626,6 +673,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ── Tables ────────────────────────────────────────────────────
   const assignTable = async (tableId: string, session: Session) => {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
@@ -633,7 +681,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updated = { ...table, status: 'occupied' as TableStatus, session };
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('table_assigned', `${tableId} assigned to ${session.customerName}`, { tableId, customerName: session.customerName });
+    // FIXED: Use table.name instead of tableId
+    await addActivity('table_assigned', `${table.name} assigned to ${session.customerName}`, { tableId, customerName: session.customerName });
   };
 
   const freeTable = async (tableId: string) => {
@@ -643,7 +692,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updated = { ...table, status: 'available' as TableStatus, session: undefined };
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('table_freed', `Table ${tableId} freed`);
+    // FIXED: Use table.name instead of tableId
+    await addActivity('table_freed', `Table ${table.name} freed`);
   };
 
   const reserveTable = async (tableId: string) => {
@@ -653,7 +703,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const updated = { ...table, status: 'reserved' as TableStatus };
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('table_reserved', `Table ${tableId} reserved`);
+    // FIXED: Use table.name instead of tableId
+    await addActivity('table_reserved', `Table ${table.name} reserved`);
   };
 
   const extendSession = async (tableId: string, extraMinutes: number, extraPayment: number) => {
@@ -670,7 +721,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('session_extended', `Session on ${tableId} extended by ${extraMinutes}min`, { tableId, extraMinutes });
+    // FIXED: Use table.name instead of tableId
+    await addActivity('session_extended', `Session on ${table.name} extended by ${extraMinutes}min`, { tableId, extraMinutes });
   };
 
   const addTable = async (name: string) => {
@@ -697,9 +749,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteTable = async (id: string) => {
+    const table = tables.find(t => t.id === id);
+    const tableName = table ? table.name : id; // Fallback just in case
+    
     await supabase.from('tables').delete().eq('id', id);
     setTables(prev => prev.filter(t => t.id !== id));
-    await addActivity('admin_action', `Table ${id} deleted`, { tableId: id });
+    // FIXED: Use tableName instead of id
+    await addActivity('admin_action', `Table "${tableName}" deleted`, { tableId: id });
   };
 
   const addToQueue = async (item: Omit<QueueItem, 'id' | 'arrivalTime' | 'status'>) => {
@@ -1005,8 +1061,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const resetStaffUserPassword = async (id: string) => {
-    await supabase.from('staff_users').update({ password: 'oneshot123' }).eq('id', id);
-    setStaffUsers(prev => prev.map(u => u.id === id ? { ...u, password: 'oneshot123' } : u));
+    await supabase.from('staff_users').update({ password: 'oneshotdefaultpw' }).eq('id', id);
+    setStaffUsers(prev => prev.map(u => u.id === id ? { ...u, password: 'oneshotdefaultpw' } : u));
   };
 
   const toggleStaffUserActive = async (id: string) => {

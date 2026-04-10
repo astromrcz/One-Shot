@@ -5,31 +5,27 @@ import {
   ToggleLeft, ToggleRight, Lock, Eye, EyeOff, PowerOff, Power,
 } from 'lucide-react';
 
-// Admin password for sensitive operations
-const ADMIN_PASSWORD = 'admin123';
-
 type PasswordModal = {
   tableId: string;
   tableName: string;
-  targetActive: boolean; // what we're toggling TO
+  targetActive: boolean; 
 };
 
 export function AdminTableManagement() {
-  const { tables, addTable, updateTable, toggleTableActive } = useAppContext();
+  // ✅ ADDED staffProfile here to check the real password
+  const { tables, addTable, updateTable, toggleTableActive, staffProfile } = useAppContext();
 
   const [newName, setNewName]         = useState('');
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [editName, setEditName]       = useState('');
   const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  // Password confirmation modal
   const [pwModal, setPwModal]         = useState<PasswordModal | null>(null);
   const [pwInput, setPwInput]         = useState('');
   const [showPw, setShowPw]           = useState(false);
   const [pwError, setPwError]         = useState('');
   const [pwConfirming, setPwConfirming] = useState(false);
 
-  // Filter
   const [filter, setFilter]           = useState<'all' | 'active' | 'inactive'>('all');
 
   const flash = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -67,7 +63,8 @@ export function AdminTableManagement() {
     if (!pwModal) return;
     setPwConfirming(true);
     setTimeout(() => {
-      if (pwInput !== ADMIN_PASSWORD) {
+      // ✅ CHANGED: Now checks against the secure logged-in admin password
+      if (pwInput !== staffProfile.password) {
         setPwError('Incorrect password. Please try again.');
         setPwConfirming(false);
         return;
@@ -102,7 +99,6 @@ export function AdminTableManagement() {
 
   return (
     <div className="space-y-5">
-      {/* Toast */}
       {toast && (
         <div className={`flex items-center gap-2.5 text-sm px-4 py-3 rounded-xl border ${
           toast.type === 'error'
@@ -114,7 +110,6 @@ export function AdminTableManagement() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Total Tables',   value: tables.length,  color: 'text-white' },
@@ -129,7 +124,6 @@ export function AdminTableManagement() {
         ))}
       </div>
 
-      {/* Add Table */}
       <div className="bg-neutral-950 border border-amber-900/30 rounded-xl p-5">
         <h3 className="text-sm font-bold text-neutral-200 mb-4 flex items-center gap-2">
           <Plus size={15} className="text-amber-400" /> Add New Table
@@ -148,9 +142,7 @@ export function AdminTableManagement() {
         </form>
       </div>
 
-      {/* Table List */}
       <div className="bg-neutral-950 border border-neutral-800 rounded-xl overflow-hidden">
-        {/* List header + filter */}
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-sm font-bold text-neutral-200">All Tables ({tables.length})</h3>
           <div className="flex gap-1.5">
@@ -176,7 +168,6 @@ export function AdminTableManagement() {
               key={t.id}
               className={`px-5 py-3.5 flex items-center gap-4 transition-colors ${t.isActive ? 'hover:bg-neutral-900/30' : 'opacity-50 bg-neutral-900/10'}`}
             >
-              {/* Icon */}
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border ${
                 t.isActive
                   ? 'bg-neutral-800 border-neutral-700'
@@ -185,7 +176,6 @@ export function AdminTableManagement() {
                 <Table2 size={15} className={t.isActive ? 'text-neutral-400' : 'text-neutral-600'} />
               </div>
 
-              {/* Name / Inline edit */}
               {editingId === t.id ? (
                 <div className="flex-1 flex items-center gap-2">
                   <input
@@ -220,17 +210,14 @@ export function AdminTableManagement() {
                 </div>
               )}
 
-              {/* Status badge */}
               {t.isActive && (
                 <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border flex-shrink-0 ${STATUS_COLOR[t.status]}`}>
                   {t.status}
                 </span>
               )}
 
-              {/* Actions */}
               {editingId !== t.id && (
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {/* Rename — only when active */}
                   {t.isActive && (
                     <button
                       onClick={() => { setEditingId(t.id); setEditName(t.name); }}
@@ -241,7 +228,6 @@ export function AdminTableManagement() {
                     </button>
                   )}
 
-                  {/* Active / Inactive toggle */}
                   <button
                     onClick={() => openPasswordModal(t)}
                     title={t.isActive ? 'Deactivate table' : 'Activate table'}
@@ -263,7 +249,6 @@ export function AdminTableManagement() {
         </div>
       </div>
 
-      {/* Info notice */}
       <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4 flex items-start gap-3">
         <AlertTriangle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-amber-600/80 leading-relaxed">
@@ -272,11 +257,9 @@ export function AdminTableManagement() {
         </p>
       </div>
 
-      {/* ── Password Confirmation Modal ── */}
       {pwModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-neutral-950 border border-amber-900/40 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
-            {/* Header */}
             <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -297,7 +280,6 @@ export function AdminTableManagement() {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* What will happen */}
               <div className={`rounded-xl p-3 text-xs border ${
                 pwModal.targetActive
                   ? 'bg-emerald-950/20 border-emerald-800/30 text-emerald-400/80'
@@ -309,7 +291,6 @@ export function AdminTableManagement() {
                 }
               </div>
 
-              {/* Password field */}
               <div>
                 <label className="text-xs text-neutral-400 mb-1.5 flex items-center gap-1.5 font-medium">
                   <Lock size={11} /> Admin Password Required
@@ -343,7 +324,6 @@ export function AdminTableManagement() {
                 )}
               </div>
 
-              {/* Buttons */}
               <div className="flex gap-3 pt-1">
                 <button
                   onClick={() => { setPwModal(null); setPwInput(''); setPwError(''); }}
