@@ -7,9 +7,9 @@ export function AdminRates() {
   const [form, setForm] = useState({ ...rates });
   const [saved, setSaved] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+ const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateRates(form);
+    await updateRates(form);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };

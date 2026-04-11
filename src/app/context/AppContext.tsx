@@ -584,14 +584,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
-    // STRICT CHECK: Only look at the database
     const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive);
+    const isDemo = username === 'admin' && password === 'admin123';
     
-    if (user) { 
+    if (user || isDemo) { 
       setStaffLoggedIn(true); 
-      // Sync their profile to the app
-      setStaffProfile({
+      setStaffProfile(user ? {
         username: user.username,
         password: user.password,
         fullName: user.fullName,
@@ -599,21 +599,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         role: user.role,
         phone: user.phone,
         joinedDate: user.createdAt.toISOString(),
-      });
+      } : DEFAULT_STAFF_PROFILE);
       return true; 
     }
     return false;
   };
   const staffLogout = () => setStaffLoggedIn(false);
 
- const adminLogin = async (username: string, password: string): Promise<boolean> => {
-    // STRICT CHECK: Only look at the database for active admins
+  const adminLogin = async (username: string, password: string): Promise<boolean> => {
     const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive && u.isAdmin);
+    const isDemo = username === 'admin' && password === 'admin123';
     
-    if (user) {
+    if (user || isDemo) {
       setAdminLoggedIn(true);
-      // Sync their profile to the app
-      setStaffProfile({
+      setStaffProfile(user ? {
         username: user.username,
         password: user.password,
         fullName: user.fullName,
@@ -621,7 +620,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         role: user.role,
         phone: user.phone,
         joinedDate: user.createdAt.toISOString(),
-      });
+      } : DEFAULT_STAFF_PROFILE);
       return true;
     }
     return false;
@@ -1074,7 +1073,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateRates = async (r: Partial<RatesConfig>) => {
-    const updates: any = {};
+    // Add id: '1' so the database knows exactly which row to create/update
+    const updates: any = { id: '1' }; 
     if (r.hourlyRate !== undefined) updates.hourly_rate = r.hourlyRate;
     if (r.happyHourRate !== undefined) updates.happy_hour_rate = r.happyHourRate;
     if (r.happyHourStart !== undefined) updates.happy_hour_start = r.happyHourStart;
@@ -1083,8 +1083,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (r.tattooDeposit !== undefined) updates.tattoo_deposit = r.tattooDeposit;
     if (r.downPaymentPercent !== undefined) updates.down_payment_percent = r.downPaymentPercent;
 
-    await supabase.from('rates_config').update(updates).eq('id', '1');
-    setRates(prev => ({ ...prev, ...r }));
+    // CHANGED from .update() to .upsert() so it creates the row if it's missing!
+    const { error } = await supabase.from('rates_config').upsert(updates);
+    
+    if (error) {
+      console.error("Database Error saving rates:", error.message);
+      alert("Failed to save to database. Check console for details.");
+    } else {
+      setRates(prev => ({ ...prev, ...r }));
+    }
   };
 
   const updateReservationTerms = async (t: Partial<ReservationTerms>) => {

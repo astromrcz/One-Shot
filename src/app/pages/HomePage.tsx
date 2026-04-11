@@ -8,7 +8,7 @@ import {
   Calendar, CheckCircle, ArrowRight,
   Megaphone, Info, Shield, Award, Mail, Tag
 } from 'lucide-react';
-import { useAppContext, HOURLY_RATE, DOWN_PAYMENT_RATE, generateReferralCode } from '../context/AppContext';
+import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { TattooSection } from '../components/TattooSection';
 
@@ -220,7 +220,7 @@ function MiniCalendar({
 // ─── Main HomePage ────────────────────────────────────────────
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode } = useAppContext();
+  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates } = useAppContext(); 
 
   // Announcement rotator
   const [announcementIdx, setAnnouncementIdx] = useState(0);
@@ -308,10 +308,11 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
     }
   }, [currentUser]);
 
-  const baseAmount = resForm.duration * HOURLY_RATE;
+  // Use dynamic rates from AppContext (with fallbacks just in case)
+  const baseAmount = resForm.duration * (rates?.hourlyRate || 250);
   const discountAmount = appliedPromo ? Math.floor(baseAmount * appliedPromo.discountPercent / 100) : 0;
   const totalAmount = baseAmount - discountAmount;
-  const downPayment = Math.ceil(totalAmount * DOWN_PAYMENT_RATE);
+  const downPayment = Math.ceil(totalAmount * ((rates?.downPaymentPercent || 25) / 100));
 
   const handleLoginSubmit = () => {
     if (!loginForm.email || !loginForm.password) {
@@ -696,7 +697,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-neutral-800">
                   {[
                     { value: '10', label: 'Billiard Tables', color: 'text-emerald-400' },
-                    { value: '₱250', label: 'Per Hour', color: 'text-amber-400' },
+                    { value: `₱${rates?.hourlyRate || 250}`, label: 'Per Hour', color: 'text-amber-400' },
                     { value: '15+', label: 'Hours Open Daily', color: 'text-sky-400' },
                     { value: 'A+', label: 'Top Tier Facility', color: 'text-rose-400' },
                   ].map(({ value, label, color }) => (
@@ -762,7 +763,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
             >
               <div className="text-center mb-10">
                 <h2 className="text-3xl font-black text-white mb-2">Make a Reservation</h2>
-                <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a 25% down payment.</p>
+                <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {rates?.downPaymentPercent || 25}% down payment.</p>
               </div>
 
               {/* Live Status Overview */}
@@ -967,7 +968,8 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                           <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
                           <div className="grid grid-cols-4 gap-1.5">
                             {TIME_SLOTS.map(t => {
-                              const isHappyHour = t === '18:00' || t === '19:00';
+                              // Dynamically block happy hour slots!
+                              const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
                               return (
                                 <button
                                   key={t}
@@ -988,7 +990,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                             })}
                           </div>
                           <p className="text-[10px] text-amber-500 mt-2">
-                            * 18:00 and 19:00 are Happy Hour (Strictly walk-in only). These time slots cannot be booked online.
+                            * {rates?.happyHourStart || '18:00'} to {rates?.happyHourEnd || '19:00'} is Happy Hour (Strictly walk-in only). These slots cannot be booked online.
                           </p>
                         </div>
 
@@ -1038,7 +1040,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                             </div>
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Duration</span>
-                              <span className="text-neutral-200">{resForm.duration}h × ₱{HOURLY_RATE}/hr</span>
+                              <span className="text-neutral-200">{resForm.duration}h × ₱{rates?.hourlyRate || 250}/hr</span>
                             </div>
                             {appliedPromo && (
                               <div className="flex justify-between text-emerald-400">
@@ -1051,7 +1053,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                               <span className="text-white font-semibold">₱{totalAmount}.00</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-amber-400">Down Payment (25%)</span>
+                              <span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span>
                               <span className="text-amber-300 font-semibold">₱{downPayment}.00</span>
                             </div>
                           </div>
@@ -1090,7 +1092,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 {[
                   {
                     name: 'Standard Play',
-                    rate: '₱250',
+                    rate: `₱${rates?.hourlyRate || 250}`,
                     unit: '/ hour',
                     desc: 'Walk-in regular play on any available table.',
                     features: ['First-Come First-Served', 'Any available table', 'Cue sticks included', 'Timer monitored'],
@@ -1099,19 +1101,19 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                   },
                   {
                     name: 'Reserved Table',
-                    rate: '₱250',
+                    rate: `₱${rates?.hourlyRate || 250}`,
                     unit: '/ hour',
                     desc: 'Book a specific time slot and table in advance.',
-                    features: ['Guaranteed table slot', '25% down payment', 'Priority seating', 'Advance booking'],
+                    features: ['Guaranteed table slot', `${rates?.downPaymentPercent || 25}% down payment`, 'Priority seating', 'Advance booking'],
                     badge: 'Popular',
                     color: 'emerald',
                   },
                   {
                     name: 'Happy Hour',
-                    rate: '₱200',
+                    rate: `₱${rates?.happyHourRate || 200}`,
                     unit: '/ hour',
-                    desc: 'Discounted walk-in rate every weekday 6PM–8PM.',
-                    features: ['Weekdays only (6–8PM)', 'Walk-in ONLY - No reservations', '20% off standard rate', 'Subject to availability'],
+                    desc: `Discounted walk-in rate every weekday ${rates?.happyHourStart || '18:00'}–${rates?.happyHourEnd || '19:00'}.`,
+                    features: [`Weekdays only (${rates?.happyHourStart || '18:00'}–${rates?.happyHourEnd || '19:00'})`, 'Walk-in ONLY - No reservations', 'Discounted standard rate', 'Subject to availability'],
                     badge: 'Limited',
                     color: 'amber',
                   },
@@ -1176,7 +1178,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                   <div>
                     <p className="text-emerald-300 text-xs font-semibold mb-1">Reservation Redemption Policy</p>
                     <p className="text-neutral-400 text-xs leading-relaxed">
-                      After completing your reservation and 25% down payment, the <span className="text-white font-medium">remaining balance must be settled in full upon arrival</span> before your table time begins — payable via <span className="text-white font-medium">Cash or GCash</span>.
+                      After completing your reservation and {rates?.downPaymentPercent || 25}% down payment, the <span className="text-white font-medium">remaining balance must be settled in full upon arrival</span> before your table time begins — payable via <span className="text-white font-medium">Cash or GCash</span>.
                     </p>
                   </div>
                 </div>
@@ -1184,7 +1186,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   {[
                     { label: 'Minimum booking time', value: '1 hour' },
-                    { label: 'Down payment required', value: '25% of total' },
+                    { label: 'Down payment required', value: `${rates?.downPaymentPercent || 25}% of total` },
                     { label: 'Remaining balance', value: 'Paid on-site before play begins' },
                     { label: 'Cancellation policy', value: '24 hours before reservation' },
                     { label: 'Payment methods', value: 'GCash, Cash' },
@@ -1238,20 +1240,33 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 </div>
               </div>
 
-              {/* Location Map — moved above Facilities */}
+              {/* Location Map */}
               <div className="mb-12">
                 <h3 className="text-center text-xl font-bold text-white mb-6">Our Location</h3>
                 <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden h-64 flex items-center justify-center relative">
-                  <div className="absolute inset-0 bg-neutral-800/50" />
+                  
+                  {/* Transparent Map Background Preview */}
+                  <iframe
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3861.3546747517616!2d121.1118129!3d14.5788544!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397c7f3e8b0b8c3%3A0x8e8a60f3b0f5b0a!2sAutobase%20OAX!5e0!3m2!1sen!2sph!4v1700000000000!5m2!1sen!2sph"
+                    className="absolute inset-0 w-full h-full opacity-30 grayscale pointer-events-none"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                  
+                  {/* Dark gradient overlay to ensure text is readable */}
+                  <div className="absolute inset-0 bg-neutral-950/50" /> 
+                  
+                  {/* Map Pin and Button */}
                   <div className="relative z-10 text-center">
-                    <MapPin size={32} className="text-emerald-500 mx-auto mb-2" />
-                    <p className="text-white font-semibold text-sm">One Shot Bar & Billiards</p>
-                    <p className="text-neutral-400 text-xs">Autobase OAX, San Juan, Cainta, Rizal 1900</p>
+                    <MapPin size={32} className="text-emerald-500 mx-auto mb-2 drop-shadow-lg" />
+                    <p className="text-white font-semibold text-sm drop-shadow-md">One Shot Bar & Billiards</p>
+                    <p className="text-neutral-300 text-xs drop-shadow-md">Autobase OAX, San Juan, Cainta, Rizal 1900</p>
                     <a
-                      href="https://maps.google.com"
+                      href="https://www.google.com/maps/place/One+Shot+Bar+and+Billiards/@14.5813335,121.1249395,17z/data=!3m1!4b1!4m6!3m5!1s0x3397c70049cd2efb:0x4b8fd5634abcd6cc!8m2!3d14.5813335!4d121.1275144!16s%2Fg%2F11wwhbc6y5?entry=ttu&g_ep=EgoyMDI2MDQwOC4wIKXMDSoASAFQAw%3D%3D"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-3 inline-block text-xs bg-emerald-600 text-white px-4 py-2 rounded-full hover:bg-emerald-500 transition-colors"
+                      className="mt-4 inline-flex items-center gap-2 text-xs bg-emerald-600/90 backdrop-blur-sm text-white px-5 py-2.5 rounded-full hover:bg-emerald-500 transition-colors shadow-xl shadow-black/50 border border-emerald-500/50"
                     >
                       Open in Google Maps
                     </a>
@@ -1699,7 +1714,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
               <div className="p-6">
                 {/* Amount */}
                 <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4 mb-5 text-center">
-                  <p className="text-xs text-amber-500 mb-1">Amount Due (25% Down Payment)</p>
+                  <p className="text-xs text-amber-500 mb-1">Amount Due ({rates?.downPaymentPercent || 25}% Down Payment)</p>
                   <p className="text-4xl font-black text-amber-400">₱{downPayment}.00</p>
                   <p className="text-xs text-neutral-500 mt-1">Remaining balance <span className="text-neutral-300 font-semibold">₱{totalAmount - downPayment}.00</span> must be paid on arrival</p>
                   <p className="text-[10px] text-neutral-600 mt-0.5">Remaining balance is due before your table time starts — Cash or GCash</p>
