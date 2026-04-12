@@ -229,6 +229,10 @@ export function HomePage() {
   const [resForm, setResForm] = useState({ name: '', email: '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
   const [promoError, setPromoError] = useState('');
@@ -242,6 +246,15 @@ export function HomePage() {
     ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}` 
     : null;
   const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
+
+  const slotCounts = reservations.reduce((acc, r) => {
+    if (r.status === 'cancelled') return acc;
+    const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
+    if (rDateStr === selectedDateStr) {
+      acc[r.timeSlot] = (acc[r.timeSlot] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
 
   const baseAmount = resForm.duration * (rates?.hourlyRate || 250);
   const discountAmount = appliedPromo ? Math.floor(baseAmount * appliedPromo.discountPercent / 100) : 0;
@@ -412,11 +425,32 @@ export function HomePage() {
   };
 
   const handleRemovePromo = () => { setAppliedPromo(null); setPromoCodeInput(''); setPromoError(''); };
-  const handleReservationSubmit = () => { if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate) return; setReservationStep(2); };
+  
+  const handleReservationSubmit = () => { 
+    if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate) return; 
+    setReservationStep(2); 
+  };
 
-  const handlePaymentConfirm = () => {
+  const handlePaymentConfirm = async () => {
+    if (!referenceNumber) {
+      setUploadError("Please enter the GCash Reference Number.");
+      return;
+    }
+    
     setConfirmingPayment(true);
-    setTimeout(() => {
+    setUploadError('');
+
+    try {
+      let receiptUrl = '';
+      
+      if (receiptFile) {
+        const fileExt = receiptFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const { data, error } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
+        if (error) throw error;
+        receiptUrl = supabase.storage.from('receipts').getPublicUrl(fileName).data.publicUrl;
+      }
+
       const reservationDate = new Date(selectedDate!);
       const [hours, minutes] = resForm.timeSlot.split(':').map(Number);
       reservationDate.setHours(hours, minutes, 0, 0);
@@ -427,16 +461,23 @@ export function HomePage() {
         partySize: resForm.pax, status: 'pending', totalAmount, downPaymentAmount: downPayment,
         downPaymentPaid: true, balancePaid: false, promoCode: appliedPromo?.code,
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        paymentReference: referenceNumber,
+        receiptUrl: receiptUrl,
       });
 
-      setConfirmingPayment(false); setReservationStep(3);
-    }, 1500);
+      setConfirmingPayment(false); 
+      setReservationStep(3);
+    } catch (err: any) {
+      setUploadError(err.message || "Failed to process payment details.");
+      setConfirmingPayment(false);
+    }
   };
 
   const closeReservation = () => {
     setReservationStep(0); setSelectedDate(null);
     setResForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
     setPromoCodeInput(''); setAppliedPromo(null); setPromoError('');
+    setReferenceNumber(''); setReceiptFile(null); setUploadError('');
   };
 
   const handleSimpleFeedbackSubmit = () => {
@@ -532,7 +573,7 @@ export function HomePage() {
       </nav>
 
       {/* ── Main Content ── */}
-      <main className={`flex-1 ${activeSection === 'home' ? 'pt-0' : 'pt-32'}`}>
+      <main className={`flex-1 ${activeSection === 'home' ? 'pt-0' : 'pt-[104px]'}`}>
         <AnimatePresence mode="wait">
           {/* ════ HOME SECTION ════ */}
           {activeSection === 'home' && (
@@ -707,10 +748,45 @@ export function HomePage() {
                   <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 1 — Pick a Date</p>
                   <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} reservedDates={reservedDates} closedDates={closedDates} />
                   {selectedDate && !selectedClosedDate && (
-                    <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
-                      <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
-                      <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
-                    </div>
+                    <>
+                      <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
+                        <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                        <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
+                      </div>
+                      
+                      {/* Slot Availability Card */}
+                      <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                            <Clock size={14} className="text-emerald-500" /> Slot Availability
+                          </h3>
+                          <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Max 5 / hour</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                          {TIME_SLOTS.map(t => {
+                            const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                            if (isHappyHour) return null; // Hide happy hour from the list
+                            
+                            const count = slotCounts[t] || 0;
+                            const isFull = count >= 5;
+                            
+                            return (
+                              <div key={t} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                                isFull ? 'bg-rose-950/20 border-rose-800/30' : 
+                                count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
+                                'bg-neutral-950 border-neutral-800/50'
+                              }`}>
+                                <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{t}</span>
+                                <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
+                                  {count}/5
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
                 <div>
@@ -768,8 +844,28 @@ export function HomePage() {
                         <div className="grid grid-cols-4 gap-1.5">
                           {TIME_SLOTS.map(t => {
                             const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                            const count = slotCounts[t] || 0;
+                            const isFull = count >= 5;
+                            const disabled = isHappyHour || isFull;
+
                             return (
-                              <button key={t} disabled={isHappyHour} onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} className={`py-2 rounded-lg text-xs font-semibold ${isHappyHour ? 'bg-neutral-800/50 text-neutral-600' : resForm.timeSlot === t ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}>{t}</button>
+                              <button 
+                                key={t} 
+                                disabled={disabled} 
+                                onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} 
+                                className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                  isHappyHour 
+                                    ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
+                                    : isFull
+                                    ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                    : resForm.timeSlot === t 
+                                    ? 'bg-emerald-600 text-white' 
+                                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
+                                }`}
+                              >
+                                {t}
+                                {isFull && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                              </button>
                             );
                           })}
                         </div>
@@ -798,7 +894,7 @@ export function HomePage() {
                         </div>
                       </div>
 
-                      <button onClick={handleReservationSubmit} disabled={!resForm.name || !resForm.email || !resForm.phone} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
+                      <button onClick={handleReservationSubmit} disabled={!resForm.name || !resForm.email || !resForm.phone || !resForm.timeSlot} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
                         Proceed to Payment
                       </button>
                     </div>
@@ -1509,13 +1605,58 @@ export function HomePage() {
                 <div><h3 className="text-base font-bold text-white">Down Payment</h3><p className="text-xs text-neutral-500">Step 2 of 2 · Secure your reservation</p></div>
                 <button onClick={closeReservation} className="text-neutral-600 hover:text-neutral-300"><X size={18} /></button>
               </div>
+              
               <div className="p-6">
                 <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4 mb-5 text-center">
                   <p className="text-xs text-amber-500 mb-1">Amount Due</p>
                   <p className="text-4xl font-black text-amber-400">₱{downPayment}.00</p>
                 </div>
-                <button onClick={handlePaymentConfirm} disabled={confirmingPayment} className="w-full mt-5 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
-                  <CheckCircle size={15} /> I've Sent the Payment
+
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col items-center gap-2">
+                    <QRDisplay pattern={QR_GCASH} color="#1d4ed8" />
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-blue-400">GCash</p>
+                      <p className="text-xs text-neutral-300 font-semibold">ONE SHOT BAR & BILLIARDS</p>
+                      <p className="text-xs text-neutral-500">+63 917-123-4567</p>
+                    </div>
+                  </div>
+                  <div className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-3 text-center">
+                    <p className="text-xs text-neutral-500">Scan the QR code using your GCash app</p>
+                    <p className="text-xs text-neutral-600 mt-0.5">Send exactly <span className="text-amber-400 font-semibold">₱{downPayment}.00</span></p>
+                  </div>
+                </div>
+
+                <div className="w-full space-y-3 mt-5 text-left border-t border-neutral-800 pt-5">
+                  {uploadError && (
+                    <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg">
+                      {uploadError}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference Number <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      value={referenceNumber}
+                      onChange={e => { setReferenceNumber(e.target.value); setUploadError(''); }}
+                      placeholder="e.g. 10023948293"
+                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-neutral-600">(optional)</span></label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => { setReceiptFile(e.target.files?.[0] || null); setUploadError(''); }}
+                      className="w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <button onClick={handlePaymentConfirm} disabled={confirmingPayment || !referenceNumber} className="w-full mt-5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+                  {confirmingPayment ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle size={15} />}
+                  {confirmingPayment ? 'Verifying...' : "I've Sent the Payment"}
                 </button>
               </div>
             </motion.div>
@@ -1529,7 +1670,21 @@ export function HomePage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 20 }} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
               <h3 className="text-xl font-black text-white mb-2">Reservation Submitted!</h3>
-              <button onClick={closeReservation} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-semibold">Back to Home</button>
+              <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
+                Your reservation for <strong className="text-neutral-200">{selectedDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{resForm.timeSlot}</strong> has been submitted. Our staff will verify your payment and confirm shortly.
+              </p>
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
+                <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
+                <div className="flex justify-between"><span className="text-neutral-500">Email</span><span className="text-neutral-200">{resForm.email}</span></div>
+                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold\">₱{downPayment}.00 ✓</span></div>
+                <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Verification</span></div>
+              </div>
+              <button
+                onClick={closeReservation}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-semibold transition-all"
+              >
+                Back to Home
+              </button>
             </motion.div>
           </motion.div>
         )}

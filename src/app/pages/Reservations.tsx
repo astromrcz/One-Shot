@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useAppContext, HOURLY_RATE, DOWN_PAYMENT_RATE, ReservationStatus } from '../context/AppContext';
 import {
   Plus, X, Calendar, Clock, Users, Phone, Mail, ChevronDown, CheckCircle,
-  XCircle, Search, Filter, DollarSign, AlertTriangle
+  XCircle, Search, Filter, DollarSign, AlertTriangle, Receipt
 } from 'lucide-react';
 import { format, isToday, isTomorrow, isPast } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const formatPHP = (amount: number) => `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
@@ -32,6 +33,15 @@ export function Reservations() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
+  const [toast, setToast] = useState<string | null>(null);
+  const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
+
+  const handleVerify = (id: string, name: string) => {
+    updateReservationStatus(id, 'confirmed');
+    setToast(`${name} successfully verified!`);
+    setTimeout(() => setToast(null), 3500); // Hide after 3.5 seconds
+    if (selectedId === id) setSelectedId(null);
+  };
   // Form state
   const [form, setForm] = useState({
     customerName: '', contactNumber: '', email: '', date: '',
@@ -88,7 +98,22 @@ export function Reservations() {
   }, 0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 relative">
+      
+      {/* Success Notification Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: 20 }}
+            animate={{ opacity: 1, y: 0, x: 0 }}
+            exit={{ opacity: 0, y: -20, x: 20 }}
+            className="fixed top-6 right-6 z-[200] bg-emerald-950/95 border border-emerald-800/50 text-emerald-400 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md"
+          >
+            <CheckCircle size={18} />
+            <span className="text-sm font-semibold">{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -202,17 +227,33 @@ export function Reservations() {
                             : <XCircle size={11} className="text-neutral-600" />}
                           <span className="text-[10px] text-neutral-500">Bal {formatPHP(r.totalAmount - r.downPaymentAmount)}</span>
                         </div>
+                        {/* Reference Number displayed inline */}
+                        {(r as any).paymentReference && (
+                          <p className="text-[9px] text-neutral-500 pt-1">
+                            Ref: <span className="font-mono text-neutral-300">{(r as any).paymentReference}</span>
+                          </p>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                         {r.status === 'pending' && (
-                          <button
-                            onClick={() => updateReservationStatus(r.id, 'confirmed')}
-                            className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-[10px] font-bold rounded border border-emerald-700/30 transition-colors"
-                          >
-                            Verify
-                          </button>
+                          <>
+                            {(r as any).receiptUrl && (
+                              <button
+                                onClick={() => setReceiptViewer({ url: (r as any).receiptUrl, ref: (r as any).paymentReference, name: r.customerName })}
+                                className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors flex items-center gap-1"
+                              >
+                                <Receipt size={10} /> Receipt
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleVerify(r.id, r.customerName)}
+                              className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-[10px] font-bold rounded border border-emerald-700/30 transition-colors"
+                            >
+                              Verify
+                            </button>
+                          </>
                         )}
                         {r.status === 'confirmed' && (
                           <button
@@ -289,8 +330,24 @@ export function Reservations() {
 
               {/* Payment breakdown */}
               <div className="bg-neutral-900 rounded-xl p-4 space-y-2.5 border border-neutral-800">
-                <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Payment</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Payment</p>
+                  {(selected as any).receiptUrl && (
+                    <button
+                      onClick={() => setReceiptViewer({ url: (selected as any).receiptUrl, ref: (selected as any).paymentReference, name: selected.customerName })}
+                      className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors flex items-center gap-1"
+                    >
+                      <Receipt size={10} /> View GCash Receipt
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-2">
+                  {(selected as any).paymentReference && (
+                    <div className="flex justify-between text-sm pb-1.5 border-b border-neutral-800/50">
+                      <span className="text-neutral-400">Reference No.</span>
+                      <span className="font-mono text-neutral-200">{(selected as any).paymentReference}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-neutral-400">Total ({selected.durationHours}h × ₱{HOURLY_RATE})</span>
                     <span className="text-neutral-200 font-semibold">{formatPHP(selected.totalAmount)}</span>
@@ -333,7 +390,7 @@ export function Reservations() {
               {/* Status Actions */}
               <div className="flex gap-2 flex-wrap">
                 {selected.status === 'pending' && (
-                  <button onClick={() => { updateReservationStatus(selected.id, 'confirmed'); setSelectedId(null); }} className="flex-1 px-3 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-semibold rounded-xl border border-emerald-700/30 transition-colors">
+                  <button onClick={() => handleVerify(selected.id, selected.customerName)} className="flex-1 px-3 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-semibold rounded-xl border border-emerald-700/30 transition-colors">
                     Confirm Booking
                   </button>
                 )}
@@ -492,6 +549,47 @@ export function Reservations() {
           </div>
         </div>
       )}
+
+      {/* Receipt Viewer Modal */}
+      <AnimatePresence>
+        {receiptViewer && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setReceiptViewer(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-4 flex-none">
+                <div>
+                  <h3 className="text-lg font-bold text-white">GCash Receipt</h3>
+                  <p className="text-xs text-neutral-500">{receiptViewer.name}</p>
+                </div>
+                <button onClick={() => setReceiptViewer(null)} className="text-neutral-600 hover:text-neutral-300">
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <div className="flex-1 min-h-0 overflow-auto bg-black rounded-lg border border-neutral-800 mb-4 flex items-center justify-center p-2">
+                <img 
+                  src={receiptViewer.url} 
+                  alt="Receipt" 
+                  className="max-w-full max-h-full object-contain rounded"
+                />
+              </div>
+
+              <div className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-4 text-center flex-none">
+                <p className="text-[10px] text-blue-500 uppercase tracking-widest font-semibold mb-1">Reference Number</p>
+                <p className="text-lg font-mono font-bold text-blue-400">{receiptViewer.ref || 'N/A'}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
