@@ -156,6 +156,7 @@ export type StaffProfile = {
   role: string;
   phone: string;
   joinedDate: string;
+  artistId?: string;
 };
 
 export type StaffUser = {
@@ -585,17 +586,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshData();
+    const savedSession = localStorage.getItem('oneshot_staff_session');
+    if (savedSession) {
+      try {
+        const profile = JSON.parse(savedSession);
+        setStaffProfile(profile);
+        
+        const r = profile.role?.toLowerCase();
+        if (r === 'admin' || r === 'manager') setAdminLoggedIn(true);
+        else if (r === 'artist' || r === 'tattoo-artist') {
+          setArtistLoggedIn(true);
+          setCurrentArtistId(profile.artistId || null);
+        }
+        else setStaffLoggedIn(true);
+      } catch (e) {
+        console.error('Failed to parse saved session');
+      }
+    }
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────
   // ── Auth ──────────────────────────────────────────────────────
+  const saveStaffSession = (profile: StaffProfile) => {
+    localStorage.setItem('oneshot_staff_session', JSON.stringify(profile));
+    setStaffProfile(profile);
+  };
+
+  const clearStaffSession = () => {
+    localStorage.removeItem('oneshot_staff_session');
+    setStaffProfile(DEFAULT_STAFF_PROFILE);
+    setStaffLoggedIn(false);
+    setAdminLoggedIn(false);
+    setArtistLoggedIn(false);
+    setCurrentArtistId(null);
+  };
+
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
     const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive);
     const isDemo = username === 'admin' && password === 'admin123';
     
     if (user || isDemo) { 
       setStaffLoggedIn(true); 
-      setStaffProfile(user ? {
+      saveStaffSession(user ? {
         username: user.username,
         password: user.password,
         fullName: user.fullName,
@@ -603,20 +635,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         role: user.role,
         phone: user.phone,
         joinedDate: user.createdAt.toISOString(),
+        artistId: user.artistId
       } : DEFAULT_STAFF_PROFILE);
       return true; 
     }
     return false;
   };
-  const staffLogout = () => setStaffLoggedIn(false);
+  
+  const staffLogout = () => clearStaffSession();
 
   const adminLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive && u.isAdmin);
+    // Now it checks for u.isAdmin OR role === 'admin'
+    const user = staffUsers.find(u => 
+      u.username === username && 
+      u.password === password && 
+      u.isActive && 
+      (u.isAdmin || u.role?.toLowerCase() === 'admin' || u.role?.toLowerCase() === 'manager')
+    );
     const isDemo = username === 'admin' && password === 'admin123';
     
     if (user || isDemo) {
       setAdminLoggedIn(true);
-      setStaffProfile(user ? {
+      saveStaffSession(user ? {
         username: user.username,
         password: user.password,
         fullName: user.fullName,
@@ -624,23 +664,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
         role: user.role,
         phone: user.phone,
         joinedDate: user.createdAt.toISOString(),
+        artistId: user.artistId
       } : DEFAULT_STAFF_PROFILE);
       return true;
     }
     return false;
   };
-  const adminLogout = () => setAdminLoggedIn(false);
+  
+  const adminLogout = () => clearStaffSession();
 
   const artistLogin = async (username: string, password: string): Promise<boolean> => {
     const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive && u.role === 'tattoo-artist');
     if (user && user.artistId) {
       setArtistLoggedIn(true);
       setCurrentArtistId(user.artistId);
+      saveStaffSession({
+        username: user.username,
+        password: user.password,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        joinedDate: user.createdAt.toISOString(),
+        artistId: user.artistId
+      });
       return true;
     }
     return false;
   };
-  const artistLogout = () => { setArtistLoggedIn(false); setCurrentArtistId(null); };
+  
+  const artistLogout = () => clearStaffSession();
 
  const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
     // 1. Update the local screen memory immediately

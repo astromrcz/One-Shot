@@ -139,12 +139,13 @@ export function AdminLayout() {
         {/* Staff Portal link */}
         <div className="px-4 pb-2">
           <button
-            onClick={() => window.open('/staff', '_blank')}
+            onClick={() => navigate('/staff')}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-neutral-200 transition-all text-xs font-semibold"
           >
             <ShieldCheck size={13} />
             <span className="flex-1 text-left">Staff Portal</span>
-            <span className="text-[9px] text-neutral-600 font-black">↗</span>
+            {/* Changed the arrow to point right instead of up-right since it's no longer opening a new tab */}
+            <span className="text-[9px] text-neutral-600 font-black">→</span> 
           </button>
         </div>
 

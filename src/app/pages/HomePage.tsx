@@ -196,7 +196,7 @@ function MiniCalendar({
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates } = useAppContext(); 
+  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin } = useAppContext();
 
   const [announcementIdx, setAnnouncementIdx] = useState(0);
   const [announcementDir, setAnnouncementDir] = useState<1 | -1>(1);
@@ -249,10 +249,21 @@ export function HomePage() {
   const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
 
   const slotCounts = reservations.reduce((acc, r) => {
-    if (r.status === 'cancelled') return acc;
-    const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
-    if (rDateStr === selectedDateStr) {
-      acc[r.timeSlot] = (acc[r.timeSlot] || 0) + 1;
+    // PROTECT: Skip cancelled, or missing time slots/dates
+    if (r.status === 'cancelled' || !r.timeSlot || !r.date) return acc; 
+    
+    try {
+      const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
+      if (rDateStr === selectedDateStr) {
+        const startHour = parseInt(r.timeSlot.split(':')[0]);
+        const duration = r.durationHours || 1; // Fallback if duration is missing
+        for (let i = 0; i < duration; i++) {
+          const hourStr = `${String(startHour + i).padStart(2, '0')}:00`;
+          acc[hourStr] = (acc[hourStr] || 0) + 1;
+        }
+      }
+    } catch (e) {
+      // Ignore old reservations with completely broken date formats
     }
     return acc;
   }, {} as Record<string, number>);
@@ -282,17 +293,34 @@ export function HomePage() {
   }, [currentUser]);
 
   useEffect(() => {
+    // 1. Automatically check Supabase for a saved session when the app opens
+    const restoreSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User';
+        const phone = session.user.user_metadata?.phone || '';
+        const referralCode = session.user.user_metadata?.referral_code || generateReferralCode(name);
+        setCurrentUser({ name, email: session.user.email!, phone, referralCode });
+      }
+    };
+    restoreSession();
+
+    // 2. Handle password recovery routing
     if (window.location.hash.includes('type=recovery')) {
       setShowForgotPwModal(false);
       setShowLoginModal(false);
       setShowUpdatePwModal(true);
       window.history.replaceState(null, '', window.location.pathname);
     }
+
+    // 3. Listen for changes (like logging out in another tab)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setShowForgotPwModal(false);
         setShowLoginModal(false);
         setShowUpdatePwModal(true);
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
       }
     });
     return () => subscription.unsubscribe();
@@ -312,6 +340,36 @@ export function HomePage() {
     setIsLoggingIn(true);
     setLoginForm(f => ({ ...f, error: '' }));
 
+    // 1. CHECK STAFF DATABASE FIRST
+    // (Allows staff to log in using either their username OR email)
+    const isDemoAdmin = loginForm.email === 'admin' && loginForm.password === 'admin123';
+    const staffMatch = staffUsers.find(u => 
+      (u.email === loginForm.email || u.username === loginForm.email) && 
+      u.password === loginForm.password && 
+      u.isActive
+    );
+
+    if (staffMatch || isDemoAdmin) {
+      const role = isDemoAdmin ? 'manager' : staffMatch?.role;
+      const username = isDemoAdmin ? 'admin' : staffMatch?.username;
+      let success = false;
+
+      // Route based on specific role
+      if (role === 'manager' || role === 'Manager' || staffMatch?.isAdmin) {
+        success = await adminLogin(username!, loginForm.password);
+        if (success) navigate('/admin');
+      } else if (role === 'tattoo-artist') {
+        success = await artistLogin(username!, loginForm.password);
+        if (success) navigate('/artist');
+      } else {
+        success = await staffLogin(username!, loginForm.password);
+        if (success) navigate('/staff');
+      }
+
+      if (success) return; // Stop here, login is complete
+    }
+
+    // 2. IF NOT STAFF, TRY CUSTOMER DATABASE
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: loginForm.email, password: loginForm.password });
       if (error) throw error;
@@ -437,7 +495,19 @@ export function HomePage() {
   const handleRemovePromo = () => { setAppliedPromo(null); setPromoCodeInput(''); setPromoError(''); };
   
   const handleReservationSubmit = () => { 
-    if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate) return; 
+    if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate || !resForm.timeSlot) {
+      setResError('Please fill all required details.');
+      return; 
+    }
+    
+    // Validate Phone for Reservation
+    const cleanPhone = resForm.phone.replace(/\D/g, '');
+    if (!/^09\d{9}$/.test(cleanPhone)) {
+      setResError('Contact number must be exactly 11 digits and start with 09 (e.g., 09123456789).');
+      return;
+    }
+
+    setResError('');
     setReservationStep(2); 
   };
 
