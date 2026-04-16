@@ -55,30 +55,6 @@ A complete web-based management system for billiard bars with integrated tattoo 
 - npm or pnpm
 - Supabase account
 
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd one-shot-billiards
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up Supabase** (REQUIRED!)
-   - Go to https://supabase.com/dashboard
-   - Select your project: `thbvvmgmkhokfhareclr.supabase.co`
-   - Run the SQL migration (see `RUN_MIGRATION_NOW.md`)
-
-4. **Start development server**
-   ```bash
-   npm run dev
-   ```
-5. **Open your browser**
-   - Navigate to `http://localhost:5173`
 
 ## 🔑 Default Credentials
 

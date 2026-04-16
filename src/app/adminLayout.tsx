@@ -84,26 +84,27 @@ export function AdminLayout() {
           </button>
         </div>
 
-        {/* Admin badge */}
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5">
-            <ShieldCheck size={16} className="text-amber-400 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-amber-300">Administrator</p>
-              <p className="text-[10px] text-amber-600">Full access · admin</p>
-            </div>
-          </div>
-        </div>
+        
 
-        {/* Quick stats */}
-        <div className="px-4 pb-2 flex gap-2">
-          <div className="flex-1 bg-neutral-900 rounded-lg p-2 text-center border border-neutral-800">
-            <p className="text-sm font-black text-amber-400">{activeAnnouncements}</p>
-            <p className="text-[9px] text-neutral-500 uppercase tracking-wider">Active Ann.</p>
-          </div>
-          <div className="flex-1 bg-neutral-900 rounded-lg p-2 text-center border border-neutral-800">
-            <p className="text-sm font-black text-rose-400">{upcomingClosed}</p>
-            <p className="text-[9px] text-neutral-500 uppercase tracking-wider">Closed Days</p>
+        {/* System Health Widget */}
+        <div className="px-4 pb-3">
+          <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-3">
+            <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-2.5 flex items-center gap-1.5">
+              <Activity size={11} className="text-emerald-500" />
+              System Status
+            </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs text-neutral-200 font-medium">Operational</span>
+              </div>
+              <span className="text-[9px] bg-neutral-800/80 text-emerald-400/80 border border-emerald-900/30 px-1.5 py-0.5 rounded font-mono font-bold tracking-wider">
+                DB CONNECTED
+              </span>
+            </div>
           </div>
         </div>
 

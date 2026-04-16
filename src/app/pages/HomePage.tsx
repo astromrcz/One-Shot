@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { addMinutes, differenceInSeconds, format, isToday } from 'date-fns';
+import { supabase } from '../../utils/supabase/client';
 import {
   ChevronLeft, ChevronRight, X, Star, Phone, MapPin,
   Clock, LogIn, UserPlus, Eye, EyeOff,
   Calendar, CheckCircle, ArrowRight,
-  Megaphone, Info, Shield, Award, Mail, Tag
+  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle
 } from 'lucide-react';
 import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
@@ -29,7 +30,6 @@ const HERO_SLIDES = [
   { src: heroImg5, alt: 'Precision Billiards' },
 ];
 
-// ─── Constants ────────────────────────────────────────────────
 const ANNOUNCEMENTS = [
   "🎱 Welcome to One Shot Bar & Billiards! Book your favorite table now!",
   "📍 Visit us at Autobase OAX, San Juan, Cainta, Rizal · Mon–Sat 12PM–3AM · Sun 5PM–3AM",
@@ -50,7 +50,6 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 
 type Section = 'home' | 'reservations' | 'rates' | 'about' | 'contacts' | 'reviews' | 'feedback' | 'tattoo';
 
-// ─── QR Code Component ────────────────────────────────────────
 const QR_GCASH = [
   [1,1,1,0,1,0,1,0,0,1,1,1,1,0,1,1,1],
   [1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1],
@@ -71,8 +70,6 @@ const QR_GCASH = [
   [1,0,1,1,0,1,1,0,1,0,0,1,0,0,1,0,1],
 ];
 
-
-
 function QRDisplay({ pattern, color }: { pattern: number[][], color: string }) {
   return (
     <div className="bg-white p-3 rounded-xl inline-block">
@@ -90,13 +87,13 @@ function QRDisplay({ pattern, color }: { pattern: number[][], color: string }) {
   );
 }
 
-// ─── Mini Calendar Component ──────────────────────────────────
 function MiniCalendar({
-  selectedDate, onSelect, reservedDates
+  selectedDate, onSelect, reservedDates, closedDates
 }: {
   selectedDate: Date | null;
   onSelect: (d: Date) => void;
   reservedDates: Date[];
+  closedDates: { date: string; reason: string }[];
 }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -135,51 +132,28 @@ function MiniCalendar({
 
   const isPast = (date: Date) => date < today;
   const isSelected = (date: Date) =>
-    selectedDate
-      ? date.getTime() === (() => { const s = new Date(selectedDate); s.setHours(0,0,0,0); return s.getTime(); })()
-      : false;
+    selectedDate ? date.getTime() === (() => { const s = new Date(selectedDate); s.setHours(0,0,0,0); return s.getTime(); })() : false;
   const isToday = (date: Date) => date.getTime() === today.getTime();
 
-  const prevMonth = () => {
-    const d = new Date(viewDate);
-    d.setMonth(d.getMonth() - 1);
-    setViewDate(d);
-  };
-  const nextMonth = () => {
-    const d = new Date(viewDate);
-    d.setMonth(d.getMonth() + 1);
-    setViewDate(d);
-  };
+  const prevMonth = () => { const d = new Date(viewDate); d.setMonth(d.getMonth() - 1); setViewDate(d); };
+  const nextMonth = () => { const d = new Date(viewDate); d.setMonth(d.getMonth() + 1); setViewDate(d); };
 
   return (
     <div className="bg-neutral-900 rounded-2xl border border-neutral-700 p-4 select-none">
-      {/* Month Nav */}
       <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={prevMonth}
-          className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-        >
+        <button onClick={prevMonth} className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
           <ChevronLeft size={16} />
         </button>
-        <span className="text-sm font-semibold text-white">
-          {MONTHS[month]} {year}
-        </span>
-        <button
-          onClick={nextMonth}
-          className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-        >
+        <span className="text-sm font-semibold text-white">{MONTHS[month]} {year}</span>
+        <button onClick={nextMonth} className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
           <ChevronRight size={16} />
         </button>
       </div>
-      {/* Day Headers */}
       <div className="grid grid-cols-7 mb-2">
         {DAYS_OF_WEEK.map(d => (
-          <div key={d} className="text-center text-[10px] text-neutral-500 font-semibold uppercase tracking-wider py-1">
-            {d}
-          </div>
+          <div key={d} className="text-center text-[10px] text-neutral-500 font-semibold uppercase tracking-wider py-1">{d}</div>
         ))}
       </div>
-      {/* Day Grid */}
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map(({ day, currentMonth, date }, idx) => {
           const past = isPast(date);
@@ -187,24 +161,26 @@ function MiniCalendar({
           const today_ = isToday(date);
           const reserved = isReserved(date) && currentMonth;
           const clickable = currentMonth && !past;
+          
+          const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          const closedInfo = currentMonth ? closedDates.find(cd => cd.date === dateStr) : null;
+
           return (
             <button
-              key={idx}
-              disabled={!clickable}
-              onClick={() => clickable && onSelect(date)}
+              key={idx} disabled={!clickable} onClick={() => clickable && onSelect(date)}
               className={`
                 relative aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all
                 ${!currentMonth ? 'opacity-20 cursor-default' : ''}
                 ${past && currentMonth ? 'opacity-30 cursor-default text-neutral-600' : ''}
-                ${selected ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : ''}
-                ${!selected && today_ ? 'border border-emerald-500 text-emerald-400' : ''}
-                ${!selected && clickable && !today_ ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
+                ${selected && !closedInfo ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : ''}
+                ${selected && closedInfo ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50' : ''}
+                ${!selected && closedInfo && clickable ? 'bg-rose-950/30 border border-rose-800/50 text-rose-400 hover:bg-rose-900/40' : ''}
+                ${!selected && !closedInfo && today_ ? 'border border-emerald-500 text-emerald-400' : ''}
+                ${!selected && !closedInfo && clickable && !today_ ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
               `}
             >
               <span>{day}</span>
-              {reserved && !selected && (
-                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
-              )}
+              {reserved && !selected && !closedInfo && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />}
             </button>
           );
         })}
@@ -212,128 +188,151 @@ function MiniCalendar({
       <div className="mt-3 flex items-center gap-3 text-[10px] text-neutral-500">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Has reservations</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Selected</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block" /> Closed</span>
       </div>
     </div>
   );
 }
 
-// ─── Main HomePage ────────────────────────────────────────────
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates } = useAppContext(); 
+  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates } = useAppContext(); 
 
-  // Announcement rotator
   const [announcementIdx, setAnnouncementIdx] = useState(0);
   const [announcementDir, setAnnouncementDir] = useState<1 | -1>(1);
-
-  // Hero slideshow
   const [heroSlideIdx, setHeroSlideIdx] = useState(0);
   const [heroSlideDir, setHeroSlideDir] = useState<1 | -1>(1);
-
-  // Live clock for table timers
   const [now, setNow] = useState(new Date());
-
-  // Active section
   const [activeSection, setActiveSection] = useState<Section>('home');
 
-  // Modals
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-
-  // Auth state (mock)
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; referralCode: string } | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showForgotPwModal, setShowForgotPwModal] = useState(false); 
+  const [showUpdatePwModal, setShowUpdatePwModal] = useState(false);
 
-const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: string, phone?: string}>) => {
-    if (!currentUser) return;
-    // Update local state
-    setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
-    // Update reservation form name/email if it's currently open
-    setResForm(f => ({ ...f, name: updates.name || f.name, email: updates.email || f.email }));
-  };
-  // Login form
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; referralCode: string } | null>(null);
+
   const [loginForm, setLoginForm] = useState({ email: '', password: '', showPw: false, error: '' });
-  // Register form
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '', referralCode: '', showPw: false, error: '' });
+  const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  // Reservation flow
-  const [reservationStep, setReservationStep] = useState<0 | 1 | 2 | 3>(0); // 0=closed, 1=form, 2=payment, 3=confirmed
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [resForm, setResForm] = useState({
-    name: '', email: '', phone: '', pax: 2, timeSlot: '18:00', duration: 2,
-  });
-  const [paymentMethod, setPaymentMethod] = useState<'gcash'>('gcash');
+  const [forgotPwEmail, setForgotPwEmail] = useState('');
+  const [isResettingPw, setIsResettingPw] = useState(false);
+  const [forgotPwMsg, setForgotPwMsg] = useState('');
+  const [updatePwForm, setUpdatePwForm] = useState({ password: '', confirm: '', error: '', loading: false, success: '' });
+
+  const [reservationStep, setReservationStep] = useState<0 | 1 | 2 | 3>(0);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null); 
+  const [resForm, setResForm] = useState({ name: '', email: '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
   const [confirmingPayment, setConfirmingPayment] = useState(false);
-  // Promo code state
+  
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
   const [promoError, setPromoError] = useState('');
 
-  // Reviews form (formerly feedback)
   const [fbForm, setFbForm] = useState({ name: '', rating: 5, comment: '' });
   const [fbSent, setFbSent] = useState(false);
-
-  // Simple Feedback form
   const [simpleFeedbackForm, setSimpleFeedbackForm] = useState({ name: '', type: '', contact: '', message: '' });
   const [simpleFeedbackSent, setSimpleFeedbackSent] = useState(false);
 
-  // Rotating announcements
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setAnnouncementDir(1);
-      setAnnouncementIdx(prev => (prev + 1) % ANNOUNCEMENTS.length);
-    }, 4500);
-    return () => clearInterval(interval);
-  }, []);
+  const selectedDateStr = selectedDate 
+    ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}` 
+    : null;
+  const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
 
-  // Auto-advance hero slides
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setHeroSlideDir(1);
-      setHeroSlideIdx(prev => (prev + 1) % HERO_SLIDES.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Live clock tick for table timers
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // When user logs in, pre-fill reservation form
-  useEffect(() => {
-    if (currentUser) {
-      setResForm(f => ({ ...f, name: currentUser.name, email: currentUser.email }));
+  const slotCounts = reservations.reduce((acc, r) => {
+    if (r.status === 'cancelled') return acc;
+    const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
+    if (rDateStr === selectedDateStr) {
+      acc[r.timeSlot] = (acc[r.timeSlot] || 0) + 1;
     }
-  }, [currentUser]);
+    return acc;
+  }, {} as Record<string, number>);
 
-  // Use dynamic rates from AppContext (with fallbacks just in case)
   const baseAmount = resForm.duration * (rates?.hourlyRate || 250);
   const discountAmount = appliedPromo ? Math.floor(baseAmount * appliedPromo.discountPercent / 100) : 0;
   const totalAmount = baseAmount - discountAmount;
   const downPayment = Math.ceil(totalAmount * ((rates?.downPaymentPercent || 25) / 100));
 
-  const handleLoginSubmit = () => {
+  useEffect(() => {
+    const interval = setInterval(() => { setAnnouncementDir(1); setAnnouncementIdx(prev => (prev + 1) % ANNOUNCEMENTS.length); }, 4500);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => { setHeroSlideDir(1); setHeroSlideIdx(prev => (prev + 1) % HERO_SLIDES.length); }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) setResForm(f => ({ ...f, name: currentUser.name, email: currentUser.email }));
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (window.location.hash.includes('type=recovery')) {
+      setShowForgotPwModal(false);
+      setShowLoginModal(false);
+      setShowUpdatePwModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowForgotPwModal(false);
+        setShowLoginModal(false);
+        setShowUpdatePwModal(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: string, phone?: string}>) => {
+    if (!currentUser) return;
+    setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+    setResForm(f => ({ ...f, name: updates.name || f.name, email: updates.email || f.email }));
+  };
+
+  const handleLoginSubmit = async () => {
     if (!loginForm.email || !loginForm.password) {
       setLoginForm(f => ({ ...f, error: 'Please fill all fields.' }));
       return;
     }
-    
-    // Simulate a database check (Reject if password is not oneshot123)
-    if (loginForm.password !== 'oneshot123') {
-      setLoginForm(f => ({ ...f, error: 'Invalid email or password. Account not found.' }));
-      return;
-    }
+    setIsLoggingIn(true);
+    setLoginForm(f => ({ ...f, error: '' }));
 
-    // Success! Log them in
-    const name = loginForm.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    setCurrentUser({ name, email: loginForm.email, referralCode: generateReferralCode(name) });
-    setShowLoginModal(false);
-    setLoginForm({ email: '', password: '', showPw: false, error: '' });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: loginForm.email, password: loginForm.password });
+      if (error) throw error;
+
+      const name = data.user.user_metadata?.full_name || loginForm.email.split('@')[0];
+      const referralCode = data.user.user_metadata?.referral_code || generateReferralCode(name);
+
+      setCurrentUser({ name, email: loginForm.email, referralCode });
+      setShowLoginModal(false);
+      setLoginForm({ email: '', password: '', showPw: false, error: '' });
+    } catch (err: any) {
+      if (err.message.includes('Email not confirmed')) {
+        setLoginForm(f => ({ ...f, error: 'Please verify your email address before logging in.' }));
+      } else {
+        setLoginForm(f => ({ ...f, error: 'Invalid email or password. Please try again.' }));
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
-  const handleRegisterSubmit = () => {
+  const handleRegisterSubmit = async () => {
     if (!registerForm.name || !registerForm.email || !registerForm.phone || !registerForm.password) {
       setRegisterForm(f => ({ ...f, error: 'Please fill all required fields.' }));
       return;
@@ -342,10 +341,75 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
       setRegisterForm(f => ({ ...f, error: 'Passwords do not match.' }));
       return;
     }
-    const myReferralCode = generateReferralCode(registerForm.name);
-    setCurrentUser({ name: registerForm.name, email: registerForm.email, referralCode: myReferralCode });
-    setShowRegisterModal(false);
-    setRegisterForm({ name: '', email: '', phone: '', password: '', confirm: '', referralCode: '', showPw: false, error: '' });
+
+    setIsRegistering(true);
+    setRegisterForm(f => ({ ...f, error: '' }));
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: registerForm.email,
+        password: registerForm.password,
+        options: {
+          data: {
+            full_name: registerForm.name,
+            phone: registerForm.phone,
+            referral_code: registerForm.referralCode || generateReferralCode(registerForm.name)
+          },
+          emailRedirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        setRegisterForm(f => ({ ...f, error: 'This email is already registered. Please log in.' }));
+      } else {
+        setRegisterSuccessMsg('Registration successful! Please check your email to verify your account before logging in.');
+        setRegisterForm({ name: '', email: '', phone: '', password: '', confirm: '', referralCode: '', showPw: false, error: '' });
+      }
+    } catch (err: any) {
+      setRegisterForm(f => ({ ...f, error: err.message || 'Failed to register. Please try again.' }));
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async () => {
+    if (!forgotPwEmail) return;
+    setIsResettingPw(true);
+    setForgotPwMsg('');
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotPwEmail, {
+        redirectTo: window.location.origin, 
+      });
+      if (error) throw error;
+      setForgotPwMsg('Success! Check your email for the password reset link.');
+    } catch (err: any) {
+      setForgotPwMsg(`Error: ${err.message}`);
+    } finally {
+      setIsResettingPw(false);
+    }
+  };
+
+  const handleUpdatePasswordSubmit = async () => {
+    if (!updatePwForm.password || updatePwForm.password !== updatePwForm.confirm) {
+      setUpdatePwForm(f => ({ ...f, error: 'Passwords do not match.' }));
+      return;
+    }
+    setUpdatePwForm(f => ({ ...f, loading: true, error: '' }));
+    
+    const { error } = await supabase.auth.updateUser({ password: updatePwForm.password });
+    
+    if (error) {
+      setUpdatePwForm(f => ({ ...f, error: error.message, loading: false }));
+    } else {
+      setUpdatePwForm(f => ({ ...f, success: 'Password updated! Redirecting to login...', loading: false }));
+      setTimeout(() => {
+        setShowUpdatePwModal(false);
+        supabase.auth.signOut();
+        setShowLoginModal(true);
+      }, 2500);
+    }
   };
 
   const handleApplyPromo = async () => {
@@ -360,82 +424,71 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
     }
   };
 
-  const handleRemovePromo = () => {
-    setAppliedPromo(null);
-    setPromoCodeInput('');
-    setPromoError('');
+  const handleRemovePromo = () => { setAppliedPromo(null); setPromoCodeInput(''); setPromoError(''); };
+  
+  const handleReservationSubmit = () => { 
+    if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate) return; 
+    setReservationStep(2); 
   };
 
-  const handleReservationSubmit = () => {
-    if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate) {
+  const handlePaymentConfirm = async () => {
+    if (!referenceNumber) {
+      setUploadError("Please enter the GCash Reference Number.");
       return;
     }
-    setReservationStep(2);
-  };
-
-  const handlePaymentConfirm = () => {
+    
     setConfirmingPayment(true);
-    setTimeout(() => {
+    setUploadError('');
+
+    try {
+      let receiptUrl = '';
+      
+      if (receiptFile) {
+        const fileExt = receiptFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const { data, error } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
+        if (error) throw error;
+        receiptUrl = supabase.storage.from('receipts').getPublicUrl(fileName).data.publicUrl;
+      }
+
       const reservationDate = new Date(selectedDate!);
       const [hours, minutes] = resForm.timeSlot.split(':').map(Number);
       reservationDate.setHours(hours, minutes, 0, 0);
 
       addReservation({
-        customerName: resForm.name,
-        contactNumber: resForm.phone,
-        email: resForm.email,
-        date: reservationDate,
-        timeSlot: resForm.timeSlot,
-        durationHours: resForm.duration,
-        partySize: resForm.pax,
-        status: 'pending',
-        totalAmount,
-        downPaymentAmount: downPayment,
-        downPaymentPaid: true,
-        balancePaid: false,
-        promoCode: appliedPromo?.code,
+        customerName: resForm.name, contactNumber: resForm.phone, email: resForm.email,
+        date: reservationDate, timeSlot: resForm.timeSlot, durationHours: resForm.duration,
+        partySize: resForm.pax, status: 'pending', totalAmount, downPaymentAmount: downPayment,
+        downPaymentPaid: true, balancePaid: false, promoCode: appliedPromo?.code,
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        paymentReference: referenceNumber,
+        receiptUrl: receiptUrl,
       });
 
-      setConfirmingPayment(false);
+      setConfirmingPayment(false); 
       setReservationStep(3);
-    }, 1500);
+    } catch (err: any) {
+      setUploadError(err.message || "Failed to process payment details.");
+      setConfirmingPayment(false);
+    }
   };
 
   const closeReservation = () => {
-    setReservationStep(0);
-    setSelectedDate(null);
+    setReservationStep(0); setSelectedDate(null);
     setResForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
-    setPaymentMethod('gcash');
-    setPromoCodeInput('');
-    setAppliedPromo(null);
-    setPromoError('');
-  };
-
-  const handleFeedbackSubmit = () => {
-    if (!fbForm.name || !fbForm.comment) return;
-    addFeedback({ customerName: fbForm.name, rating: fbForm.rating, comment: fbForm.comment, tags: [] });
-    setFbSent(true);
-    setTimeout(() => {
-      setFbSent(false);
-      setFbForm({ name: '', rating: 5, comment: '' });
-    }, 3000);
+    setPromoCodeInput(''); setAppliedPromo(null); setPromoError('');
+    setReferenceNumber(''); setReceiptFile(null); setUploadError('');
   };
 
   const handleSimpleFeedbackSubmit = () => {
     if (!simpleFeedbackForm.name || !simpleFeedbackForm.type || !simpleFeedbackForm.contact) return;
-    // Mock submission - in real app would send to backend
     setSimpleFeedbackSent(true);
-    setTimeout(() => {
-      setSimpleFeedbackSent(false);
-      setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' });
-    }, 3000);
+    setTimeout(() => { setSimpleFeedbackSent(false); setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); }, 3000);
   };
 
   const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + HERO_SLIDES.length) % HERO_SLIDES.length); };
   const nextHeroSlide = () => { setHeroSlideDir(1); setHeroSlideIdx(p => (p + 1) % HERO_SLIDES.length); };
 
-  // Table timer helper
   const getTableTimerInfo = (tableId: string) => {
     const t = tables.find(tb => tb.id === tableId);
     if (!t || t.status !== 'occupied' || !t.session) return null;
@@ -445,56 +498,24 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
     const absSecs = Math.abs(secsLeft);
     const mins = Math.floor(absSecs / 60);
     const secs = absSecs % 60;
-    return {
-      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
-      isOvertime,
-      isAlert: !isOvertime && secsLeft <= 900,
-      customerName: t.session.customerName,
-    };
+    return { formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, isOvertime, isAlert: !isOvertime && secsLeft <= 900, customerName: t.session.customerName };
   };
 
-  // Next reservation for a table (today only)
   const getNextResForTable = (tableId: string) => {
-    return reservations
-      .filter(r =>
-        r.tableId === tableId &&
-        (r.status === 'pending' || r.status === 'confirmed') &&
-        isToday(new Date(r.date)) &&
-        new Date(r.date) >= now
-      )
+    return reservations.filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && isToday(new Date(r.date)) && new Date(r.date) >= now)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null;
   };
 
-  const reservedDates = reservations
-    .filter(r => r.status !== 'cancelled')
-    .map(r => new Date(r.date));
-
-  const navSections: { id: Section; label: string }[] = [
-    { id: 'home', label: 'Home' },
-    { id: 'reservations', label: 'Reservations' },
-    { id: 'rates', label: 'Rates' },
-    { id: 'tattoo', label: 'Tattoo Studio' },
-    { id: 'about', label: 'About Us' },
-    { id: 'reviews', label: 'Feedback' },
-  ];
+  const reservedDates = reservations.filter(r => r.status !== 'cancelled').map(r => new Date(r.date));
+  const navSections: { id: Section; label: string }[] = [{ id: 'home', label: 'Home' }, { id: 'reservations', label: 'Reservations' }, { id: 'rates', label: 'Rates' }, { id: 'tattoo', label: 'Tattoo Studio' }, { id: 'about', label: 'About Us' }, { id: 'reviews', label: 'Feedback' }];
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
-
       {/* ── Top Header ── */}
       <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800/60 flex items-center overflow-hidden">
-        
-        {/* Half-Parallelogram Logo */}
-        <div
-          className="h-full flex items-center px-5 pr-12 bg-emerald-700 flex-shrink-0 relative z-10"
-          style={{ clipPath: 'polygon(0 0, 100% 0, 82% 100%, 0 100%)', minWidth: 220 }}
-        >
+        <div className="h-full flex items-center px-5 pr-12 bg-emerald-700 flex-shrink-0 relative z-10" style={{ clipPath: 'polygon(0 0, 100% 0, 82% 100%, 0 100%)', minWidth: 220 }}>
           <div className="flex items-center gap-2.5">
-            <img
-              src={logoImg}
-              alt="One Shot Bar & Billiards"
-              className="h-9 w-9 object-contain rounded-lg flex-shrink-0"
-            />
+            <img src={logoImg} alt="One Shot Bar & Billiards" className="h-9 w-9 object-contain rounded-lg flex-shrink-0" />
             <div>
               <p className="text-white font-black text-sm tracking-tight leading-tight">ONE SHOT</p>
               <p className="text-emerald-200 text-[9px] uppercase tracking-[0.2em] font-semibold">Bar & Billiards</p>
@@ -510,27 +531,10 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
             </div>
             <div className="flex-1 overflow-hidden text-center">
               <AnimatePresence mode="wait">
-                <motion.p
-                  key={announcementIdx}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.35 }}
-                  className="text-xs text-neutral-300 truncate"
-                >
+                <motion.p key={announcementIdx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35 }} className="text-xs text-neutral-300 truncate">
                   {ANNOUNCEMENTS[announcementIdx]}
                 </motion.p>
               </AnimatePresence>
-            </div>
-            {/* Dots indicator */}
-            <div className="flex gap-1 flex-shrink-0">
-              {ANNOUNCEMENTS.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => { setAnnouncementDir(i > announcementIdx ? 1 : -1); setAnnouncementIdx(i); }}
-                  className={`w-1.5 h-1.5 rounded-full transition-all ${i === announcementIdx ? 'bg-emerald-400 w-3' : 'bg-neutral-600 hover:bg-neutral-400'}`}
-                />
-              ))}
             </div>
           </div>
         </div>
@@ -539,146 +543,67 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
         <div className="flex items-center gap-2 pr-4 flex-shrink-0">
           {currentUser ? (
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowProfileModal(true)}
-                className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/25 rounded-full px-3 py-1.5 hover:bg-emerald-600/20 transition-colors"
-              >
-                <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[9px] font-black text-white">
-                  {currentUser.name[0]}
-                </div>
+              <button onClick={() => setShowProfileModal(true)} className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/25 rounded-full px-3 py-1.5 hover:bg-emerald-600/20 transition-colors">
+                <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[9px] font-black text-white">{currentUser.name[0]}</div>
                 <span className="text-xs text-emerald-300 font-medium hidden sm:block">{currentUser.name}</span>
               </button>
-              <button
-                onClick={() => setCurrentUser(null)}
-                className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors"
-              >
-                Logout
-              </button>
+              <button onClick={() => setCurrentUser(null)} className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors">Logout</button>
             </div>
           ) : (
             <>
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="flex items-center gap-1.5 text-xs text-neutral-300 hover:text-white bg-neutral-800/60 hover:bg-neutral-800 border border-neutral-700/50 px-3 py-1.5 rounded-full transition-all"
-              >
-                <LogIn size={12} />
-                <span className="hidden sm:inline">Login</span>
+              <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-1.5 text-xs text-neutral-300 hover:text-white bg-neutral-800/60 hover:bg-neutral-800 border border-neutral-700/50 px-3 py-1.5 rounded-full transition-all">
+                <LogIn size={12} /> <span className="hidden sm:inline">Login</span>
               </button>
-              <button
-                onClick={() => setShowRegisterModal(true)}
-                className="flex items-center gap-1.5 text-xs text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-full transition-all"
-              >
-                <UserPlus size={12} />
-                <span className="hidden sm:inline">Register</span>
+              <button onClick={() => setShowRegisterModal(true)} className="flex items-center gap-1.5 text-xs text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-full transition-all">
+                <UserPlus size={12} /> <span className="hidden sm:inline">Register</span>
               </button>
             </>
           )}
-
         </div>
       </header>
 
       {/* ── Section Navigation ── */}
       <nav className="fixed top-16 left-0 right-0 z-40 bg-neutral-900/95 backdrop-blur-sm border-b border-neutral-800/60 flex items-center justify-center gap-1 px-4 overflow-x-auto">
         {navSections.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setActiveSection(id)}
-            className={`relative px-4 py-3 text-xs font-semibold whitespace-nowrap transition-all ${
-              activeSection === id
-                ? 'text-emerald-400'
-                : 'text-neutral-500 hover:text-neutral-300'
-            }`}
-          >
+          <button key={id} onClick={() => setActiveSection(id)} className={`relative px-4 py-3 text-xs font-semibold whitespace-nowrap transition-all ${activeSection === id ? 'text-emerald-400' : 'text-neutral-500 hover:text-neutral-300'}`}>
             {label}
-            {activeSection === id && (
-              <motion.span
-                layoutId="navUnderline"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full"
-              />
-            )}
+            {activeSection === id && <motion.span layoutId="navUnderline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />}
           </button>
         ))}
       </nav>
 
       {/* ── Main Content ── */}
-      <main className="flex-1 pt-32">
+      <main className={`flex-1 ${activeSection === 'home' ? 'pt-0' : 'pt-[104px]'}`}>
         <AnimatePresence mode="wait">
           {/* ════ HOME SECTION ════ */}
           {activeSection === 'home' && (
-            <motion.div
-              key="home"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
+            <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
               {/* Hero Slideshow */}
               <div className="relative h-[70vh] min-h-[480px] overflow-hidden group">
                 <AnimatePresence mode="wait" custom={heroSlideDir}>
-                  <motion.div
-                    key={heroSlideIdx}
-                    custom={heroSlideDir}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.9 }}
-                    className="absolute inset-0"
-                  >
-                    <img
-                      src={HERO_SLIDES[heroSlideIdx].src}
-                      alt={HERO_SLIDES[heroSlideIdx].alt}
-                      className="w-full h-full object-cover"
-                    />
+                  <motion.div key={heroSlideIdx} custom={heroSlideDir} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.9 }} className="absolute inset-0">
+                    <img src={HERO_SLIDES[heroSlideIdx].src} alt={HERO_SLIDES[heroSlideIdx].alt} className="w-full h-full object-cover" />
                   </motion.div>
                 </AnimatePresence>
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/55 to-transparent" />
-
-                {/* Prev / Next arrows */}
-                <button
-                  onClick={prevHeroSlide}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60 z-10"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  onClick={nextHeroSlide}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60 z-10"
-                >
-                  <ChevronRight size={18} />
-                </button>
+                <button onClick={prevHeroSlide} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60 z-10"><ChevronLeft size={18} /></button>
+                <button onClick={nextHeroSlide} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60 z-10"><ChevronRight size={18} /></button>
 
                 <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 px-6 text-center z-10">
-                  <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15, duration: 0.5 }}
-                    className="flex flex-col items-center"
-                  >
+                  <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.5 }} className="flex flex-col items-center">
                     <p className="text-emerald-400 text-xs uppercase tracking-[0.3em] font-semibold mb-3">Welcome to</p>
-                    <h1 className="text-5xl md:text-6xl font-black text-white mb-2 tracking-tight">
-                      One Shot
-                    </h1>
+                    <h1 className="text-5xl md:text-6xl font-black text-white mb-2 tracking-tight">One Shot</h1>
                     <p className="text-emerald-300 text-xl font-light mb-5">Bar & Billiards</p>
+
                     <p className="text-neutral-400 text-sm max-w-md mx-auto mb-7 leading-relaxed">
                       Your premier billiard destination at Autobase OAX, Cainta, Rizal. 10 world-class tables, refreshing drinks, and an unbeatable atmosphere.
                     </p>
+
                     <div className="flex flex-wrap justify-center gap-3 mb-6">
-                      <button
-                        onClick={() => setActiveSection('reservations')}
-                        className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-full text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40 hover:shadow-emerald-800/60"
-                      >
-                        <Calendar size={15} />
-                        Book a Table
-                      </button>
-                      <button
-                        onClick={() => setActiveSection('about')}
-                        className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-6 py-3 rounded-full text-sm font-semibold transition-all border border-neutral-700"
-                      >
-                        <Info size={15} />
-                        Learn More
-                      </button>
+                      <button onClick={() => setActiveSection('reservations')} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-full text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40 hover:shadow-emerald-800/60"><Calendar size={15} /> Book a Table</button>
+                      <button onClick={() => setActiveSection('about')} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-6 py-3 rounded-full text-sm font-semibold transition-all border border-neutral-700"><Info size={15} /> Learn More</button>
                     </div>
-                    {/* Slide dots — placed below CTA buttons */}
+
                     <div className="flex gap-2">
                       {HERO_SLIDES.map((_, i) => (
                         <button
@@ -708,7 +633,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                   ))}
                 </div>
               </div>
-
+              
               {/* Features */}
               <div className="max-w-5xl mx-auto px-6 py-16">
                 <h2 className="text-center text-2xl font-bold text-white mb-10">Why Choose One Shot?</h2>
@@ -753,14 +678,7 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
 
           {/* ════ RESERVATIONS SECTION ════ */}
           {activeSection === 'reservations' && (
-            <motion.div
-              key="reservations"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="max-w-5xl mx-auto px-6 py-10"
-            >
+            <motion.div key="reservations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="max-w-5xl mx-auto px-6 py-10">
               <div className="text-center mb-10">
                 <h2 className="text-3xl font-black text-white mb-2">Make a Reservation</h2>
                 <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {rates?.downPaymentPercent || 25}% down payment.</p>
@@ -770,72 +688,34 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
                 <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
-                      <Clock size={14} className="text-neutral-500" /> Live Table Status
-                    </h2>
-                    <div className="flex items-center gap-2.5">
-                      {[{ color: 'bg-emerald-500', label: 'Free' }, { color: 'bg-rose-500', label: 'Busy' }, { color: 'bg-amber-500', label: 'Reserved' }].map(item => (
-                        <div key={item.label} className="flex items-center gap-1">
-                          <span className={`w-2 h-2 rounded-full ${item.color}`} />
-                          <span className="text-[10px] text-neutral-500">{item.label}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
                   </div>
                   <div className="space-y-1 max-h-56 overflow-y-auto">
                     {tables.map(t => {
-                      // 1. IF THE TABLE IS DISABLED: Show greyed out "Unavailable" status
                       if (!t.isActive) {
                         return (
                           <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
                             <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
                             <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
-                            <div className="flex-1 min-w-0">
-                              <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">
-                                Unavailable
-                              </span>
-                            </div>
+                            <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
                           </div>
                         );
                       }
-
-                      // 2. IF THE TABLE IS ACTIVE: Show the normal timers and status
                       const timerInfo = getTableTimerInfo(t.id);
                       const nextRes = getNextResForTable(t.id);
-                      const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' :
-                        timerInfo?.isAlert ? 'bg-amber-400' :
-                        t.status === 'occupied' ? 'bg-rose-500' :
-                        t.status === 'reserved' ? 'bg-amber-400' : 'bg-emerald-500';
-                        
+                      const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' : timerInfo?.isAlert ? 'bg-amber-400' : t.status === 'occupied' ? 'bg-rose-500' : t.status === 'reserved' ? 'bg-amber-400' : 'bg-emerald-500';
                       return (
-                        <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${
-                          timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' :
-                          timerInfo?.isAlert ? 'bg-amber-950/20 border-amber-800/30' :
-                          t.status === 'occupied' ? 'bg-neutral-950 border-neutral-800/50' :
-                          t.status === 'reserved' ? 'bg-amber-950/10 border-amber-900/20' :
-                          'bg-neutral-950/50 border-neutral-800/30'
-                        }`}>
+                        <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
                           <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
                           <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
                           <div className="flex-1 min-w-0">
                             {timerInfo ? (
-                              <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isAlert ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                {timerInfo.isOvertime ? '+' : ''}{timerInfo.formatted}
-                                <span className="font-sans font-normal text-[10px] text-neutral-500 ml-1">
-                                  {timerInfo.isOvertime ? 'overtime' : 'left'}
-                                </span>
-                              </span>
+                              <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : 'text-emerald-400'}`}>{timerInfo.formatted}</span>
                             ) : (
-                              <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : 'text-amber-400'}`}>
-                                {t.status}
-                              </span>
+                              <span className={`font-semibold uppercase text-[10px] ${t.status === 'available' ? 'text-emerald-500' : 'text-amber-400'}`}>{t.status}</span>
                             )}
                           </div>
-                          {nextRes && (
-                            <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[90px]">
-                              → {nextRes.customerName.split(' ')[0]} @ {nextRes.timeSlot}
-                            </span>
-                          )}
+                          {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[90px]">→ {nextRes.customerName.split(' ')[0]} @ {nextRes.timeSlot}</span>}
                         </div>
                       );
                     })}
@@ -847,226 +727,176 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                     <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
                     <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
                   </div>
-                  <p className="text-[10px] text-amber-400/80 font-semibold uppercase tracking-wider mb-3 flex items-center gap-1">
-                    <Clock size={9} /> First Come, First Served
-                  </p>
                   {queue.filter(q => q.status === 'waiting').length === 0 ? (
-                    <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg">
-                      <p className="text-xs text-neutral-500">No customers currently waiting.</p>
-                    </div>
+                    <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
                   ) : (
                     <div className="space-y-2">
                       {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
                         <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
-                          <span className="w-5 h-5 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
+                          <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
                           <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
                           <span className="text-xs text-neutral-500">{q.partySize} pax</span>
                         </div>
                       ))}
-                      {queue.filter(q => q.status === 'waiting').length > 4 && (
-                        <p className="text-xs text-neutral-600 pl-7">+{queue.filter(q => q.status === 'waiting').length - 4} more</p>
-                      )}
                     </div>
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                {/* Calendar */}
                 <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">
-                    Step 1 — Pick a Date
-                  </p>
-                  <MiniCalendar
-                    selectedDate={selectedDate}
-                    onSelect={setSelectedDate}
-                    reservedDates={reservedDates}
-                  />
-                  {selectedDate && (
-                    <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
-                      <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
-                      <span className="text-xs text-emerald-300">
-                        Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong>
-                      </span>
-                    </div>
+                  <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 1 — Pick a Date</p>
+                  <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} reservedDates={reservedDates} closedDates={closedDates} />
+                  {selectedDate && !selectedClosedDate && (
+                    <>
+                      <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
+                        <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                        <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
+                      </div>
+                      
+                      {/* Slot Availability Card */}
+                      <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                            <Clock size={14} className="text-emerald-500" /> Slot Availability
+                          </h3>
+                          <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Max 5 / hour</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                          {TIME_SLOTS.map(t => {
+                            const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                            if (isHappyHour) return null; // Hide happy hour from the list
+                            
+                            const count = slotCounts[t] || 0;
+                            const isFull = count >= 5;
+                            
+                            return (
+                              <div key={t} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                                isFull ? 'bg-rose-950/20 border-rose-800/30' : 
+                                count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
+                                'bg-neutral-950 border-neutral-800/50'
+                              }`}>
+                                <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{t}</span>
+                                <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
+                                  {count}/5
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
-
-                {/* Form */}
                 <div>
                   {!selectedDate ? (
                     <div className="bg-neutral-900 border border-dashed border-neutral-700 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
                       <Calendar size={32} className="text-neutral-600" />
                       <p className="text-neutral-500 text-sm">Please select a date from the calendar to continue your reservation.</p>
                     </div>
-                  ) : (
-                    <div>
-                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">
-                        Step 2 — Your Details
-                      </p>
-                      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4">
-                        {/* Name */}
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
-                          <input
-                            type="text"
-                            value={resForm.name}
-                            onChange={e => setResForm(f => ({ ...f, name: e.target.value }))}
-                            placeholder="e.g. Juan dela Cruz"
-                            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                          />
-                        </div>
-                        {/* Email */}
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
-                          <input
-                            type="email"
-                            value={resForm.email}
-                            onChange={e => setResForm(f => ({ ...f, email: e.target.value }))}
-                            placeholder="juan@email.com"
-                            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                          />
-                        </div>
-                        {/* Contact */}
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
-                          <input
-                            type="tel"
-                            value={resForm.phone}
-                            onChange={e => setResForm(f => ({ ...f, phone: e.target.value }))}
-                            placeholder="09XX-XXX-XXXX"
-                            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                          />
-                        </div>
-                        {/* Pax & Duration */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">No. of Persons</label>
-                            <input
-                              type="number"
-                              min={1} max={20}
-                              value={resForm.pax}
-                              onChange={e => setResForm(f => ({ ...f, pax: parseInt(e.target.value) || 1 }))}
-                              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500 transition-colors"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">Duration (hours)</label>
-                            <select
-                              value={resForm.duration}
-                              onChange={e => setResForm(f => ({ ...f, duration: parseInt(e.target.value) }))}
-                              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500 transition-colors"
-                            >
-                              {[1, 2, 3, 4, 5, 6].map(h => (
-                                <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        {/* Time Slot */}
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {TIME_SLOTS.map(t => {
-                              // Dynamically block happy hour slots!
-                              const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                              return (
-                                <button
-                                  key={t}
-                                  disabled={isHappyHour}
-                                  onClick={() => setResForm(f => ({ ...f, timeSlot: t }))}
-                                  className={`py-2 rounded-lg text-xs font-semibold transition-all ${
-                                    isHappyHour 
-                                      ? 'bg-neutral-800/50 text-neutral-600 cursor-not-allowed border border-neutral-800' 
-                                      : resForm.timeSlot === t
-                                      ? 'bg-emerald-600 text-white'
-                                      : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
-                                  }`}
-                                  title={isHappyHour ? "Happy Hour (Walk-in Only)" : ""}
-                                >
-                                  {t}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <p className="text-[10px] text-amber-500 mt-2">
-                            * {rates?.happyHourStart || '18:00'} to {rates?.happyHourEnd || '19:00'} is Happy Hour (Strictly walk-in only). These slots cannot be booked online.
-                          </p>
-                        </div>
-
-                        {/* Promo Code */}
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">Promo Code <span className="text-neutral-600">(optional)</span></label>
-                          {appliedPromo ? (
-                            <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/30 rounded-lg px-3 py-2">
-                              <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" />
-                              <span className="text-xs text-emerald-300 font-semibold flex-1">{appliedPromo.code} — {appliedPromo.discountPercent}% off applied!</span>
-                              <button onClick={handleRemovePromo} className="text-neutral-500 hover:text-rose-400 transition-colors"><X size={13} /></button>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={promoCodeInput}
-                                  onChange={e => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoError(''); }}
-                                  placeholder="e.g. WELCOME20"
-                                  className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 font-mono"
-                                />
-                                <button
-                                  onClick={handleApplyPromo}
-                                  disabled={!promoCodeInput.trim()}
-                                  className="px-4 py-2 bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 rounded-lg text-xs font-semibold hover:bg-emerald-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-                                >
-                                  Apply
-                                </button>
-                              </div>
-                              {promoError && <p className="text-[11px] text-rose-400">{promoError}</p>}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Summary */}
-                        <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50">
-                          <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
-                          <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-neutral-400">Date</span>
-                              <span className="text-neutral-200">{selectedDate.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-neutral-400">Time</span>
-                              <span className="text-neutral-200">{resForm.timeSlot}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-neutral-400">Duration</span>
-                              <span className="text-neutral-200">{resForm.duration}h × ₱{rates?.hourlyRate || 250}/hr</span>
-                            </div>
-                            {appliedPromo && (
-                              <div className="flex justify-between text-emerald-400">
-                                <span>Promo ({appliedPromo.code})</span>
-                                <span>−₱{discountAmount}.00</span>
-                              </div>
-                            )}
-                            <div className="border-t border-neutral-700 pt-1.5 mt-1.5 flex justify-between">
-                              <span className="text-neutral-400">Total Amount</span>
-                              <span className="text-white font-semibold">₱{totalAmount}.00</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span>
-                              <span className="text-amber-300 font-semibold">₱{downPayment}.00</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={handleReservationSubmit}
-                          disabled={!resForm.name || !resForm.email || !resForm.phone}
-                          className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
-                        >
-                          Proceed to Payment <ArrowRight size={14} />
-                        </button>
+                  ) : selectedClosedDate ? (
+                    <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-8 text-center flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 bg-rose-900/30 rounded-full flex items-center justify-center">
+                        <AlertTriangle size={32} className="text-rose-500" />
                       </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-rose-400 mb-2">Store Closed</h3>
+                        <p className="text-sm text-neutral-300 leading-relaxed mb-4">
+                          We are currently closed on {selectedDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.
+                        </p>
+                        <div className="bg-rose-950/40 border border-rose-800/50 rounded-xl p-4 text-left">
+                          <p className="text-[10px] text-rose-500 uppercase tracking-widest font-semibold mb-1">Reason for closure</p>
+                          <p className="text-sm text-neutral-200">{selectedClosedDate.reason}</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-neutral-500 mt-2">Please select a different date from the calendar to make your reservation.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4">
+                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 2 — Your Details</p>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+                        <input type="text" value={resForm.name} onChange={e => setResForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
+                        <input type="email" value={resForm.email} onChange={e => setResForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
+                        <input type="tel" value={resForm.phone} onChange={e => setResForm(f => ({ ...f, phone: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs text-neutral-400 mb-1.5">No. of Persons</label>
+                          <input type="number" min={1} max={20} value={resForm.pax} onChange={e => setResForm(f => ({ ...f, pax: parseInt(e.target.value) || 1 }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-neutral-400 mb-1.5">Duration (hours)</label>
+                          <select value={resForm.duration} onChange={e => setResForm(f => ({ ...f, duration: parseInt(e.target.value) }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100">
+                            {[1, 2, 3, 4, 5, 6].map(h => <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {TIME_SLOTS.map(t => {
+                            const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                            const count = slotCounts[t] || 0;
+                            const isFull = count >= 5;
+                            const disabled = isHappyHour || isFull;
+
+                            return (
+                              <button 
+                                key={t} 
+                                disabled={disabled} 
+                                onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} 
+                                className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                  isHappyHour 
+                                    ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
+                                    : isFull
+                                    ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                    : resForm.timeSlot === t 
+                                    ? 'bg-emerald-600 text-white' 
+                                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
+                                }`}
+                              >
+                                {t}
+                                {isFull && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Promo Code <span className="text-neutral-600">(optional)</span></label>
+                        {appliedPromo ? (
+                          <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/30 rounded-lg px-3 py-2">
+                            <span className="text-xs text-emerald-300 font-semibold flex-1">{appliedPromo.code} — {appliedPromo.discountPercent}% off applied!</span>
+                            <button onClick={handleRemovePromo} className="text-neutral-500 hover:text-rose-400 transition-colors"><X size={13} /></button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <input type="text" value={promoCodeInput} onChange={e => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoError(''); }} className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100" />
+                            <button onClick={handleApplyPromo} className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-xs font-semibold">Apply</button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Summary Box */}
+                      <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50 mt-4">
+                        <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
+                          <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
+                        </div>
+                      </div>
+
+                      <button onClick={handleReservationSubmit} disabled={!resForm.name || !resForm.email || !resForm.phone || !resForm.timeSlot} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
+                        Proceed to Payment
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1170,7 +1000,6 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
                 <h3 className="text-white font-semibold mb-4">Additional Information</h3>
 
-                {/* Redemption notice */}
                 <div className="flex gap-3 bg-emerald-950/40 border border-emerald-700/30 rounded-xl p-4 mb-5">
                   <div className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-600/20 flex items-center justify-center mt-0.5">
                     <Info size={13} className="text-emerald-400" />
@@ -1245,7 +1074,6 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 <h3 className="text-center text-xl font-bold text-white mb-6">Our Location</h3>
                 <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden h-64 flex items-center justify-center relative">
                   
-                  {/* Transparent Map Background Preview */}
                   <iframe
                     src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3861.3546747517616!2d121.1118129!3d14.5788544!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397c7f3e8b0b8c3%3A0x8e8a60f3b0f5b0a!2sAutobase%20OAX!5e0!3m2!1sen!2sph!4v1700000000000!5m2!1sen!2sph"
                     className="absolute inset-0 w-full h-full opacity-30 grayscale pointer-events-none"
@@ -1253,11 +1081,8 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
                   />
-                  
-                  {/* Dark gradient overlay to ensure text is readable */}
                   <div className="absolute inset-0 bg-neutral-950/50" /> 
                   
-                  {/* Map Pin and Button */}
                   <div className="relative z-10 text-center">
                     <MapPin size={32} className="text-emerald-500 mx-auto mb-2 drop-shadow-lg" />
                     <p className="text-white font-semibold text-sm drop-shadow-md">One Shot Bar & Billiards</p>
@@ -1274,7 +1099,6 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 </div>
               </div>
 
-              {/* Facilities */}
               <div className="mb-12">
                 <h3 className="text-center text-xl font-bold text-white mb-6">Our Facilities</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1297,7 +1121,6 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 </div>
               </div>
 
-              {/* ── Contact & Socials ── */}
               <div className="border-t border-neutral-800 pt-10">
                 <div className="text-center mb-8">
                   <h3 className="text-xl font-bold text-white mb-1">Contact Us</h3>
@@ -1478,16 +1301,12 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
       <AnimatePresence>
         {showLoginModal && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => setShowLoginModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
               onClick={e => e.stopPropagation()}
               className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
             >
@@ -1511,49 +1330,176 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                 <div>
                   <label className="block text-xs text-neutral-400 mb-1.5">Email</label>
                   <input
-                    type="email"
-                    value={loginForm.email}
+                    type="email" value={loginForm.email}
                     onChange={e => setLoginForm(f => ({ ...f, email: e.target.value, error: '' }))}
+                    onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()}
                     placeholder="your@email.com"
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">Password</label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs text-neutral-400">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => { setShowLoginModal(false); setShowForgotPwModal(true); }}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <div className="relative">
                     <input
-                      type={loginForm.showPw ? 'text' : 'password'}
-                      value={loginForm.password}
+                      type={loginForm.showPw ? 'text' : 'password'} value={loginForm.password}
                       onChange={e => setLoginForm(f => ({ ...f, password: e.target.value, error: '' }))}
+                      onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()}
                       placeholder="••••••••"
                       className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 pr-10 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
                     />
-                    <button
-                      onClick={() => setLoginForm(f => ({ ...f, showPw: !f.showPw }))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-neutral-400"
-                    >
+                    <button onClick={() => setLoginForm(f => ({ ...f, showPw: !f.showPw }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-neutral-400">
                       {loginForm.showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
                 </div>
               </div>
 
-              <button
-                onClick={handleLoginSubmit}
-                className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-semibold transition-all"
-              >
-                Login
+              <button onClick={handleLoginSubmit} disabled={isLoggingIn} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2">
+                {isLoggingIn ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+                {isLoggingIn ? 'Logging in...' : 'Login'}
               </button>
 
               <p className="text-center text-xs text-neutral-600 mt-4">
                 Don't have an account?{' '}
-                <button
-                  onClick={() => { setShowLoginModal(false); setShowRegisterModal(true); }}
-                  className="text-emerald-400 hover:text-emerald-300 font-semibold"
-                >
+                <button onClick={() => { setShowLoginModal(false); setShowRegisterModal(true); }} className="text-emerald-400 hover:text-emerald-300 font-semibold">
                   Register
                 </button>
               </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Forgot Password Modal */}
+      <AnimatePresence>
+        {showForgotPwModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => { setShowForgotPwModal(false); setForgotPwMsg(''); setForgotPwEmail(''); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Reset Password</h3>
+                  <p className="text-xs text-neutral-500">We'll send you instructions.</p>
+                </div>
+                <button onClick={() => { setShowForgotPwModal(false); setForgotPwMsg(''); setForgotPwEmail(''); }} className="text-neutral-600 hover:text-neutral-300 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {forgotPwMsg && (
+                <div className={`text-xs px-3 py-2.5 rounded-lg mb-4 font-medium ${forgotPwMsg.startsWith('Error') ? 'bg-rose-950/40 border border-rose-800/50 text-rose-400' : 'bg-emerald-950/40 border border-emerald-800/50 text-emerald-400'}`}>
+                  {forgotPwMsg}
+                </div>
+              )}
+
+              {!forgotPwMsg.startsWith('Success') && (
+                <>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-neutral-400 mb-1.5">Email Address</label>
+                      <input
+                        type="email" value={forgotPwEmail}
+                        onChange={e => { setForgotPwEmail(e.target.value); setForgotPwMsg(''); }}
+                        onKeyDown={e => e.key === 'Enter' && handleForgotPasswordSubmit()}
+                        placeholder="your@email.com"
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleForgotPasswordSubmit}
+                    disabled={isResettingPw || !forgotPwEmail}
+                    className="w-full mt-5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    {isResettingPw ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+                    {isResettingPw ? 'Sending...' : 'Send Reset Link'}
+                  </button>
+                </>
+              )}
+
+              <p className="text-center text-xs text-neutral-600 mt-4">
+                Remembered your password?{' '}
+                <button onClick={() => { setShowForgotPwModal(false); setShowLoginModal(true); setForgotPwMsg(''); setForgotPwEmail(''); }} className="text-emerald-400 hover:text-emerald-300 font-semibold">
+                  Back to Login
+                </button>
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showUpdatePwModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <div className="mb-5">
+                <h3 className="text-lg font-bold text-white">Create New Password</h3>
+                <p className="text-xs text-neutral-500">Please enter your new password below.</p>
+              </div>
+
+              {updatePwForm.error && (
+                <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mb-4">
+                  {updatePwForm.error}
+                </div>
+              )}
+              {updatePwForm.success && (
+                <div className="bg-emerald-950/40 border border-emerald-800/50 text-emerald-400 text-xs px-3 py-2 rounded-lg mb-4">
+                  {updatePwForm.success}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">New Password</label>
+                  <input
+                    type="password" value={updatePwForm.password}
+                    onChange={e => setUpdatePwForm(f => ({ ...f, password: e.target.value, error: '' }))}
+                    placeholder="••••••••"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">Confirm New Password</label>
+                  <input
+                    type="password" value={updatePwForm.confirm}
+                    onChange={e => setUpdatePwForm(f => ({ ...f, confirm: e.target.value, error: '' }))}
+                    placeholder="••••••••"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={handleUpdatePasswordSubmit}
+                disabled={updatePwForm.loading || !!updatePwForm.success || !updatePwForm.password}
+                className="w-full mt-5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white py-3 rounded-xl text-sm font-semibold transition-all flex justify-center items-center gap-2"
+              >
+                {updatePwForm.loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+                {updatePwForm.loading ? 'Updating...' : 'Update Password'}
+              </button>
             </motion.div>
           </motion.div>
         )}
@@ -1563,16 +1509,12 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
       <AnimatePresence>
         {showRegisterModal && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => setShowRegisterModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
               onClick={e => e.stopPropagation()}
               className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto"
             >
@@ -1581,91 +1523,60 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
                   <h3 className="text-lg font-bold text-white">Create Account</h3>
                   <p className="text-xs text-neutral-500">Join One Shot today</p>
                 </div>
-                <button onClick={() => setShowRegisterModal(false)} className="text-neutral-600 hover:text-neutral-300 transition-colors">
+                <button onClick={() => { setShowRegisterModal(false); setRegisterSuccessMsg(''); }} className="text-neutral-600 hover:text-neutral-300 transition-colors">
                   <X size={18} />
                 </button>
               </div>
 
-              {registerForm.error && (
-                <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mb-4">
-                  {registerForm.error}
+              {registerSuccessMsg ? (
+                <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-2xl p-8 text-center space-y-3">
+                  <div className="w-16 h-16 bg-emerald-600/20 rounded-full flex items-center justify-center mx-auto mb-2"><Mail size={32} className="text-emerald-400" /></div>
+                  <h4 className="text-lg font-bold text-emerald-400">Check Your Email</h4>
+                  <p className="text-sm text-neutral-300 leading-relaxed">{registerSuccessMsg}</p>
+                  <button onClick={() => { setShowRegisterModal(false); setRegisterSuccessMsg(''); setShowLoginModal(true); }} className="mt-4 bg-neutral-800 hover:bg-neutral-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all">
+                    Go to Login
+                  </button>
                 </div>
+              ) : (
+                <>
+                  {registerForm.error && <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mb-4">{registerForm.error}</div>}
+                  <div className="space-y-3">
+                    {[
+                      { key: 'name', label: 'Full Name', type: 'text', placeholder: 'Juan dela Cruz' },
+                      { key: 'email', label: 'Email', type: 'email', placeholder: 'juan@email.com' },
+                      { key: 'phone', label: 'Contact Number', type: 'tel', placeholder: '09XX-XXX-XXXX' },
+                    ].map(({ key, label, type, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs text-neutral-400 mb-1.5">{label} <span className="text-rose-500">*</span></label>
+                        <input type={type} value={(registerForm as any)[key]} onChange={e => setRegisterForm(f => ({ ...f, [key]: e.target.value, error: '' }))} placeholder={placeholder} className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500" />
+                      </div>
+                    ))}
+                    <div>
+                      <label className="block text-xs text-neutral-400 mb-1.5">Password <span className="text-rose-500">*</span></label>
+                      <div className="relative">
+                        <input type={registerForm.showPw ? 'text' : 'password'} value={registerForm.password} onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value, error: '' }))} placeholder="••••••••" className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 pr-10 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500" />
+                        <button onClick={() => setRegisterForm(f => ({ ...f, showPw: !f.showPw }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-neutral-400"><Eye size={14} /></button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-400 mb-1.5">Referral Code <span className="text-neutral-600">(optional)</span></label>
+                      <input type="text" value={registerForm.referralCode} onChange={e => setRegisterForm(f => ({ ...f, referralCode: e.target.value.toUpperCase(), error: '' }))} placeholder="e.g. JUAN-AB12" className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-400 mb-1.5">Confirm Password</label>
+                      <input type="password" value={registerForm.confirm} onChange={e => setRegisterForm(f => ({ ...f, confirm: e.target.value, error: '' }))} placeholder="••••••••" className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500" />
+                    </div>
+                  </div>
+
+                  <button onClick={handleRegisterSubmit} disabled={isRegistering} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white py-3 rounded-xl text-sm font-semibold flex justify-center gap-2">
+                    {isRegistering ? 'Creating Account...' : 'Create Account'}
+                  </button>
+
+                  <p className="text-center text-xs text-neutral-600 mt-4">
+                    Already have an account? <button onClick={() => { setShowRegisterModal(false); setShowLoginModal(true); }} className="text-emerald-400 hover:text-emerald-300 font-semibold">Login</button>
+                  </p>
+                </>
               )}
-
-              <div className="space-y-3">
-                {[
-                  { key: 'name', label: 'Full Name', type: 'text', placeholder: 'Juan dela Cruz' },
-                  { key: 'email', label: 'Email', type: 'email', placeholder: 'juan@email.com' },
-                  { key: 'phone', label: 'Contact Number', type: 'tel', placeholder: '09XX-XXX-XXXX' },
-                ].map(({ key, label, type, placeholder }) => (
-                  <div key={key}>
-                    <label className="block text-xs text-neutral-400 mb-1.5">{label} <span className="text-rose-500">*</span></label>
-                    <input
-                      type={type}
-                      value={(registerForm as any)[key]}
-                      onChange={e => setRegisterForm(f => ({ ...f, [key]: e.target.value, error: '' }))}
-                      placeholder={placeholder}
-                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                    />
-                  </div>
-                ))}
-                <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">Password <span className="text-rose-500">*</span></label>
-                  <div className="relative">
-                    <input
-                      type={registerForm.showPw ? 'text' : 'password'}
-                      value={registerForm.password}
-                      onChange={e => setRegisterForm(f => ({ ...f, password: e.target.value, error: '' }))}
-                      placeholder="••••••••"
-                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 pr-10 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                    />
-                    <button
-                      onClick={() => setRegisterForm(f => ({ ...f, showPw: !f.showPw }))}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-neutral-400"
-                    >
-                      {registerForm.showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">Referral Code <span className="text-neutral-600">(optional)</span></label>
-                  <input
-                    type="text"
-                    value={registerForm.referralCode}
-                    onChange={e => setRegisterForm(f => ({ ...f, referralCode: e.target.value.toUpperCase(), error: '' }))}
-                    placeholder="e.g. JUAN-AB12"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
-                  />
-                  <p className="text-[10px] text-neutral-600 mt-1">Enter a friend's referral code to get a bonus!</p>
-                </div>
-                <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">Confirm Password</label>
-                  <input
-                    type="password"
-                    value={registerForm.confirm}
-                    onChange={e => setRegisterForm(f => ({ ...f, confirm: e.target.value, error: '' }))}
-                    placeholder="••••••••"
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={handleRegisterSubmit}
-                className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-semibold transition-all"
-              >
-                Create Account
-              </button>
-
-              <p className="text-center text-xs text-neutral-600 mt-4">
-                Already have an account?{' '}
-                <button
-                  onClick={() => { setShowRegisterModal(false); setShowLoginModal(true); }}
-                  className="text-emerald-400 hover:text-emerald-300 font-semibold"
-                >
-                  Login
-                </button>
-              </p>
             </motion.div>
           </motion.div>
         )}
@@ -1688,93 +1599,65 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
       {/* Payment Modal */}
       <AnimatePresence>
         {reservationStep === 2 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
-              className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[95vh] overflow-y-auto"
-            >
-              {/* Header */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[95vh] overflow-y-auto">
               <div className="bg-neutral-900 border-b border-neutral-800 px-6 py-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-white">Down Payment</h3>
-                  <p className="text-xs text-neutral-500">Step 2 of 2 · Secure your reservation</p>
-                </div>
-                <button onClick={closeReservation} className="text-neutral-600 hover:text-neutral-300">
-                  <X size={18} />
-                </button>
+                <div><h3 className="text-base font-bold text-white">Down Payment</h3><p className="text-xs text-neutral-500">Step 2 of 2 · Secure your reservation</p></div>
+                <button onClick={closeReservation} className="text-neutral-600 hover:text-neutral-300"><X size={18} /></button>
               </div>
-
+              
               <div className="p-6">
-                {/* Amount */}
                 <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4 mb-5 text-center">
-                  <p className="text-xs text-amber-500 mb-1">Amount Due ({rates?.downPaymentPercent || 25}% Down Payment)</p>
+                  <p className="text-xs text-amber-500 mb-1">Amount Due</p>
                   <p className="text-4xl font-black text-amber-400">₱{downPayment}.00</p>
-                  <p className="text-xs text-neutral-500 mt-1">Remaining balance <span className="text-neutral-300 font-semibold">₱{totalAmount - downPayment}.00</span> must be paid on arrival</p>
-                  <p className="text-[10px] text-neutral-600 mt-0.5">Remaining balance is due before your table time starts — Cash or GCash</p>
                 </div>
 
-                {/* Booking summary */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5">
-                  <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">Date</span><span className="text-neutral-200">{selectedDate?.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">Time</span><span className="text-neutral-200">{resForm.timeSlot} ({resForm.duration}h)</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">Pax</span><span className="text-neutral-200">{resForm.pax} person{resForm.pax > 1 ? 's' : ''}</span></div>
-                </div>
-
-                {/* Payment Method — GCash only */}
-                <div className="flex items-center justify-center gap-2 mb-5 bg-blue-950/30 border border-blue-700/30 rounded-xl py-2.5">
-                  <span className="text-base">💙</span>
-                  <span className="text-sm font-semibold text-blue-300">GCash Down Payment</span>
-                </div>
-
-                {/* QR Code */}
                 <div className="flex flex-col items-center gap-4">
                   <div className="flex flex-col items-center gap-2">
-                    <QRDisplay
-                      pattern={QR_GCASH}
-                      color="#1d4ed8"
-                    />
+                    <QRDisplay pattern={QR_GCASH} color="#1d4ed8" />
                     <div className="text-center">
                       <p className="text-sm font-bold text-blue-400">GCash</p>
                       <p className="text-xs text-neutral-300 font-semibold">ONE SHOT BAR & BILLIARDS</p>
                       <p className="text-xs text-neutral-500">+63 917-123-4567</p>
                     </div>
                   </div>
-
                   <div className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-3 text-center">
                     <p className="text-xs text-neutral-500">Scan the QR code using your GCash app</p>
                     <p className="text-xs text-neutral-600 mt-0.5">Send exactly <span className="text-amber-400 font-semibold">₱{downPayment}.00</span></p>
                   </div>
                 </div>
 
-                <button
-                  onClick={handlePaymentConfirm}
-                  disabled={confirmingPayment}
-                  className="w-full mt-5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
-                >
-                  {confirmingPayment ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={15} />
-                      I've Sent the Payment
-                    </>
+                <div className="w-full space-y-3 mt-5 text-left border-t border-neutral-800 pt-5">
+                  {uploadError && (
+                    <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg">
+                      {uploadError}
+                    </div>
                   )}
-                </button>
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference Number <span className="text-rose-500">*</span></label>
+                    <input
+                      type="text"
+                      value={referenceNumber}
+                      onChange={e => { setReferenceNumber(e.target.value); setUploadError(''); }}
+                      placeholder="e.g. 10023948293"
+                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-neutral-600">(optional)</span></label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => { setReceiptFile(e.target.files?.[0] || null); setUploadError(''); }}
+                      className="w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
 
-                <p className="text-center text-[10px] text-neutral-700 mt-3">
-                  By confirming, you agree that payment has been sent. Staff will verify your payment before confirming your reservation.
-                </p>
+                <button onClick={handlePaymentConfirm} disabled={confirmingPayment || !referenceNumber} className="w-full mt-5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+                  {confirmingPayment ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle size={15} />}
+                  {confirmingPayment ? 'Verifying...' : "I've Sent the Payment"}
+                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -1784,34 +1667,16 @@ const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: stri
       {/* Confirmation Modal */}
       <AnimatePresence>
         {reservationStep === 3 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.8, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.8, y: 20 }}
-              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
-                className="w-16 h-16 rounded-full bg-emerald-600/15 border border-emerald-600/30 flex items-center justify-center mx-auto mb-4"
-              >
-                <CheckCircle size={32} className="text-emerald-400" />
-              </motion.div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 20 }} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
               <h3 className="text-xl font-black text-white mb-2">Reservation Submitted!</h3>
-              <p className="text-neutral-500 text-sm mb-5 leading-relaxed">
+              <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
                 Your reservation for <strong className="text-neutral-200">{selectedDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{resForm.timeSlot}</strong> has been submitted. Our staff will verify your payment and confirm shortly.
               </p>
               <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
                 <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Email</span><span className="text-neutral-200">{resForm.email}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold">₱{downPayment}.00 ✓</span></div>
+                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold\">₱{downPayment}.00 ✓</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Verification</span></div>
               </div>
               <button
