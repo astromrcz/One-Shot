@@ -47,10 +47,12 @@ export type Reservation = {
   downPaymentAmount: number;
   downPaymentPaid: boolean;
   balancePaid: boolean;
-  createdAt: Date;
+ createdAt: Date;
   cancellationReason?: string;
   promoCode?: string;
   discountAmount?: number;
+  paymentReference?: string;
+  receiptUrl?: string;
 };
 
 export type Feedback = {
@@ -428,6 +430,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         cancellationReason: row.cancellation_reason || undefined,
         promoCode: row.promo_code || undefined,
         discountAmount: row.discount_amount || undefined,
+        paymentReference: row.payment_reference || undefined,
+        receiptUrl: row.receipt_url || undefined,
       })));
 
       if (feedbackError) console.error('Error fetching feedback:', feedbackError);
@@ -710,17 +714,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const table = tables.find(t => t.id === tableId);
     if (!table || !table.session) return;
 
+    const newDuration = table.session.durationMinutes + extraMinutes;
+    const newEndTime = new Date(table.session.startTime.getTime() + newDuration * 60000);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const conflict = reservations.find(r => {
+      // PROTECT: Ignore if cancelled/completed, or missing crucial data from old records
+      if (r.tableId !== tableId || r.status === 'cancelled' || r.status === 'completed' || !r.timeSlot || !r.date) return false;
+      
+      const rDateStr = new Date(r.date).toISOString().split('T')[0];
+      if (rDateStr !== todayStr) return false;
+      
+      const resStart = new Date(r.date);
+      const [hours, minutes] = r.timeSlot.split(':').map(Number);
+      resStart.setHours(hours, minutes, 0, 0);
+      
+      return newEndTime > resStart; 
+    });
+
+    if (conflict) {
+      alert(`EXTENSION BLOCKED: This table is reserved for ${conflict.customerName} at ${conflict.timeSlot}. Please assign the customer to a different table.`);
+      throw new Error("Table overlap conflict.");
+    }
+
     const updated = {
       ...table,
       session: {
         ...table.session,
-        durationMinutes: table.session.durationMinutes + extraMinutes,
+        durationMinutes: newDuration,
         amountPaid: table.session.amountPaid + extraPayment
       }
     };
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    // FIXED: Use table.name instead of tableId
     await addActivity('session_extended', `Session on ${table.name} extended by ${extraMinutes}min`, { tableId, extraMinutes });
   };
 
@@ -788,10 +814,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addReservation = async (item: Omit<Reservation, 'id' | 'createdAt'>) => {
-    const id = `r${Date.now()}`;
-    const reservation = { ...item, id, createdAt: new Date() };
+    const id = crypto.randomUUID();
+    const reservation: Reservation = { ...item, id, createdAt: new Date() };
 
-    await supabase.from('reservations').insert([{
+    const { error } = await supabase.from('reservations').insert([{
       id,
       customer_name: item.customerName,
       contact_number: item.contactNumber,
@@ -809,11 +835,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancellation_reason: item.cancellationReason,
       promo_code: item.promoCode,
       discount_amount: item.discountAmount,
+      payment_reference: item.paymentReference,
+      receipt_url: item.receiptUrl,
     }]);
+
+    if (error) {
+      console.error("Supabase Save Error:", error);
+      throw new Error(error.message); 
+    }
+
     setReservations(prev => [...prev, reservation]);
     await addActivity('reservation_created', `New reservation for ${item.customerName}`);
   };
-
   const updateReservationStatus = async (id: string, status: ReservationStatus) => {
     await supabase.from('reservations').update({ status }).eq('id', id);
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status } : r));

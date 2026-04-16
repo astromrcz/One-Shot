@@ -211,7 +211,7 @@ export function HomePage() {
   const [showForgotPwModal, setShowForgotPwModal] = useState(false); 
   const [showUpdatePwModal, setShowUpdatePwModal] = useState(false);
 
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; referralCode: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; phone: string; referralCode: string } | null>(null);
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '', showPw: false, error: '' });
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -228,7 +228,8 @@ export function HomePage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null); 
   const [resForm, setResForm] = useState({ name: '', email: '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
   const [confirmingPayment, setConfirmingPayment] = useState(false);
-  
+  const [resError, setResError] = useState(''); // NEW ERROR STATE
+
   const [referenceNumber, setReferenceNumber] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState('');
@@ -276,8 +277,8 @@ export function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (currentUser) setResForm(f => ({ ...f, name: currentUser.name, email: currentUser.email }));
+ useEffect(() => {
+    if (currentUser) setResForm(f => ({ ...f, name: currentUser.name, email: currentUser.email, phone: currentUser.phone || '' }));
   }, [currentUser]);
 
   useEffect(() => {
@@ -299,8 +300,8 @@ export function HomePage() {
 
   const handleUpdateCustomerProfile = (updates: Partial<{name: string, email: string, phone?: string}>) => {
     if (!currentUser) return;
-    setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
-    setResForm(f => ({ ...f, name: updates.name || f.name, email: updates.email || f.email }));
+    setCurrentUser(prev => prev ? { ...prev, ...updates } as any : null);
+    setResForm(f => ({ ...f, name: updates.name || f.name, email: updates.email || f.email, phone: updates.phone || f.phone }));
   };
 
   const handleLoginSubmit = async () => {
@@ -316,9 +317,10 @@ export function HomePage() {
       if (error) throw error;
 
       const name = data.user.user_metadata?.full_name || loginForm.email.split('@')[0];
+      const phone = data.user.user_metadata?.phone || '';
       const referralCode = data.user.user_metadata?.referral_code || generateReferralCode(name);
 
-      setCurrentUser({ name, email: loginForm.email, referralCode });
+      setCurrentUser({ name, email: loginForm.email, phone, referralCode });
       setShowLoginModal(false);
       setLoginForm({ email: '', password: '', showPw: false, error: '' });
     } catch (err: any) {
@@ -337,6 +339,14 @@ export function HomePage() {
       setRegisterForm(f => ({ ...f, error: 'Please fill all required fields.' }));
       return;
     }
+    
+    // Validate Phone for Registration
+    const cleanPhone = registerForm.phone.replace(/\D/g, '');
+    if (!/^09\d{9}$/.test(cleanPhone)) {
+      setRegisterForm(f => ({ ...f, error: 'Contact number must be exactly 11 digits and start with 09.' }));
+      return;
+    }
+
     if (registerForm.password !== registerForm.confirm) {
       setRegisterForm(f => ({ ...f, error: 'Passwords do not match.' }));
       return;
@@ -475,9 +485,11 @@ export function HomePage() {
 
   const closeReservation = () => {
     setReservationStep(0); setSelectedDate(null);
-    setResForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
+    // Notice how phone correctly resets back to the current user's actual phone now
+    setResForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: currentUser?.phone || '', pax: 2, timeSlot: '18:00', duration: 2 });
     setPromoCodeInput(''); setAppliedPromo(null); setPromoError('');
     setReferenceNumber(''); setReceiptFile(null); setUploadError('');
+    setResError('');
   };
 
   const handleSimpleFeedbackSubmit = () => {
@@ -766,7 +778,9 @@ export function HomePage() {
                         <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
                           {TIME_SLOTS.map(t => {
                             const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                            if (isHappyHour) return null; // Hide happy hour from the list
+                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours();
+                            
+                            if (isHappyHour || isPastTime) return null; // Hide happy hour and passed times from the list
                             
                             const count = slotCounts[t] || 0;
                             const isFull = count >= 5;
@@ -825,7 +839,17 @@ export function HomePage() {
                       </div>
                       <div>
                         <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
-                        <input type="tel" value={resForm.phone} onChange={e => setResForm(f => ({ ...f, phone: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                        <input 
+                          type="tel" 
+                          value={resForm.phone} 
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            if (val.length <= 11) setResForm(f => ({ ...f, phone: val }));
+                            setResError(''); // Clear error while typing
+                          }} 
+                          placeholder="09XXXXXXXXX"
+                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600" 
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -846,7 +870,8 @@ export function HomePage() {
                             const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
                             const count = slotCounts[t] || 0;
                             const isFull = count >= 5;
-                            const disabled = isHappyHour || isFull;
+                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours();
+                            const disabled = isHappyHour || isFull || isPastTime;
 
                             return (
                               <button 
@@ -856,6 +881,8 @@ export function HomePage() {
                                 className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
                                   isHappyHour 
                                     ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
+                                    : isPastTime
+                                    ? 'bg-neutral-900/30 text-neutral-600/50 border border-neutral-800/30 cursor-not-allowed'
                                     : isFull
                                     ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
                                     : resForm.timeSlot === t 
@@ -864,7 +891,8 @@ export function HomePage() {
                                 }`}
                               >
                                 {t}
-                                {isFull && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                                {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                                {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Passed</span>}
                               </button>
                             );
                           })}
@@ -894,7 +922,14 @@ export function HomePage() {
                         </div>
                       </div>
 
-                      <button onClick={handleReservationSubmit} disabled={!resForm.name || !resForm.email || !resForm.phone || !resForm.timeSlot} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
+                      {/* Display the new Validation Error */}
+                      {resError && (
+                        <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mt-3">
+                          {resError}
+                        </div>
+                      )}
+
+                      <button onClick={handleReservationSubmit} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
                         Proceed to Payment
                       </button>
                     </div>
@@ -1544,11 +1579,24 @@ export function HomePage() {
                     {[
                       { key: 'name', label: 'Full Name', type: 'text', placeholder: 'Juan dela Cruz' },
                       { key: 'email', label: 'Email', type: 'email', placeholder: 'juan@email.com' },
-                      { key: 'phone', label: 'Contact Number', type: 'tel', placeholder: '09XX-XXX-XXXX' },
+                      { key: 'phone', label: 'Contact Number', type: 'tel', placeholder: '09XXXXXXXXX' },
                     ].map(({ key, label, type, placeholder }) => (
                       <div key={key}>
                         <label className="block text-xs text-neutral-400 mb-1.5">{label} <span className="text-rose-500">*</span></label>
-                        <input type={type} value={(registerForm as any)[key]} onChange={e => setRegisterForm(f => ({ ...f, [key]: e.target.value, error: '' }))} placeholder={placeholder} className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500" />
+                        <input 
+                          type={type} 
+                          value={(registerForm as any)[key]} 
+                          onChange={e => {
+                            let val = e.target.value;
+                            if (key === 'phone') {
+                              val = val.replace(/\D/g, '');
+                              if (val.length > 11) return; // Block typing past 11 digits
+                            }
+                            setRegisterForm(f => ({ ...f, [key]: val, error: '' }));
+                          }} 
+                          placeholder={placeholder} 
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-emerald-500" 
+                        />
                       </div>
                     ))}
                     <div>
