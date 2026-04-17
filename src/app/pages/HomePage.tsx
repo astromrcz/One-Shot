@@ -45,6 +45,14 @@ const TIME_SLOTS = [
   '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00',
 ];
 
+const formatTime = (time24: string) => {
+  const [h, m] = time24.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 || 12;
+  return `${formattedHour}:${m} ${ampm}`;
+};
+
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -823,7 +831,7 @@ export function HomePage() {
                               <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
                             )}
                           </div>
-                          {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[90px]">→ {nextRes.customerName.split(' ')[0]} @ {nextRes.timeSlot}</span>}
+                          {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {formatTime(nextRes.timeSlot)}</span>}
                         </div>
                       );
                     })}
@@ -887,7 +895,7 @@ export function HomePage() {
                                 count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
                                 'bg-neutral-950 border-neutral-800/50'
                               }`}>
-                                <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{t}</span>
+                                <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{formatTime(t)}</span>
                                 <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
                                   {count}/5
                                 </span>
@@ -986,7 +994,7 @@ export function HomePage() {
                                     : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
                                 }`}
                               >
-                                {t}
+                                {formatTime(t)}
                                 {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
                                 {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Passed</span>}
                               </button>
@@ -1815,7 +1823,7 @@ export function HomePage() {
             <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 20 }} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
               <h3 className="text-xl font-black text-white mb-2">Reservation Submitted!</h3>
               <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
-                Your reservation for <strong className="text-neutral-200">{selectedDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{resForm.timeSlot}</strong> has been submitted. Our staff will verify your payment and confirm shortly.
+                Your reservation for <strong className="text-neutral-200">{selectedDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{formatTime(resForm.timeSlot)}</strong> has been submitted. Our staff will verify your payment and confirm shortly.
               </p>
               <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
                 <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
