@@ -19,7 +19,11 @@ type CustomerSource =
   | { kind: 'reservation';  id: string; name: string; partySize: number; contact: string; durationHours: number; timeSlot: string };
 
 export function Tables() {
-  const { tables, queue, reservations, assignTable, extendSession, freeTable } = useAppContext();
+  const { 
+    tables, queue, reservations, 
+    assignTable, extendSession, freeTable,
+    removeFromQueue, updateReservationStatus // <-- Added these two
+  } = useAppContext();
   const [filter, setFilter]       = useState<FilterStatus>('all');
   const [search, setSearch]       = useState('');
   const [assigningTableId, setAssigningTableId] = useState<string | null>(null);
@@ -128,11 +132,13 @@ export function Tables() {
     }
   };
 
-  const handleAssign = (e: React.FormEvent) => {
+  const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assigningTableId || !customerName) return;
     const autoPayment = (durationMinutes / 60) * HOURLY_RATE;
-    assignTable(assigningTableId, {
+    
+    // 1. Assign the table
+    await assignTable(assigningTableId, {
       customerName,
       durationMinutes,
       startTime: new Date(),
@@ -140,6 +146,17 @@ export function Tables() {
       hourlyRate: HOURLY_RATE,
       amountPaid: parseFloat(amountPaid) || autoPayment,
     });
+
+    // 2. Auto-remove from Walk-in Queue OR check-in the Reservation
+    if (selectedCustomer) {
+      if (selectedCustomer.kind === 'queue') {
+        await removeFromQueue(selectedCustomer.id);
+      } else if (selectedCustomer.kind === 'reservation') {
+        await updateReservationStatus(selectedCustomer.id, 'checked-in');
+      }
+    }
+
+    // 3. Close modal and reset state
     setAssigningTableId(null);
     setSelectedCustomer(null);
     setCustomerName('');

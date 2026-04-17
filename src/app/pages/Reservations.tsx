@@ -35,6 +35,7 @@ export function Reservations() {
 
   const [toast, setToast] = useState<string | null>(null);
   const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const handleVerify = (id: string, name: string) => {
     updateReservationStatus(id, 'confirmed');
@@ -228,9 +229,9 @@ export function Reservations() {
                           <span className="text-[10px] text-neutral-500">Bal {formatPHP(r.totalAmount - r.downPaymentAmount)}</span>
                         </div>
                         {/* Reference Number displayed inline */}
-                        {(r as any).paymentReference && (
+                        {r.paymentReference && (
                           <p className="text-[9px] text-neutral-500 pt-1">
-                            Ref: <span className="font-mono text-neutral-300">{(r as any).paymentReference}</span>
+                            Ref: <span className="font-mono text-neutral-300">{r.paymentReference}</span>
                           </p>
                         )}
                       </div>
@@ -239,9 +240,9 @@ export function Reservations() {
                       <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                         {r.status === 'pending' && (
                           <>
-                            {(r as any).receiptUrl && (
+                            {r.receiptUrl && (
                               <button
-                                onClick={() => setReceiptViewer({ url: (r as any).receiptUrl, ref: (r as any).paymentReference, name: r.customerName })}
+                                onClick={() => setReceiptViewer({ url: r.receiptUrl!, ref: r.paymentReference || '', name: r.customerName })}
                                 className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors flex items-center gap-1"
                               >
                                 <Receipt size={10} /> Receipt
@@ -332,9 +333,9 @@ export function Reservations() {
               <div className="bg-neutral-900 rounded-xl p-4 space-y-2.5 border border-neutral-800">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Payment</p>
-                  {(selected as any).receiptUrl && (
+                  {selected.receiptUrl && (
                     <button
-                      onClick={() => setReceiptViewer({ url: (selected as any).receiptUrl, ref: (selected as any).paymentReference, name: selected.customerName })}
+                      onClick={() => setReceiptViewer({ url: selected.receiptUrl!, ref: selected.paymentReference || '', name: selected.customerName })}
                       className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors flex items-center gap-1"
                     >
                       <Receipt size={10} /> View GCash Receipt
@@ -342,10 +343,10 @@ export function Reservations() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  {(selected as any).paymentReference && (
+                  {selected.paymentReference && (
                     <div className="flex justify-between text-sm pb-1.5 border-b border-neutral-800/50">
                       <span className="text-neutral-400">Reference No.</span>
-                      <span className="font-mono text-neutral-200">{(selected as any).paymentReference}</span>
+                      <span className="font-mono text-neutral-200">{selected.paymentReference}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
@@ -556,7 +557,7 @@ export function Reservations() {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setReceiptViewer(null)}
+            onClick={() => { setReceiptViewer(null); setIsZoomed(false); }}
           >
             <motion.div
               initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
@@ -568,16 +569,21 @@ export function Reservations() {
                   <h3 className="text-lg font-bold text-white">GCash Receipt</h3>
                   <p className="text-xs text-neutral-500">{receiptViewer.name}</p>
                 </div>
-                <button onClick={() => setReceiptViewer(null)} className="text-neutral-600 hover:text-neutral-300">
+                <button onClick={() => { setReceiptViewer(null); setIsZoomed(false); }} className="text-neutral-600 hover:text-neutral-300">
                   <X size={18} />
                 </button>
               </div>
               
-              <div className="flex-1 min-h-0 overflow-auto bg-black rounded-lg border border-neutral-800 mb-4 flex items-center justify-center p-2">
+              <div className={`relative w-full h-[55vh] min-h-[300px] max-h-[500px] bg-black rounded-lg border border-neutral-800 mb-4 flex ${isZoomed ? 'overflow-auto items-start p-0' : 'overflow-hidden items-center justify-center p-2'}`}>
                 <img 
                   src={receiptViewer.url} 
                   alt="Receipt" 
-                  className="max-w-full max-h-full object-contain rounded"
+                  onClick={() => setIsZoomed(!isZoomed)}
+                  className={`transition-all duration-300 rounded mx-auto ${
+                    isZoomed 
+                      ? 'w-[150%] h-auto max-w-none cursor-zoom-out' 
+                      : 'w-full h-full object-contain cursor-zoom-in'
+                  }`}
                 />
               </div>
 

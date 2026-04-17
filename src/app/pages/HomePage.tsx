@@ -547,6 +547,10 @@ export function HomePage() {
       setUploadError("Please enter the GCash Reference Number.");
       return;
     }
+    if (!receiptFile) {
+      setUploadError("Please upload a screenshot of your GCash receipt.");
+      return;
+    }
     
     setConfirmingPayment(true);
     setUploadError('');
@@ -1850,7 +1854,7 @@ export function HomePage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-neutral-600">(optional)</span></label>
+                    <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-rose-500">*</span></label>
                     <input
                       type="file"
                       accept="image/*"

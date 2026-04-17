@@ -134,8 +134,8 @@ export function OverviewDashboard() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Available Tables" value={available} sub={`of ${tables.length} total`} color="text-emerald-400" icon={TableProperties} onClick={() => navigate('/staff/tables')} />
-        <StatCard label="Occupied" value={occupied} sub={`${reserved} reserved`} color="text-rose-400" icon={TableProperties} onClick={() => navigate('/staff/tables')} />
-        <StatCard label="Waiting Queue" value={waiting} sub="FCFS order" color="text-amber-400" icon={Users} onClick={() => navigate('/staff/queue')} />
+        <StatCard label="In Use" value={occupied} sub={`${reserved} reserved`} color="text-amber-500" icon={TableProperties} onClick={() => navigate('/staff/tables')} />
+        <StatCard label="Waiting Queue" value={waiting} sub="FCFS order" color="text-orange-400" icon={Users} onClick={() => navigate('/staff/queue')} />
         <StatCard label="Today's Revenue" value={formatPHP(todayRevenue)} sub="table rentals only" color="text-blue-400" icon={TrendingUp} />
       </div>
 
