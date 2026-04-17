@@ -51,6 +51,7 @@ export const router = createBrowserRouter([
           { path: 'tables',               Component: Tables },
           { path: 'reservations',         Component: Reservations },
           { path: 'queue',                Component: Queue },
+          { path: 'live-monitor',         Component: LiveMonitor },
           { path: 'feedback',             Component: FeedbackPage },
           { path: 'promo-codes',          Component: PromoCodesPage },
           { path: 'tattoo-reservations',  Component: TattooReservationsPage },
