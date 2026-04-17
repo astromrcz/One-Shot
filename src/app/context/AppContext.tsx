@@ -150,7 +150,7 @@ export const TATTOO_DEPOSIT = 500;
 
 export type StaffProfile = {
   username: string;
-  password: string;
+  password?: string; // <-- Add the ? to make it optional
   fullName: string;
   email: string;
   role: string;
@@ -217,7 +217,7 @@ export const HOURLY_RATE = 250;
 export const DOWN_PAYMENT_RATE = 0.25;
 
 const DEFAULT_STAFF_PROFILE: StaffProfile = {
-  username: 'admin', password: 'admin123', fullName: 'Admin User',
+  username: 'admin', fullName: 'Admin User', 
   email: 'admin@oneshot.com', role: 'Manager', phone: '09171234567', joinedDate: '2024-01-15',
 };
 
@@ -578,7 +578,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })));
 
     } catch (err) {
-      console.error('Critical sync error:', err);
+      // Properly typed error catching instead of 'any'
+      const errorMessage = err instanceof Error ? err.message : 'Unknown network error';
+      console.error('Critical sync error:', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -610,7 +612,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Auth ──────────────────────────────────────────────────────
   
   const saveStaffSession = (profile: StaffProfile) => {
-    localStorage.setItem('oneshot_staff_session', JSON.stringify(profile));
+    // SECURITY PATCH: Clone the profile and strip the password before saving to browser!
+    const secureProfile = { ...profile };
+    delete secureProfile.password;
+    
+    localStorage.setItem('oneshot_staff_session', JSON.stringify(secureProfile));
     setStaffProfile(profile);
   };
 
@@ -626,20 +632,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
     const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive);
-    const isDemo = username === 'admin' && password === 'admin123';
     
-    if (user || isDemo) { 
+    if (user) { 
       setStaffLoggedIn(true); 
-      saveStaffSession(user ? {
-        username: user.username,
-        password: user.password,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        joinedDate: user.createdAt.toISOString(),
-        artistId: user.artistId
-      } : DEFAULT_STAFF_PROFILE);
+      saveStaffSession({
+        username: user.username, fullName: user.fullName, email: user.email,
+        role: user.role, phone: user.phone, joinedDate: user.createdAt.toISOString(), artistId: user.artistId
+      });
       return true; 
     }
     return false;
@@ -648,27 +647,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
  const staffLogout = async () => await clearStaffSession();
 
   const adminLogin = async (username: string, password: string): Promise<boolean> => {
-    // Now it checks for u.isAdmin OR role === 'admin'
     const user = staffUsers.find(u => 
-      u.username === username && 
-      u.password === password && 
-      u.isActive && 
+      u.username === username && u.password === password && u.isActive && 
       (u.isAdmin || u.role?.toLowerCase() === 'admin' || u.role?.toLowerCase() === 'manager')
     );
-    const isDemo = username === 'admin' && password === 'admin123';
     
-    if (user || isDemo) {
+    if (user) {
       setAdminLoggedIn(true);
-      saveStaffSession(user ? {
-        username: user.username,
-        password: user.password,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        joinedDate: user.createdAt.toISOString(),
-        artistId: user.artistId
-      } : DEFAULT_STAFF_PROFILE);
+      saveStaffSession({
+        username: user.username, fullName: user.fullName, email: user.email,
+        role: user.role, phone: user.phone, joinedDate: user.createdAt.toISOString(), artistId: user.artistId
+      });
       return true;
     }
     return false;
@@ -738,9 +727,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!table) return;
 
     const updated = { ...table, status: 'occupied' as TableStatus, session };
-    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    if (error) {
+      console.error("Assign Table Error:", error);
+      throw new Error("Failed to assign table in database."); // Stops execution here!
+    }
+
+    // 2. Only update the UI if the database succeeded
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    // FIXED: Use table.name instead of tableId
     await addActivity('table_assigned', `${table.name} assigned to ${session.customerName}`, { tableId, customerName: session.customerName });
   };
 
@@ -749,9 +743,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!table) return;
 
     const updated = { ...table, status: 'available' as TableStatus, session: undefined };
-    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    
+    const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    if (error) {
+      console.error("Free Table Error:", error);
+      throw new Error("Failed to free table in database.");
+    }
+
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    // FIXED: Use table.name instead of tableId
     await addActivity('table_freed', `Table ${table.name} freed`);
   };
 
@@ -760,9 +759,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!table) return;
 
     const updated = { ...table, status: 'reserved' as TableStatus };
-    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    
+    const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    if (error) {
+      console.error("Reserve Table Error:", error);
+      throw new Error("Failed to reserve table in database.");
+    }
+
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    // FIXED: Use table.name instead of tableId
     await addActivity('table_reserved', `Table ${table.name} reserved`);
   };
 

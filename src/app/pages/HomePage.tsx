@@ -348,28 +348,27 @@ export function HomePage() {
     setIsLoggingIn(true);
     setLoginForm(f => ({ ...f, error: '' }));
 
-    // 1. CHECK STAFF/ADMIN ARRAY FIRST (For proper Dashboard State)
-    const isDemoAdmin = loginForm.email === 'admin' && loginForm.password === 'admin123';
+    // 1. CHECK STAFF/ADMIN ARRAY FIRST (Strict Database Check)
     const staffMatch = staffUsers.find(u => 
       (u.email === loginForm.email || u.username === loginForm.email) && 
       u.password === loginForm.password && 
       u.isActive
     );
 
-    if (staffMatch || isDemoAdmin) {
-      const role = isDemoAdmin ? 'admin' : staffMatch?.role?.toLowerCase();
-      const username = isDemoAdmin ? 'admin' : staffMatch?.username;
-      const displayName = isDemoAdmin ? 'Admin' : staffMatch?.fullName || username; 
+    if (staffMatch) {
+      const role = staffMatch.role?.toLowerCase();
+      const username = staffMatch.username;
+      const displayName = staffMatch.fullName || username; 
       let success = false;
 
-      if (role === 'admin' || role === 'manager' || staffMatch?.isAdmin) {
-        success = await adminLogin(username!, loginForm.password);
+      if (role === 'admin' || role === 'manager' || staffMatch.isAdmin) {
+        success = await adminLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/admin'); return; }
       } else if (role === 'artist' || role === 'tattoo-artist') {
-        success = await artistLogin(username!, loginForm.password);
+        success = await artistLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/artist'); return; }
       } else {
-        success = await staffLogin(username!, loginForm.password);
+        success = await staffLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/staff'); return; }
       }
     }
@@ -515,7 +514,7 @@ export function HomePage() {
 
   const handleRemovePromo = () => { setAppliedPromo(null); setPromoCodeInput(''); setPromoError(''); };
   
-  const handleReservationSubmit = () => { 
+  const handleReservationSubmit = async () => { 
     if (!resForm.name || !resForm.email || !resForm.phone || !selectedDate || !resForm.timeSlot) {
       setResError('Please fill all required details.');
       return; 
@@ -526,6 +525,17 @@ export function HomePage() {
     if (!/^09\d{9}$/.test(cleanPhone)) {
       setResError('Contact number must be exactly 11 digits and start with 09 (e.g., 09123456789).');
       return;
+    }
+
+    // 🚨 FAST-FAIL DURATION CHECK 🚨
+    // Ensures a 3-hour booking doesn't bleed into an hour that is already full!
+    const targetStartHour = parseInt(resForm.timeSlot.split(':')[0]);
+    for (let i = 0; i < resForm.duration; i++) {
+      const hourStr = `${String(targetStartHour + i).padStart(2, '0')}:00`;
+      if ((slotCounts[hourStr] || 0) >= 5) {
+        setResError(`Cannot book for ${resForm.duration} hours. The ${hourStr} slot is fully booked. Please adjust your duration or time.`);
+        return;
+      }
     }
 
     setResError('');
@@ -542,6 +552,45 @@ export function HomePage() {
     setUploadError('');
 
     try {
+      // --- 🚨 RACE CONDITION FIX: LIVE DATABASE DOUBLE-CHECK 🚨 ---
+      const dateStart = new Date(selectedDate!);
+      dateStart.setHours(0,0,0,0);
+      const dateEnd = new Date(selectedDate!);
+      dateEnd.setHours(23,59,59,999);
+
+      // Fetch the absolute latest active reservations for this day directly from the DB
+      const { data: latestReservations, error: fetchError } = await supabase
+        .from('reservations')
+        .select('time_slot, duration_hours')
+        .neq('status', 'cancelled')
+        .gte('date', dateStart.toISOString())
+        .lte('date', dateEnd.toISOString());
+
+      if (fetchError) throw fetchError;
+
+      const targetStartHour = parseInt(resForm.timeSlot.split(':')[0]);
+      
+      // Verify every hour of the requested duration against live DB data
+      for (let i = 0; i < resForm.duration; i++) {
+         const checkHour = targetStartHour + i;
+         let countForThisHour = 0;
+         
+         (latestReservations || []).forEach(r => {
+            if (!r.time_slot) return;
+            const rStartHour = parseInt(r.time_slot.split(':')[0]);
+            const rEndHour = rStartHour + (r.duration_hours || 1);
+            if (checkHour >= rStartHour && checkHour < rEndHour) {
+               countForThisHour++;
+            }
+         });
+
+         // If the exact hour they want hit 5 tables while they were paying...
+         if (countForThisHour >= 5) {
+             throw new Error(`We're sorry! The ${checkHour}:00 slot was just taken by someone else while you were completing payment. Please close this modal and select a different time.`);
+         }
+      }
+      // ------------------------------------------------------------
+
       let receiptUrl = '';
       
       if (receiptFile) {
@@ -556,7 +605,8 @@ export function HomePage() {
       const [hours, minutes] = resForm.timeSlot.split(':').map(Number);
       reservationDate.setHours(hours, minutes, 0, 0);
 
-      addReservation({
+      // Await the reservation to ensure database insertion succeeds
+      await addReservation({
         customerName: resForm.name, contactNumber: resForm.phone, email: resForm.email,
         date: reservationDate, timeSlot: resForm.timeSlot, durationHours: resForm.duration,
         partySize: resForm.pax, status: 'pending', totalAmount, downPaymentAmount: downPayment,
@@ -1000,7 +1050,7 @@ export function HomePage() {
                               >
                                 {formatTime(t)}
                                 {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
-                                {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Passed</span>}
+                                {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Unavailable</span>}
                               </button>
                             );
                           })}
