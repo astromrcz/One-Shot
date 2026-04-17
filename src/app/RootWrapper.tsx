@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router';
 import { AppProvider, useAppContext } from './context/AppContext';
+import { Toaster } from "./components/ui/sonner";
 
 function RootContent() {
   const { loading } = useAppContext();
@@ -24,7 +25,10 @@ function RootContent() {
 export function RootWrapper() {
   return (
     <AppProvider>
+      {/* RootContent handles the loading screen and the Outlet for your pages */}
       <RootContent />
+      {/* Toaster sits on top of everything to catch notifications */}
+      <Toaster position="top-right" expand={false} richColors />
     </AppProvider>
   );
 }

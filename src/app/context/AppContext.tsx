@@ -242,11 +242,11 @@ type AppContextType = {
   currentArtistId: string | null;
   staffProfile: StaffProfile;
   staffLogin: (username: string, password: string) => Promise<boolean>;
-  staffLogout: () => void;
+  staffLogout: () => Promise<void>;
   adminLogin: (username: string, password: string) => Promise<boolean>;
-  adminLogout: () => void;
+  adminLogout: () => Promise<void>;
   artistLogin: (username: string, password: string) => Promise<boolean>;
-  artistLogout: () => void;
+  artistLogout: () => Promise<void>;
   updateStaffProfile: (profile: Partial<StaffProfile>) => void;
   assignTable: (tableId: string, session: Session) => Promise<void>;
   freeTable: (tableId: string) => Promise<void>;
@@ -584,6 +584,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  
   useEffect(() => {
     refreshData();
     const savedSession = localStorage.getItem('oneshot_staff_session');
@@ -607,18 +608,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Auth ──────────────────────────────────────────────────────
   // ── Auth ──────────────────────────────────────────────────────
+  
   const saveStaffSession = (profile: StaffProfile) => {
     localStorage.setItem('oneshot_staff_session', JSON.stringify(profile));
     setStaffProfile(profile);
   };
 
-  const clearStaffSession = () => {
+  const clearStaffSession = async () => {
     localStorage.removeItem('oneshot_staff_session');
     setStaffProfile(DEFAULT_STAFF_PROFILE);
     setStaffLoggedIn(false);
     setAdminLoggedIn(false);
     setArtistLoggedIn(false);
     setCurrentArtistId(null);
+    await supabase.auth.signOut(); // Wipes any lingering Supabase cache!
   };
 
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
@@ -642,7 +645,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return false;
   };
   
-  const staffLogout = () => clearStaffSession();
+ const staffLogout = async () => await clearStaffSession();
 
   const adminLogin = async (username: string, password: string): Promise<boolean> => {
     // Now it checks for u.isAdmin OR role === 'admin'
@@ -671,7 +674,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return false;
   };
   
-  const adminLogout = () => clearStaffSession();
+  const adminLogout = async () => await clearStaffSession();
 
   const artistLogin = async (username: string, password: string): Promise<boolean> => {
     const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive && u.role === 'tattoo-artist');
@@ -693,7 +696,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return false;
   };
   
-  const artistLogout = () => clearStaffSession();
+  const artistLogout = async () => await clearStaffSession();
 
  const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
     // 1. Update the local screen memory immediately

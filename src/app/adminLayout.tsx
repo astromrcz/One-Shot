@@ -6,7 +6,7 @@ import {
   Palette, Menu, X, LogOut, ChevronRight,
   ShieldCheck, Bell, Circle, Activity, Settings as SettingsIcon
 } from 'lucide-react';
-
+import { toast } from 'sonner';
 import { useAppContext } from './context/AppContext';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
@@ -55,9 +55,17 @@ export function AdminLayout() {
   const upcomingClosed = closedDates.filter(c => new Date(c.date) >= new Date()).length;
   const pageTitle = pageTitles[location.pathname] || 'Admin';
 
-  const handleLogout = () => {
-    adminLogout();
-    navigate('/admin/login');
+  const handleLogout = async () => {
+    try {
+      await adminLogout(); // or staffLogout()
+      navigate('/');
+      toast.info("Signed out", { 
+        description: "Admin session ended successfully.",
+        duration: 3000 
+      });
+    } catch (error) {
+      toast.error("Logout failed", { description: "Please try again." });
+    }
   };
 
   return (

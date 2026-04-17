@@ -21,7 +21,7 @@ import heroImg2 from '@/app/assets/f80be24577ead53e120a2e3792c660d627f94c6f.png'
 import heroImg3 from '@/app/assets/622002b1a57eb609a09cacd650764fb95c911672.png';
 import heroImg4 from '@/app/assets/759b04149309a4f38a99d59a2ef822b4e59fd5d3.png';
 import heroImg5 from '@/app/assets/0784e9fa4728a17ea332ccf7dd013e304884f734.png';
-
+import { toast } from 'sonner';
 const HERO_SLIDES = [
   { src: heroImg1, alt: 'One Shot Bar & Billiards – All It Takes Is One Shot' },
   { src: heroImg2, alt: 'One Shot Bar and Billiards' },
@@ -340,8 +340,7 @@ export function HomePage() {
     setIsLoggingIn(true);
     setLoginForm(f => ({ ...f, error: '' }));
 
-    // 1. CHECK STAFF DATABASE FIRST
-    // (Allows staff to log in using either their username OR email)
+    // 1. CHECK STAFF/ADMIN ARRAY FIRST (For proper Dashboard State)
     const isDemoAdmin = loginForm.email === 'admin' && loginForm.password === 'admin123';
     const staffMatch = staffUsers.find(u => 
       (u.email === loginForm.email || u.username === loginForm.email) && 
@@ -350,28 +349,29 @@ export function HomePage() {
     );
 
     if (staffMatch || isDemoAdmin) {
-      const role = isDemoAdmin ? 'manager' : staffMatch?.role;
+      const role = isDemoAdmin ? 'admin' : staffMatch?.role?.toLowerCase();
       const username = isDemoAdmin ? 'admin' : staffMatch?.username;
       let success = false;
 
-      // Route based on specific role
-      if (role === 'manager' || role === 'Manager' || staffMatch?.isAdmin) {
+      if (role === 'admin' || role === 'manager' || staffMatch?.isAdmin) {
         success = await adminLogin(username!, loginForm.password);
-        if (success) navigate('/admin');
-      } else if (role === 'tattoo-artist') {
+        if (success) { toast.success("Welcome back, Admin!"); navigate('/admin'); return; }
+      } else if (role === 'artist' || role === 'tattoo-artist') {
         success = await artistLogin(username!, loginForm.password);
-        if (success) navigate('/artist');
+        if (success) { toast.success("Welcome back, Artist!"); navigate('/artist'); return; }
       } else {
         success = await staffLogin(username!, loginForm.password);
-        if (success) navigate('/staff');
+        if (success) { toast.success("Welcome back, Staff!"); navigate('/staff'); return; }
       }
-
-      if (success) return; // Stop here, login is complete
     }
 
-    // 2. IF NOT STAFF, TRY CUSTOMER DATABASE
+    // 2. IF NOT STAFF, LOG IN AS A CUSTOMER VIA SUPABASE
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: loginForm.email, password: loginForm.password });
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email: loginForm.email, 
+        password: loginForm.password 
+      });
+      
       if (error) throw error;
 
       const name = data.user.user_metadata?.full_name || loginForm.email.split('@')[0];
@@ -379,8 +379,10 @@ export function HomePage() {
       const referralCode = data.user.user_metadata?.referral_code || generateReferralCode(name);
 
       setCurrentUser({ name, email: loginForm.email, phone, referralCode });
+      toast.success(`Welcome back, ${name}!`);
       setShowLoginModal(false);
       setLoginForm({ email: '', password: '', showPw: false, error: '' });
+      
     } catch (err: any) {
       if (err.message.includes('Email not confirmed')) {
         setLoginForm(f => ({ ...f, error: 'Please verify your email address before logging in.' }));
@@ -389,6 +391,16 @@ export function HomePage() {
       }
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleCustomerLogout = async () => {
+    try {
+      setCurrentUser(null); // Instantly clear the UI
+      await supabase.auth.signOut(); // Securely tell the database to destroy the session
+      toast.info("Logged out", { description: "You have been securely signed out." });
+    } catch (error) {
+      toast.error("Logout failed", { description: "Please try again." });
     }
   };
 
@@ -629,7 +641,9 @@ export function HomePage() {
                 <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[9px] font-black text-white">{currentUser.name[0]}</div>
                 <span className="text-xs text-emerald-300 font-medium hidden sm:block">{currentUser.name}</span>
               </button>
-              <button onClick={() => setCurrentUser(null)} className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors">Logout</button>
+              <button onClick={handleCustomerLogout} className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors">
+                Logout
+              </button>
             </div>
           ) : (
             <>
@@ -1417,7 +1431,7 @@ export function HomePage() {
             >
               <div className="flex items-center justify-between mb-5">
                 <div>
-                  <h3 className="text-lg font-bold text-white">Customer Login</h3>
+                  <h3 className="text-lg font-bold text-white">User Login</h3>
                   <p className="text-xs text-neutral-500">Welcome back!</p>
                 </div>
                 <button onClick={() => setShowLoginModal(false)} className="text-neutral-600 hover:text-neutral-300 transition-colors">
@@ -1708,8 +1722,8 @@ export function HomePage() {
           currentUser={currentUser}
           onUpdateUser={handleUpdateCustomerProfile}
           onLogout={() => {
-            setCurrentUser(null);
-            setShowProfileModal(false);
+            handleCustomerLogout(); // Triggers the secure sign out and toast
+            setShowProfileModal(false); // Closes the modal
           }}
         />
       )}
