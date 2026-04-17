@@ -292,7 +292,7 @@ type AppContextType = {
   addClosedDate: (item: Omit<ClosedDate, 'id'>) => Promise<void>;
   removeClosedDate: (id: string) => Promise<void>;
   updateClosedDate: (id: string, updates: Partial<ClosedDate>) => Promise<void>;
-  refreshData: () => Promise<void>;
+  refreshData: (silent?: boolean) => Promise<void>;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -363,8 +363,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     session_amount_paid: table.session?.amountPaid || null,
   });
 
-  const refreshData = async () => {
-    setLoading(true);
+  const refreshData = async (silent = false) => {
+    if (!silent) setLoading(true);
 
     try {
       const [

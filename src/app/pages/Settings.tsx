@@ -6,6 +6,7 @@ import {
   AlertTriangle, LogOut
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
 type Section = 'profile' | 'security' | 'account';
@@ -69,9 +70,10 @@ export function SettingsPage() {
     flashSaved('security');
   };
 
-  const handleLogout = () => {
-    staffLogout();
-    navigate('/staff/login');
+  const handleLogout = async () => {
+    await staffLogout();
+    navigate('/');
+    toast.info("Signed out", { description: "You have been securely signed out." });
   };
 
   const tabs: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -374,32 +376,7 @@ export function SettingsPage() {
             </div>
           </div>
 
-          {/* System Info */}
-          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-neutral-100 mb-4">System Info</h3>
-            <div className="space-y-2 text-xs text-neutral-500">
-              <div className="flex justify-between">
-                <span>System</span>
-                <span className="text-neutral-400">One Shot Bar & Billiards Management System</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Version</span>
-                <span className="text-neutral-400">1.0.0</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Base Rate</span>
-                <span className="text-neutral-400">₱250/hr</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Location</span>
-                <span className="text-neutral-400">Autobase OAX, San Juan, Cainta, Rizal</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Hours</span>
-                <span className="text-neutral-400">Mon–Sat 12PM–3AM · Sun 5PM–3AM</span>
-              </div>
-            </div>
-          </div>
+          
         </div>
       )}
     </div>

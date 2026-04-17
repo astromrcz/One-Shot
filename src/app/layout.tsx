@@ -8,6 +8,7 @@ import {
   Monitor, ShieldCheck
 } from 'lucide-react';
 import { useAppContext } from './context/AppContext';
+import { toast } from 'sonner';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
 const navItems = [
@@ -36,7 +37,8 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const { queue, tables, activities, staffLoggedIn, staffLogout } = useAppContext();
+  const [now, setNow] = useState(new Date()); // <-- Added for the clock
+  const { queue, tables, activities, staffLoggedIn, staffLogout, staffProfile } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -47,7 +49,16 @@ export function Layout() {
     }
   }, [staffLoggedIn, navigate]);
 
+  // Live Clock effect
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (!staffLoggedIn) return null;
+
+  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   const waitingCount = queue.filter(q => q.status === 'waiting').length;
   const occupiedCount = tables.filter(t => t.status === 'occupied').length;
@@ -59,10 +70,11 @@ export function Layout() {
 
   const pageTitle = pageTitles[location.pathname] || 'One Shot Bar';
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowUserMenu(false);
-    staffLogout();
-    navigate('/staff/login');
+    await staffLogout();
+    navigate('/');
+    toast.info("Signed out", { description: "You have been securely signed out." });
   };
 
   const openLiveMonitor = () => {
@@ -103,22 +115,12 @@ export function Layout() {
           </button>
         </div>
 
-        {/* Quick Status */}
+        {/* Live Clock & Overtime */}
         <div className="px-4 py-3 flex gap-2">
-          <div className="flex-1 bg-neutral-900 rounded-lg p-2.5 text-center border border-neutral-800">
-            <p className="text-lg font-black text-rose-500">{occupiedCount}</p>
-            <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Occupied</p>
+          <div className="flex-1 bg-neutral-900 rounded-lg p-2.5 text-center border border-neutral-800 flex flex-col justify-center">
+            <p className="text-lg font-black text-emerald-400 tabular-nums tracking-tight">{timeStr}</p>
+            <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">{dateStr}</p>
           </div>
-          <div className="flex-1 bg-neutral-900 rounded-lg p-2.5 text-center border border-neutral-800">
-            <p className="text-lg font-black text-amber-500">{waitingCount}</p>
-            <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">In Queue</p>
-          </div>
-          {overtimeCount > 0 && (
-            <div className="flex-1 bg-rose-950/30 rounded-lg p-2.5 text-center border border-rose-800/40">
-              <p className="text-lg font-black text-rose-400">{overtimeCount}</p>
-              <p className="text-[10px] text-rose-500 uppercase tracking-wider font-semibold">Overtime</p>
-            </div>
-          )}
         </div>
 
         {/* Live Monitor Button */}
@@ -200,15 +202,6 @@ export function Layout() {
             <h1 className="text-base font-semibold text-neutral-200">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-3">
-            {/* Live Monitor quick-launch in header */}
-            <button
-              onClick={openLiveMonitor}
-              title="Open Live Table Monitor"
-              className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-600/25 px-3 py-1.5 rounded-full transition-all font-semibold"
-            >
-              <Monitor size={13} />
-              Live Monitor
-            </button>
 
             {overtimeCount > 0 && (
               <div className="flex items-center gap-1.5 bg-rose-950/40 border border-rose-800/40 px-3 py-1.5 rounded-full">
@@ -254,22 +247,22 @@ export function Layout() {
               )}
             </div>
 
-            {/* User Menu Dropdown */}
+           {/* User Menu Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-2 bg-neutral-800/60 rounded-full pl-1 pr-3 py-1 border border-neutral-700/50 hover:bg-neutral-800 transition-colors"
               >
-                <div className="w-7 h-7 bg-emerald-600/30 rounded-full border border-emerald-600/50 flex items-center justify-center text-emerald-400 text-xs font-bold">
-                  S
+                <div className="w-7 h-7 bg-emerald-600/30 rounded-full border border-emerald-600/50 flex items-center justify-center text-emerald-400 text-xs font-bold uppercase">
+                  {staffProfile?.username?.charAt(0) || 'S'}
                 </div>
-                <span className="text-xs text-neutral-400 font-medium">Staff</span>
+                <span className="text-xs text-neutral-400 font-medium">{staffProfile?.username || 'Staff'}</span>
               </button>
               {showUserMenu && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-neutral-950 border border-neutral-800 rounded-xl shadow-2xl z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-neutral-800">
-                    <p className="text-sm font-semibold text-neutral-200">Staff User</p>
-                    <p className="text-xs text-neutral-500">admin@oneshot.com</p>
+                    <p className="text-sm font-semibold text-neutral-200">{staffProfile?.fullName || 'Staff User'}</p>
+                    <p className="text-xs text-neutral-500 truncate">{staffProfile?.email || 'No email provided'}</p>
                   </div>
                   <NavLink
                     to="/staff/settings"

@@ -174,22 +174,39 @@ function QueueRow({ item, position }: { item: QueueItem; position: number }) {
 
 // ── Main Component ─────────────────────────────────────────────
 export function LiveMonitor() {
-  const { tables, queue } = useAppContext();
+  const { tables, queue, refreshData } = useAppContext();
   const [tick, setTick] = useState(0);
   const [now, setNow] = useState(new Date());
 
-  // Refresh timers every second
   useEffect(() => {
-    const id = setInterval(() => {
-      setTick(t => t + 1);
+    // 1. FAST TICK: Updates the local UI every 1 second for perfectly smooth countdowns and clocks
+    const localTimer = setInterval(() => {
       setNow(new Date());
+      setTick(t => t + 1); // Forces the TableCards to re-calculate their remaining time instantly
     }, 1000);
-    return () => clearInterval(id);
+
+    // 2. SLOW FETCH: Silently checks the database every 5 seconds for new reservations/queue members
+    const dbFetcher = setInterval(() => {
+      refreshData(true); 
+    }, 5000);
+
+    // Cleanup both timers if the page closes
+    return () => {
+      clearInterval(localTimer);
+      clearInterval(dbFetcher);
+    };
   }, []);
 
   const availableCount = tables.filter(t => t.status === 'available').length;
   const occupiedCount = tables.filter(t => t.status === 'occupied').length;
   const reservedCount = tables.filter(t => t.status === 'reserved').length;
+
+  const overtimeCount = tables.filter(t => {
+    if (t.status !== 'occupied' || !t.session) return false;
+    const end = new Date(t.session.startTime).getTime() + t.session.durationMinutes * 60000;
+    return Date.now() > end;
+  }).length;
+
   const waitingQueue = queue.filter(q => q.status === 'waiting' || q.status === 'called');
 
   const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -230,6 +247,13 @@ export function LiveMonitor() {
           <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
           <span className="text-sm font-semibold text-blue-300">{reservedCount} Reserved</span>
         </div>
+
+        {/* ADD THIS OVERTIME BLOCK HERE */}
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] animate-pulse" />
+          <span className="text-sm font-semibold text-rose-300">{overtimeCount} Overtime</span>
+        </div>
+
         <div className="ml-auto flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-[11px] text-neutral-500 uppercase tracking-widest font-semibold">Live</span>
@@ -251,13 +275,7 @@ export function LiveMonitor() {
             ))}
           </div>
 
-          {/* Legend */}
-          <div className="mt-6 flex flex-wrap gap-4 text-[11px] text-neutral-600">
-            <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-emerald-700" /> Available — walk up to any open table</div>
-            <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-neutral-700" /> In Use — countdown shows remaining time</div>
-            <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-blue-800" /> Reserved — pre-booked slot</div>
-            <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-rose-800" /> Overtime — please see staff</div>
-          </div>
+          
         </div>
 
         {/* Queue Section */}

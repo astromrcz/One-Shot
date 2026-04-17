@@ -351,17 +351,18 @@ export function HomePage() {
     if (staffMatch || isDemoAdmin) {
       const role = isDemoAdmin ? 'admin' : staffMatch?.role?.toLowerCase();
       const username = isDemoAdmin ? 'admin' : staffMatch?.username;
+      const displayName = isDemoAdmin ? 'Admin' : staffMatch?.fullName || username; 
       let success = false;
 
       if (role === 'admin' || role === 'manager' || staffMatch?.isAdmin) {
         success = await adminLogin(username!, loginForm.password);
-        if (success) { toast.success("Welcome back, Admin!"); navigate('/admin'); return; }
+        if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/admin'); return; }
       } else if (role === 'artist' || role === 'tattoo-artist') {
         success = await artistLogin(username!, loginForm.password);
-        if (success) { toast.success("Welcome back, Artist!"); navigate('/artist'); return; }
+        if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/artist'); return; }
       } else {
         success = await staffLogin(username!, loginForm.password);
-        if (success) { toast.success("Welcome back, Staff!"); navigate('/staff'); return; }
+        if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/staff'); return; }
       }
     }
 
@@ -797,18 +798,29 @@ export function HomePage() {
                           </div>
                         );
                       }
+                      
                       const timerInfo = getTableTimerInfo(t.id);
                       const nextRes = getNextResForTable(t.id);
-                      const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' : timerInfo?.isAlert ? 'bg-amber-400' : t.status === 'occupied' ? 'bg-rose-500' : t.status === 'reserved' ? 'bg-amber-400' : 'bg-emerald-500';
+                      
+                      // UPDATED COLOR MAPPING LOGIC
+                      const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' : t.status === 'occupied' ? 'bg-amber-500' : t.status === 'reserved' ? 'bg-blue-500' : 'bg-emerald-500';
+                      
                       return (
                         <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
                           <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
                           <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
                             {timerInfo ? (
-                              <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : 'text-emerald-400'}`}>{timerInfo.formatted}</span>
+                              <>
+                                <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : 'text-amber-500'}`}>
+                                  {timerInfo.isOvertime ? 'OVERTIME' : 'IN USE'}
+                                </span>
+                                <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : 'text-amber-500'}`}>
+                                  {timerInfo.formatted}
+                                </span>
+                              </>
                             ) : (
-                              <span className={`font-semibold uppercase text-[10px] ${t.status === 'available' ? 'text-emerald-500' : 'text-amber-400'}`}>{t.status}</span>
+                              <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
                             )}
                           </div>
                           {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[90px]">→ {nextRes.customerName.split(' ')[0]} @ {nextRes.timeSlot}</span>}
