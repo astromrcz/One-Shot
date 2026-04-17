@@ -882,7 +882,9 @@ export function HomePage() {
                         <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
                           {TIME_SLOTS.map(t => {
                             const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours();
+                            // Adds a 1-hour buffer. If it's 1:50 PM (Hour 13), 2 PM (Hour 14) is blocked.
+                            const bufferHours = 1; 
+                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
                             
                             if (isHappyHour || isPastTime) return null; // Hide happy hour and passed times from the list
                             
@@ -974,7 +976,9 @@ export function HomePage() {
                             const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
                             const count = slotCounts[t] || 0;
                             const isFull = count >= 5;
-                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours();
+                            // Matches the buffer above to block immediate same-day bookings
+                            const bufferHours = 1;
+                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
                             const disabled = isHappyHour || isFull || isPastTime;
 
                             return (
