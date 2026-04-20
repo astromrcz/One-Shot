@@ -556,6 +556,18 @@ export function HomePage() {
     setUploadError('');
 
     try {
+      // --- 🚨 GCASH DUPLICATE REFERENCE FIX 🚨 ---
+      const { data: existingRef } = await supabase
+        .from('reservations')
+        .select('id')
+        .eq('payment_reference', referenceNumber)
+        .maybeSingle();
+
+      if (existingRef) {
+        throw new Error("This GCash reference number has already been used. Please provide a valid, unique receipt.");
+      }
+      // ------------------------------------------------------------
+
       // --- 🚨 RACE CONDITION FIX: LIVE DATABASE DOUBLE-CHECK 🚨 ---
       const dateStart = new Date(selectedDate!);
       dateStart.setHours(0,0,0,0);

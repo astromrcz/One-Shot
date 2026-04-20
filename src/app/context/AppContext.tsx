@@ -384,9 +384,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ] = await Promise.all([
         supabase.from('tables').select('*').order('name'),
         supabase.from('queue_items').select('*').order('arrival_time'),
-        supabase.from('reservations').select('*').order('date', { ascending: false }),
+        // Added .limit(500) to cap memory usage
+        supabase.from('reservations').select('*').order('date', { ascending: false }).limit(500), 
         supabase.from('feedback').select('*').order('created_at', { ascending: false }),
-        supabase.from('activities').select('*').limit(100),
+        // Added proper ordering so it grabs the NEWEST 200 activities
+        supabase.from('activities').select('*').order('created_at', { ascending: false }).limit(200),
         supabase.from('promo_codes').select('*').order('created_at', { ascending: false }),
         supabase.from('tattoo_artists').select('*').order('name'),
         supabase.from('tattoo_reservations').select('*').order('date', { ascending: false }),
