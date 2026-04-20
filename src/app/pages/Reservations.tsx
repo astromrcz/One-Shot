@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppContext, HOURLY_RATE, DOWN_PAYMENT_RATE, ReservationStatus } from '../context/AppContext';
+import emailjs from '@emailjs/browser';
 import {
   Plus, X, Calendar, Clock, Users, Phone, Mail, ChevronDown, CheckCircle,
   XCircle, Search, Filter, DollarSign, AlertTriangle, Receipt
@@ -37,11 +38,37 @@ export function Reservations() {
   const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
 
-  const handleVerify = (id: string, name: string) => {
-    updateReservationStatus(id, 'confirmed');
-    setToast(`${name} successfully verified!`);
-    setTimeout(() => setToast(null), 3500); // Hide after 3.5 seconds
-    if (selectedId === id) setSelectedId(null);
+  const handleVerify = async (r: any) => {
+    updateReservationStatus(r.id, 'confirmed');
+    
+    if (r.email) {
+      try {
+        const balance = r.totalAmount - r.downPaymentAmount;
+        
+        await emailjs.send(
+          'service_d5kmgtc',   // ⚠️ Replace with your EmailJS Service ID
+          'template_48a5pgd',  // ⚠️ Replace with your EmailJS Template ID
+          {
+            to_email: r.email,
+            customer_name: r.customerName,
+            date: r.date ? format(new Date(r.date), 'MMM d, yyyy') : '',
+            time: r.timeSlot || '',
+            duration: r.durationHours,
+            total_amount: r.totalAmount.toFixed(2),
+            down_payment: r.downPaymentAmount.toFixed(2),
+            balance: balance.toFixed(2)
+          },
+          'agtFkbRS7r_lgBWMV'    // ⚠️ Replace with your EmailJS Public Key
+        );
+        console.log("Confirmation email sent!");
+      } catch (error) {
+        console.error("Failed to send email:", error);
+      }
+    }
+
+    setToast(`${r.customerName} successfully verified! Confirmation email sent.`);
+    setTimeout(() => setToast(null), 3500); 
+    if (selectedId === r.id) setSelectedId(null);
   };
   // Form state
   const [form, setForm] = useState({
@@ -249,7 +276,7 @@ export function Reservations() {
                               </button>
                             )}
                             <button
-                              onClick={() => handleVerify(r.id, r.customerName)}
+                              onClick={() => handleVerify(r)}
                               className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-[10px] font-bold rounded border border-emerald-700/30 transition-colors"
                             >
                               Verify
@@ -391,7 +418,7 @@ export function Reservations() {
               {/* Status Actions */}
               <div className="flex gap-2 flex-wrap">
                 {selected.status === 'pending' && (
-                  <button onClick={() => handleVerify(selected.id, selected.customerName)} className="flex-1 px-3 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-semibold rounded-xl border border-emerald-700/30 transition-colors">
+                  <button onClick={() => handleVerify(selected)} className="flex-1 px-3 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-semibold rounded-xl border border-emerald-700/30 transition-colors">
                     Confirm Booking
                   </button>
                 )}

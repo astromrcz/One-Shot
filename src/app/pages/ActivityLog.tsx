@@ -2,7 +2,7 @@ import { useAppContext } from '../context/AppContext';
 import { 
   Clock, Filter, Search, CheckCircle, XCircle, Bell, Users, 
   Calendar, DollarSign, TableProperties, TrendingUp, 
-  MessageSquare, Tag, Palette, ShieldAlert, Activity // Added new icons
+  MessageSquare, Tag, Palette, ShieldAlert, Activity, Download // Added new icons
 } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { useState } from 'react';
@@ -69,6 +69,26 @@ export function ActivityLog() {
     admin_action: 'Admin Action',
   };
 
+  // Fulfills System Requirement REQ012
+  const handleExportCSV = () => {
+    if (!activities || activities.length === 0) return;
+    
+    const headers = "Date,Type,Description\n";
+    const rows = activities.map(act => {
+      const date = new Date(act.timestamp).toLocaleString().replace(/,/g, ''); 
+      // Replace quotes in description to prevent CSV breaking
+      const safeDesc = act.description.replace(/"/g, '""'); 
+      return `"${date}","${act.type}","${safeDesc}"`;
+    }).join("\n");
+
+    const blob = new Blob([headers + rows], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `OneShot_Activity_Report_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+
   return (
     <div className="space-y-5">
       {/* Stats */}
@@ -109,6 +129,9 @@ export function ActivityLog() {
               <option key={type} value={type}>{typeLabels[type] || 'Unknown'}</option>
             ))}
           </select>
+          <button onClick={handleExportCSV} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 px-3 py-2 rounded-lg text-sm transition-colors flex-none ml-2">
+            <Download size={14} /> <span className="hidden sm:inline">Export CSV</span>
+          </button>
         </div>
       </div>
 

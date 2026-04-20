@@ -41,13 +41,21 @@ const pageTitles: Record<string, string> = {
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { adminLoggedIn, adminLogout, announcements, closedDates } = useAppContext();
+  const { adminLoggedIn, staffLoggedIn, adminLogout, announcements, closedDates } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!adminLoggedIn) navigate('/admin/login', { replace: true });
-  }, [adminLoggedIn, navigate]);
+    if (!adminLoggedIn) {
+      // If they are a regular staff trying to sneak into admin, kick them to staff dashboard
+      if (staffLoggedIn) {
+        navigate('/staff', { replace: true });
+        toast.error("Access Denied", { description: "You do not have administrator privileges." });
+      } else {
+        navigate('/admin/login', { replace: true });
+      }
+    }
+  }, [adminLoggedIn, staffLoggedIn, navigate]);
 
   if (!adminLoggedIn) return null;
 
