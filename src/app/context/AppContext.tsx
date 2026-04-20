@@ -598,12 +598,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setStaffProfile(profile);
         
         const r = profile.role?.toLowerCase();
-        if (r === 'admin' || r === 'manager') setAdminLoggedIn(true);
+        if (r === 'admin' || profile.isAdmin) {
+          setAdminLoggedIn(true);
+          setStaffLoggedIn(true); // 🚨 Restore dual-access on refresh
+        }
         else if (r === 'artist' || r === 'tattoo-artist') {
           setArtistLoggedIn(true);
           setCurrentArtistId(profile.artistId || null);
         }
-        else setStaffLoggedIn(true);
+        else setStaffLoggedIn(true); // Managers and standard staff
       } catch (e) {
         console.error('Failed to parse saved session');
       }
@@ -651,11 +654,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const adminLogin = async (username: string, password: string): Promise<boolean> => {
     const user = staffUsers.find(u => 
       u.username === username && u.password === password && u.isActive && 
-      (u.isAdmin || u.role?.toLowerCase() === 'admin' || u.role?.toLowerCase() === 'manager')
+      (u.isAdmin || u.role?.toLowerCase() === 'admin')
     );
     
     if (user) {
       setAdminLoggedIn(true);
+      setStaffLoggedIn(true); // 🚨 Grants Admins access to the Staff Portal!
       saveStaffSession({
         username: user.username, fullName: user.fullName, email: user.email,
         role: user.role, phone: user.phone, joinedDate: user.createdAt.toISOString(), artistId: user.artistId

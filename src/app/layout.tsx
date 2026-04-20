@@ -38,14 +38,15 @@ export function Layout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [now, setNow] = useState(new Date()); // <-- Added for the clock
-  const { queue, tables, activities, staffLoggedIn, staffLogout, staffProfile } = useAppContext();
+  const { queue, tables, activities, staffLoggedIn, adminLoggedIn, staffLogout, staffProfile } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
 
   // Auth guard — redirect to login if not authenticated
+  // Auth guard — redirect to login if not authenticated
   useEffect(() => {
     if (!staffLoggedIn) {
-      navigate('/staff/login', { replace: true });
+      navigate('/', { replace: true }); // Redirect to homepage
     }
   }, [staffLoggedIn, navigate]);
 
@@ -171,15 +172,17 @@ export function Layout() {
 
         {/* Bottom */}
         <div className="p-4 border-t border-neutral-800 space-y-2">
-          {/* Admin Portal shortcut */}
-          <button
-            onClick={() => navigate('/admin')}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-950/20 hover:bg-amber-950/40 border border-amber-900/30 hover:border-amber-800/50 text-amber-500/80 hover:text-amber-400 transition-all text-xs font-semibold"
-          >
-            <ShieldCheck size={14} />
-            <span className="flex-1 text-left">Admin Portal</span>
-            <span className="text-[9px] text-amber-700 font-black">↗</span>
-          </button>
+          {/* Admin Portal shortcut (Only visible to Admins) */}
+          {adminLoggedIn && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-amber-950/20 hover:bg-amber-950/40 border border-amber-900/30 hover:border-amber-800/50 text-amber-500/80 hover:text-amber-400 transition-all text-xs font-semibold"
+            >
+              <ShieldCheck size={14} />
+              <span className="flex-1 text-left">Admin Portal</span>
+              <span className="text-[9px] text-amber-700 font-black">↗</span>
+            </button>
+          )}
           <div className="flex items-center gap-2 text-neutral-600">
             <Circle size={8} className="fill-emerald-500 text-emerald-500" />
             <span className="text-xs">Mon–Sat 12PM–3AM · Sun 5PM–3AM</span>

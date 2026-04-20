@@ -361,7 +361,7 @@ export function HomePage() {
       const displayName = staffMatch.fullName || username; 
       let success = false;
 
-      if (role === 'admin' || role === 'manager' || staffMatch.isAdmin) {
+      if (role === 'admin' || staffMatch.isAdmin) {
         success = await adminLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/admin'); return; }
       } else if (role === 'artist' || role === 'tattoo-artist') {

@@ -52,7 +52,7 @@ export function AdminLayout() {
         navigate('/staff', { replace: true });
         toast.error("Access Denied", { description: "You do not have administrator privileges." });
       } else {
-        navigate('/admin/login', { replace: true });
+        navigate('/', { replace: true }); // Redirect to homepage
       }
     }
   }, [adminLoggedIn, staffLoggedIn, navigate]);
