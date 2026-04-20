@@ -387,8 +387,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Added .limit(500) to cap memory usage
         supabase.from('reservations').select('*').order('date', { ascending: false }).limit(500), 
         supabase.from('feedback').select('*').order('created_at', { ascending: false }),
-        // Added proper ordering so it grabs the NEWEST 200 activities
-        supabase.from('activities').select('*').order('created_at', { ascending: false }).limit(200),
+        // 🚨 FIX: Changed 'created_at' to 'timestamp' to match your Supabase schema!
+        supabase.from('activities').select('*').order('timestamp', { ascending: false }).limit(200),
         supabase.from('promo_codes').select('*').order('created_at', { ascending: false }),
         supabase.from('tattoo_artists').select('*').order('name'),
         supabase.from('tattoo_reservations').select('*').order('date', { ascending: false }),

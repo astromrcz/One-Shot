@@ -13,8 +13,6 @@ import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { TattooSection } from '../components/TattooSection';
 
-const [guestEmail, setGuestEmail] = useState(() => localStorage.getItem('oneshot_guest_email') || '');
-
 import { CustomerSettingsModal } from '../components/CustomerSettingsModal';
 
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
@@ -207,7 +205,7 @@ function MiniCalendar({
 export function HomePage() {
   const navigate = useNavigate();
   const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin } = useAppContext();
-
+  const [guestEmail, setGuestEmail] = useState(() => localStorage.getItem('oneshot_guest_email') || '');
   const [announcementIdx, setAnnouncementIdx] = useState(0);
   const [announcementDir, setAnnouncementDir] = useState<1 | -1>(1);
   const [heroSlideIdx, setHeroSlideIdx] = useState(0);
@@ -545,8 +543,10 @@ export function HomePage() {
   };
 
   const handlePaymentConfirm = async () => {
-    if (!referenceNumber) {
-      setUploadError("Please enter the GCash Reference Number.");
+    const cleanRef = referenceNumber.replace(/\s/g, ''); // Remove spaces for validation
+    
+    if (!referenceNumber || cleanRef.length !== 13) {
+      setUploadError("Please enter a valid 13-digit GCash Reference Number.");
       return;
     }
     if (!receiptFile) {
@@ -856,314 +856,324 @@ export function HomePage() {
 
           {/* ════ RESERVATIONS SECTION ════ */}
           {activeSection === 'reservations' && (
-            <motion.div key="reservations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="max-w-5xl mx-auto px-6 py-10">
+            <motion.div key="reservations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="max-w-6xl mx-auto px-6 py-10">
               <div className="text-center mb-10">
                 <h2 className="text-3xl font-black text-white mb-2">Make a Reservation</h2>
                 <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {rates?.downPaymentPercent || 25}% down payment.</p>
               </div>
 
-              {/* Live Status Overview */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-10">
+              {/* Layout wrapper for Main Content (Left) and Sidebar (Right) */}
+              <div className="flex flex-col lg:flex-row gap-8 items-start">
                 
-                {/* 🚨 NEW: My Reservations Card 🚨 */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex flex-col">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
-                  </div>
+                {/* --- MAIN CONTENT AREA (LEFT) --- */}
+                <div className="flex-1 min-w-0 space-y-10">
                   
-                  {(() => {
-                    const myEmail = currentUser?.email || guestEmail;
-                    const myReservations = myEmail ? reservations.filter(r => r.email === myEmail).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
-                    
-                    if (!myEmail) {
-                      return (
-                        <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-4 text-center">
-                          <p className="text-xs text-neutral-500 mb-2">Log in to view your booking history.</p>
-                          <button onClick={() => setShowLoginModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-3 py-1.5 rounded-lg font-semibold hover:bg-emerald-600/30">Login</button>
-                        </div>
-                      );
-                    }
-                    if (myReservations.length === 0) {
-                      return <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24"><p className="text-xs text-neutral-500">No recent reservations.</p></div>;
-                    }
-                    return (
-                      <div className="space-y-2 overflow-y-auto max-h-56 pr-1">
-                        {myReservations.map(r => (
-                          <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
-                            <div className="flex justify-between items-start mb-1.5">
-                              <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                r.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
-                                r.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
-                                r.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
-                                'bg-rose-500/10 text-rose-400'
-                              }`}>{r.status}</span>
+                  {/* Live Status Overview (Now 2 columns instead of 3) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Table Status Card */}
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
+                      </div>
+                      <div className="space-y-1 max-h-56 overflow-y-auto">
+                        {tables.map(t => {
+                          if (!t.isActive) {
+                            return (
+                              <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
+                                <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
+                                <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
+                                <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
+                              </div>
+                            );
+                          }
+                          
+                          const timerInfo = getTableTimerInfo(t.id);
+                          const nextRes = getNextResForTable(t.id);
+                          const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' : t.status === 'occupied' ? 'bg-amber-500' : t.status === 'reserved' ? 'bg-blue-500' : 'bg-emerald-500';
+                          
+                          return (
+                            <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
+                              <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
+                              <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
+                              <div className="flex-1 min-w-0 flex items-center gap-2">
+                                {timerInfo ? (
+                                  <>
+                                    <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : 'text-amber-500'}`}>
+                                      {timerInfo.isOvertime ? 'OVERTIME' : 'IN USE'}
+                                    </span>
+                                    <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : 'text-amber-500'}`}>
+                                      {timerInfo.formatted}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
+                                )}
+                              </div>
+                              {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {formatTime(nextRes.timeSlot)}</span>}
                             </div>
-                            <div className="flex justify-between text-neutral-500 text-[11px]">
-                              <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
-                              <span>₱{r.totalAmount}</span>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Walk-in Queue Card */}
+                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-1">
+                        <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
+                        <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
+                      </div>
+                      {queue.filter(q => q.status === 'waiting').length === 0 ? (
+                        <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
+                      ) : (
+                        <div className="space-y-2">
+                          {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
+                            <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
+                              <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
+                              <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
+                              <span className="text-xs text-neutral-500">{q.partySize} pax</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Booking Steps */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                    
+                    {/* Step 1 */}
+                    <div>
+                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 1 — Pick a Date</p>
+                      <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} reservedDates={reservedDates} closedDates={closedDates} />
+                      {selectedDate && !selectedClosedDate && (
+                        <>
+                          <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
+                            <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                            <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
+                          </div>
+                          
+                          <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                                <Clock size={14} className="text-emerald-500" /> Slot Availability
+                              </h3>
+                              <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Max 5 / hour</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                              {TIME_SLOTS.map(t => {
+                                const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                const bufferHours = 1; 
+                                const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
+                                if (isHappyHour || isPastTime) return null; 
+                                
+                                const count = slotCounts[t] || 0;
+                                const isFull = count >= 5;
+                                
+                                return (
+                                  <div key={t} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                                    isFull ? 'bg-rose-950/20 border-rose-800/30' : 
+                                    count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
+                                    'bg-neutral-950 border-neutral-800/50'
+                                  }`}>
+                                    <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{formatTime(t)}</span>
+                                    <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
+                                      {count}/5
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* 🚨 END NEW CARD 🚨 */}
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Step 2 */}
+                    <div>
+                      {/* Title is now OUTSIDE the box to align perfectly with Step 1 */}
+                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 2 — Your Details</p>
+                      
+                      {!selectedDate ? (
+                        <div className="bg-neutral-900 border border-dashed border-neutral-700 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
+                          <Calendar size={32} className="text-neutral-600" />
+                          <p className="text-neutral-500 text-sm">Please select a date from the calendar to continue your reservation.</p>
+                        </div>
+                      ) : selectedClosedDate ? (
+                        <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-8 text-center flex flex-col items-center gap-4">
+                          <div className="w-16 h-16 bg-rose-900/30 rounded-full flex items-center justify-center">
+                            <AlertTriangle size={32} className="text-rose-500" />
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-rose-400 mb-2">Store Closed</h3>
+                            <p className="text-sm text-neutral-300 leading-relaxed mb-4">
+                              We are currently closed on {selectedDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.
+                            </p>
+                            <div className="bg-rose-950/40 border border-rose-800/50 rounded-xl p-4 text-left">
+                              <p className="text-[10px] text-rose-500 uppercase tracking-widest font-semibold mb-1">Reason for closure</p>
+                              <p className="text-sm text-neutral-200">{selectedClosedDate.reason}</p>
+                            </div>
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-2">Please select a different date from the calendar to make your reservation.</p>
+                        </div>
+                      ) : (
+                        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4">
+                          <div>
+                            <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+                            <input type="text" value={resForm.name} onChange={e => setResForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
+                            <input type="email" value={resForm.email} onChange={e => setResForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
+                            <input 
+                              type="tel" 
+                              value={resForm.phone} 
+                              onChange={e => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                if (val.length <= 11) setResForm(f => ({ ...f, phone: val }));
+                                setResError(''); 
+                              }} 
+                              placeholder="09XXXXXXXXX"
+                              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600" 
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs text-neutral-400 mb-1.5">No. of Persons</label>
+                              <input type="number" min={1} max={20} value={resForm.pax} onChange={e => setResForm(f => ({ ...f, pax: parseInt(e.target.value) || 1 }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-neutral-400 mb-1.5">Duration (hours)</label>
+                              <select value={resForm.duration} onChange={e => setResForm(f => ({ ...f, duration: parseInt(e.target.value) }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100">
+                                {[1, 2, 3, 4, 5, 6].map(h => <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {TIME_SLOTS.map(t => {
+                                const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                const count = slotCounts[t] || 0;
+                                const isFull = count >= 5;
+                                const bufferHours = 1;
+                                const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
+                                const disabled = isHappyHour || isFull || isPastTime;
 
-                {/* Existing Table Status Card */}
-                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
+                                return (
+                                  <button 
+                                    key={t} 
+                                    disabled={disabled} 
+                                    onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} 
+                                    className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                      isHappyHour 
+                                        ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
+                                        : isPastTime
+                                        ? 'bg-neutral-900/30 text-neutral-600/50 border border-neutral-800/30 cursor-not-allowed'
+                                        : isFull
+                                        ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                        : resForm.timeSlot === t 
+                                        ? 'bg-emerald-600 text-white' 
+                                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
+                                    }`}
+                                  >
+                                    {formatTime(t)}
+                                    {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                                    {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Unavailable</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-neutral-400 mb-1.5">Promo Code <span className="text-neutral-600">(optional)</span></label>
+                            {appliedPromo ? (
+                              <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/30 rounded-lg px-3 py-2">
+                                <span className="text-xs text-emerald-300 font-semibold flex-1">{appliedPromo.code} — {appliedPromo.discountPercent}% off applied!</span>
+                                <button onClick={handleRemovePromo} className="text-neutral-500 hover:text-rose-400 transition-colors"><X size={13} /></button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <input type="text" value={promoCodeInput} onChange={e => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoError(''); }} className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100" />
+                                <button onClick={handleApplyPromo} className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-xs font-semibold">Apply</button>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50 mt-4">
+                            <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
+                            <div className="space-y-1.5 text-xs">
+                              <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
+                              <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
+                            </div>
+                          </div>
+
+                          {resError && (
+                            <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mt-3">
+                              {resError}
+                            </div>
+                          )}
+
+                          <button onClick={handleReservationSubmit} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
+                            Proceed to Payment
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-1 max-h-56 overflow-y-auto">
-                    {tables.map(t => {
-                      if (!t.isActive) {
+                </div>
+
+                {/* --- RIGHT SIDEBAR (MY BOOKINGS) --- */}
+                <div className="w-full lg:w-[320px] flex-none">
+                  {/* Sticky wrapper so it stays in view when scrolling down the form */}
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex flex-col sticky top-24">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
+                    </div>
+                    
+                    {(() => {
+                      const myEmail = currentUser?.email || guestEmail;
+                      const myReservations = myEmail ? reservations.filter(r => r.email === myEmail).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
+                      
+                      if (!myEmail) {
                         return (
-                          <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
-                            <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
-                            <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
-                            <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
+                          <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2">
+                            <p className="text-xs text-neutral-500 mb-3">Log in to view your booking history.</p>
+                            <button onClick={() => setShowLoginModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30">Login</button>
                           </div>
                         );
                       }
-                      
-                      const timerInfo = getTableTimerInfo(t.id);
-                      const nextRes = getNextResForTable(t.id);
-                      
-                      // UPDATED COLOR MAPPING LOGIC
-                      const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' : t.status === 'occupied' ? 'bg-amber-500' : t.status === 'reserved' ? 'bg-blue-500' : 'bg-emerald-500';
-                      
+                      if (myReservations.length === 0) {
+                        return <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>;
+                      }
                       return (
-                        <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
-                          <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
-                          <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            {timerInfo ? (
-                              <>
-                                <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : 'text-amber-500'}`}>
-                                  {timerInfo.isOvertime ? 'OVERTIME' : 'IN USE'}
-                                </span>
-                                <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : 'text-amber-500'}`}>
-                                  {timerInfo.formatted}
-                                </span>
-                              </>
-                            ) : (
-                              <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
-                            )}
-                          </div>
-                          {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {formatTime(nextRes.timeSlot)}</span>}
+                        <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
+                          {myReservations.map(r => (
+                            <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
+                              <div className="flex justify-between items-start mb-1.5">
+                                <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                  r.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                  r.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                  r.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                  'bg-rose-500/10 text-rose-400'
+                                }`}>{r.status}</span>
+                              </div>
+                              <div className="flex justify-between text-neutral-500 text-[11px]">
+                                <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
+                                <span>₱{r.totalAmount}</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
                 </div>
 
-                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
-                    <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
-                  </div>
-                  {queue.filter(q => q.status === 'waiting').length === 0 ? (
-                    <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
-                  ) : (
-                    <div className="space-y-2">
-                      {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
-                        <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
-                          <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
-                          <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
-                          <span className="text-xs text-neutral-500">{q.partySize} pax</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                <div>
-                  <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 1 — Pick a Date</p>
-                  <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} reservedDates={reservedDates} closedDates={closedDates} />
-                  {selectedDate && !selectedClosedDate && (
-                    <>
-                      <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
-                        <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
-                        <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
-                      </div>
-                      
-                      {/* Slot Availability Card */}
-                      <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
-                            <Clock size={14} className="text-emerald-500" /> Slot Availability
-                          </h3>
-                          <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Max 5 / hour</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-                          {TIME_SLOTS.map(t => {
-                            const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                            // Adds a 1-hour buffer. If it's 1:50 PM (Hour 13), 2 PM (Hour 14) is blocked.
-                            const bufferHours = 1; 
-                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
-                            
-                            if (isHappyHour || isPastTime) return null; // Hide happy hour and passed times from the list
-                            
-                            const count = slotCounts[t] || 0;
-                            const isFull = count >= 5;
-                            
-                            return (
-                              <div key={t} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
-                                isFull ? 'bg-rose-950/20 border-rose-800/30' : 
-                                count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
-                                'bg-neutral-950 border-neutral-800/50'
-                              }`}>
-                                <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{formatTime(t)}</span>
-                                <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
-                                  {count}/5
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-                <div>
-                  {!selectedDate ? (
-                    <div className="bg-neutral-900 border border-dashed border-neutral-700 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
-                      <Calendar size={32} className="text-neutral-600" />
-                      <p className="text-neutral-500 text-sm">Please select a date from the calendar to continue your reservation.</p>
-                    </div>
-                  ) : selectedClosedDate ? (
-                    <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-8 text-center flex flex-col items-center gap-4">
-                      <div className="w-16 h-16 bg-rose-900/30 rounded-full flex items-center justify-center">
-                        <AlertTriangle size={32} className="text-rose-500" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold text-rose-400 mb-2">Store Closed</h3>
-                        <p className="text-sm text-neutral-300 leading-relaxed mb-4">
-                          We are currently closed on {selectedDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.
-                        </p>
-                        <div className="bg-rose-950/40 border border-rose-800/50 rounded-xl p-4 text-left">
-                          <p className="text-[10px] text-rose-500 uppercase tracking-widest font-semibold mb-1">Reason for closure</p>
-                          <p className="text-sm text-neutral-200">{selectedClosedDate.reason}</p>
-                        </div>
-                      </div>
-                      <p className="text-xs text-neutral-500 mt-2">Please select a different date from the calendar to make your reservation.</p>
-                    </div>
-                  ) : (
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4">
-                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 2 — Your Details</p>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
-                        <input type="text" value={resForm.name} onChange={e => setResForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
-                        <input type="email" value={resForm.email} onChange={e => setResForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
-                        <input 
-                          type="tel" 
-                          value={resForm.phone} 
-                          onChange={e => {
-                            const val = e.target.value.replace(/\D/g, '');
-                            if (val.length <= 11) setResForm(f => ({ ...f, phone: val }));
-                            setResError(''); // Clear error while typing
-                          }} 
-                          placeholder="09XXXXXXXXX"
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600" 
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">No. of Persons</label>
-                          <input type="number" min={1} max={20} value={resForm.pax} onChange={e => setResForm(f => ({ ...f, pax: parseInt(e.target.value) || 1 }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-neutral-400 mb-1.5">Duration (hours)</label>
-                          <select value={resForm.duration} onChange={e => setResForm(f => ({ ...f, duration: parseInt(e.target.value) }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100">
-                            {[1, 2, 3, 4, 5, 6].map(h => <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {TIME_SLOTS.map(t => {
-                            const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                            const count = slotCounts[t] || 0;
-                            const isFull = count >= 5;
-                            // Matches the buffer above to block immediate same-day bookings
-                            const bufferHours = 1;
-                            const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
-                            const disabled = isHappyHour || isFull || isPastTime;
-
-                            return (
-                              <button 
-                                key={t} 
-                                disabled={disabled} 
-                                onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} 
-                                className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
-                                  isHappyHour 
-                                    ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
-                                    : isPastTime
-                                    ? 'bg-neutral-900/30 text-neutral-600/50 border border-neutral-800/30 cursor-not-allowed'
-                                    : isFull
-                                    ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
-                                    : resForm.timeSlot === t 
-                                    ? 'bg-emerald-600 text-white' 
-                                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
-                                }`}
-                              >
-                                {formatTime(t)}
-                                {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
-                                {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Unavailable</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Promo Code <span className="text-neutral-600">(optional)</span></label>
-                        {appliedPromo ? (
-                          <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/30 rounded-lg px-3 py-2">
-                            <span className="text-xs text-emerald-300 font-semibold flex-1">{appliedPromo.code} — {appliedPromo.discountPercent}% off applied!</span>
-                            <button onClick={handleRemovePromo} className="text-neutral-500 hover:text-rose-400 transition-colors"><X size={13} /></button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <input type="text" value={promoCodeInput} onChange={e => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoError(''); }} className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100" />
-                            <button onClick={handleApplyPromo} className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-xs font-semibold">Apply</button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Summary Box */}
-                      <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50 mt-4">
-                        <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
-                        <div className="space-y-1.5 text-xs">
-                          <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
-                          <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
-                        </div>
-                      </div>
-
-                      {/* Display the new Validation Error */}
-                      {resError && (
-                        <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mt-3">
-                          {resError}
-                        </div>
-                      )}
-
-                      <button onClick={handleReservationSubmit} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
-                        Proceed to Payment
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
             </motion.div>
           )}
@@ -1915,7 +1925,14 @@ export function HomePage() {
                     <input
                       type="text"
                       value={referenceNumber}
-                      onChange={e => { setReferenceNumber(e.target.value); setUploadError(''); }}
+                      onChange={e => { 
+                        const val = e.target.value;
+                        // Only update state if the length (excluding spaces) is 13 or less
+                        if (val.replace(/\s/g, '').length <= 13) {
+                          setReferenceNumber(val); 
+                          setUploadError(''); 
+                        }
+                      }}
                       placeholder="e.g. 10023948293"
                       className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
                     />
