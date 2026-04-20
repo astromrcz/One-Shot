@@ -13,6 +13,8 @@ import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { TattooSection } from '../components/TattooSection';
 
+const [guestEmail, setGuestEmail] = useState(() => localStorage.getItem('oneshot_guest_email') || '');
+
 import { CustomerSettingsModal } from '../components/CustomerSettingsModal';
 
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
@@ -632,6 +634,11 @@ export function HomePage() {
         receiptUrl: receiptUrl,
       });
 
+      if (!currentUser && resForm.email) {
+        localStorage.setItem('oneshot_guest_email', resForm.email);
+        setGuestEmail(resForm.email);
+      }
+
       setConfirmingPayment(false); 
       setReservationStep(3);
     } catch (err: any) {
@@ -856,7 +863,55 @@ export function HomePage() {
               </div>
 
               {/* Live Status Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-10">
+                
+                {/* 🚨 NEW: My Reservations Card 🚨 */}
+                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
+                  </div>
+                  
+                  {(() => {
+                    const myEmail = currentUser?.email || guestEmail;
+                    const myReservations = myEmail ? reservations.filter(r => r.email === myEmail).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
+                    
+                    if (!myEmail) {
+                      return (
+                        <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-4 text-center">
+                          <p className="text-xs text-neutral-500 mb-2">Log in to view your booking history.</p>
+                          <button onClick={() => setShowLoginModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-3 py-1.5 rounded-lg font-semibold hover:bg-emerald-600/30">Login</button>
+                        </div>
+                      );
+                    }
+                    if (myReservations.length === 0) {
+                      return <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24"><p className="text-xs text-neutral-500">No recent reservations.</p></div>;
+                    }
+                    return (
+                      <div className="space-y-2 overflow-y-auto max-h-56 pr-1">
+                        {myReservations.map(r => (
+                          <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
+                            <div className="flex justify-between items-start mb-1.5">
+                              <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                r.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                r.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                r.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                'bg-rose-500/10 text-rose-400'
+                              }`}>{r.status}</span>
+                            </div>
+                            <div className="flex justify-between text-neutral-500 text-[11px]">
+                              <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
+                              <span>₱{r.totalAmount}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* 🚨 END NEW CARD 🚨 */}
+
+                {/* Existing Table Status Card */}
                 <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
