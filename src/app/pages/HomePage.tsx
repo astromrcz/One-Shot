@@ -238,6 +238,24 @@ export function HomePage() {
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [resError, setResError] = useState(''); // NEW ERROR STATE
 
+  const [cancelModal, setCancelModal] = useState({ isOpen: false, id: '', reason: '', loading: false });
+
+  const handleCustomerCancel = async () => {
+    if (!cancelModal.reason.trim()) {
+      toast.error("Please provide a brief reason for cancellation.");
+      return;
+    }
+    setCancelModal(prev => ({ ...prev, loading: true }));
+    try {
+      await cancelReservation(cancelModal.id, cancelModal.reason);
+      toast.success("Reservation cancelled.");
+      setCancelModal({ isOpen: false, id: '', reason: '', loading: false });
+    } catch (error) {
+      toast.error("Failed to cancel reservation.");
+      setCancelModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const [referenceNumber, setReferenceNumber] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState('');
@@ -1109,6 +1127,14 @@ export function HomePage() {
                               <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
                               <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
                             </div>
+                            
+                            {/* 🚨 NEW: Non-Refundable Warning 🚨 */}
+                            <div className="mt-3 pt-3 border-t border-neutral-700/50 flex gap-2 items-start">
+                              <AlertTriangle size={12} className="text-rose-400 mt-0.5 flex-none" />
+                              <p className="text-[10px] text-neutral-400 leading-tight">
+                                <strong className="text-rose-400">Strict Policy:</strong> All down payments are final and <strong className="text-white">non-refundable</strong> in the event of cancellation or no-show. Rescheduling requires management approval.
+                              </p>
+                            </div>
                           </div>
 
                           {resError && (
@@ -1166,6 +1192,16 @@ export function HomePage() {
                                 <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
                                 <span>₱{r.totalAmount}</span>
                               </div>
+                              
+                              {/* 🚨 NEW: Cancel Button (Only shows for active bookings) 🚨 */}
+                              {(r.status === 'pending' || r.status === 'confirmed') && (
+                                <button
+                                  onClick={() => setCancelModal({ isOpen: true, id: r.id, reason: '', loading: false })}
+                                  className="w-full mt-2.5 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider"
+                                >
+                                  Cancel Booking
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1979,6 +2015,59 @@ export function HomePage() {
               >
                 Back to Home
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+
+      </AnimatePresence>
+      {/* Customer Cancellation Modal */}
+      <AnimatePresence>
+        {cancelModal.isOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <AlertTriangle size={18} className="text-rose-500" /> Cancel Reservation
+                </h3>
+                <button onClick={() => setCancelModal({ isOpen: false, id: '', reason: '', loading: false })} className="text-neutral-600 hover:text-neutral-300">
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <div className="bg-rose-950/30 border border-rose-900/50 rounded-xl p-3 mb-4">
+                <p className="text-xs text-rose-400 leading-relaxed">
+                  Are you sure you want to cancel? As per our policy, your down payment is <strong className="text-white">non-refundable</strong>. This action cannot be undone.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Reason for Cancellation <span className="text-rose-500">*</span></label>
+                <textarea
+                  value={cancelModal.reason}
+                  onChange={e => setCancelModal(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Please tell us why you are cancelling..."
+                  rows={3}
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-rose-500 resize-none transition-colors"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => setCancelModal({ isOpen: false, id: '', reason: '', loading: false })}
+                  disabled={cancelModal.loading}
+                  className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  Keep Booking
+                </button>
+                <button
+                  onClick={handleCustomerCancel}
+                  disabled={cancelModal.loading || !cancelModal.reason.trim()}
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:bg-rose-900 disabled:text-rose-400 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors flex justify-center items-center gap-2"
+                >
+                  {cancelModal.loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+                  {cancelModal.loading ? 'Cancelling...' : 'Yes, Cancel'}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
