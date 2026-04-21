@@ -4,9 +4,19 @@ import { TableCard } from '../components/TableCard';
 import {
   Search, Play, Zap, X, UserPlus, Clock,
   Calendar, Users, CheckCircle, ChevronRight,
-  CreditCard, Banknote, AlertTriangle, CircleCheck
+  CreditCard, Banknote, AlertTriangle, CircleCheck,
+  ShoppingCart
 } from 'lucide-react';
 import { isToday, differenceInSeconds, addMinutes } from 'date-fns';
+
+// 🚨 POS HARDCODED MENU (Update these with your real items!)
+const POS_MENU = [
+  { id: 'm1', name: 'San Miguel Pale', price: 80, category: 'Drinks' },
+  { id: 'm2', name: 'Red Horse', price: 85, category: 'Drinks' },
+  { id: 'm3', name: 'Nachos Platter', price: 150, category: 'Snacks' },
+  { id: 'm4', name: 'French Fries', price: 120, category: 'Snacks' },
+  { id: 'm5', name: 'Premium Cue Rental', price: 50, category: 'Misc' },
+];
 
 type FilterStatus = 'all' | 'available' | 'occupied' | 'reserved';
 type PaymentMethod = 'gcash' | 'cash';
@@ -20,12 +30,46 @@ type CustomerSource =
 
 export function Tables() {
   const { 
-    tables, queue, reservations, 
+    tables, queue, reservations, staffUsers,
     assignTable, extendSession, freeTable,
-    removeFromQueue, updateReservationStatus // <-- Added these two
+    removeFromQueue, updateReservationStatus,
+    addOrderToTable, removeOrderFromTable
   } = useAppContext();
+  
   const [filter, setFilter]       = useState<FilterStatus>('all');
   const [search, setSearch]       = useState('');
+  
+ // 🚨 NEW POS STATES
+  const [selectedPosTableId, setSelectedPosTableId] = useState<string | null>(null);
+  const [voidOrderId, setVoidOrderId] = useState<string | null>(null);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [voidError, setVoidError] = useState('');
+
+  const handleConfirmVoid = async () => {
+    const isAdminValid = staffUsers.some(u => (u.isAdmin || u.role?.toLowerCase() === 'admin') && u.password === adminPassword);
+    if (!isAdminValid) {
+      setVoidError('Invalid admin password.');
+      return;
+    }
+    if (selectedPosTableId && voidOrderId) {
+      await removeOrderFromTable(selectedPosTableId, voidOrderId);
+    }
+    setVoidOrderId(null);
+    setAdminPassword('');
+    setVoidError('');
+  };
+
+  const handleAddOrder = async (menuItem: typeof POS_MENU[0]) => {
+    if (!selectedPosTableId) return;
+    const order = {
+      id: Date.now().toString(),
+      name: menuItem.name,
+      price: menuItem.price,
+      quantity: 1,
+      timestamp: new Date()
+    };
+    await addOrderToTable(selectedPosTableId, order);
+  };
   const [assigningTableId, setAssigningTableId] = useState<string | null>(null);
   const [extendingTableId, setExtendingTableId] = useState<string | null>(null);
   const [endingTableId,    setEndingTableId]    = useState<string | null>(null);
@@ -135,7 +179,11 @@ export function Tables() {
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assigningTableId || !customerName) return;
-    const autoPayment = (durationMinutes / 60) * HOURLY_RATE;
+    
+    // Walk-ins pay 0 upfront. Reservations pay what was entered.
+    const finalAmountPaid = selectedCustomer?.kind === 'reservation' 
+      ? (parseFloat(amountPaid) || 0) 
+      : 0;
     
     // 1. Assign the table
     await assignTable(assigningTableId, {
@@ -144,7 +192,7 @@ export function Tables() {
       startTime: new Date(),
       isPaid: true,
       hourlyRate: HOURLY_RATE,
-      amountPaid: parseFloat(amountPaid) || autoPayment,
+      amountPaid: finalAmountPaid,
     });
 
     // 2. Auto-remove from Walk-in Queue OR check-in the Reservation
@@ -278,18 +326,156 @@ export function Tables() {
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-        {filtered.map(table => (
-          <TableCard
-            key={table.id}
-            table={table}
-            onAssign={() => openAssign(table.id)}
-            onExtend={() => openExtend(table.id)}
-            onEnd={() => openEnd(table.id)}
-            nextReservation={table.status === 'reserved' ? getNextReservation(table.id) : null}
-          />
-        ))}
+      {/* 🚨 NEW: Split Layout for Grid and POS 🚨 */}
+      <div className="flex flex-col xl:flex-row gap-6 items-start">
+        
+        {/* LEFT SIDE: TABLE GRID */}
+        <div className="flex-1 min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+            {filtered.map(table => (
+              <div 
+                key={table.id} 
+                onClick={() => setSelectedPosTableId(table.id)} 
+                className={`cursor-pointer rounded-2xl transition-all ${
+                  selectedPosTableId === table.id 
+                    ? 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-900/20 scale-[1.02]' 
+                    : 'ring-1 ring-transparent hover:ring-neutral-700'
+                }`}
+              >
+                <TableCard
+                  table={table}
+                  onAssign={() => openAssign(table.id)}
+                  onExtend={() => openExtend(table.id)}
+                  onEnd={() => openEnd(table.id)}
+                  nextReservation={table.status === 'reserved' ? getNextReservation(table.id) : null}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* RIGHT SIDE: COMPACT QUICK SALE POS SIDEBAR */}
+        <div className="w-full xl:w-[340px] flex-none bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sticky top-6 flex flex-col max-h-[calc(100vh-48px)]">
+          {(() => {
+            if (!selectedPosTableId) {
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800">
+                    <h2 className="text-sm font-bold text-white flex items-center gap-2"><ShoppingCart size={16} className="text-emerald-500" /> Quick Sale POS</h2>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center text-center text-xs text-neutral-500 border border-dashed border-neutral-800 rounded-xl p-6">Click on any active table card to open the POS system and add orders.</div>
+                </>
+              );
+            }
+
+            const activeTable = tables.find(t => t.id === selectedPosTableId);
+            const session = activeTable?.session;
+
+            if (!session) {
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800">
+                    <h2 className="text-sm font-bold text-white flex items-center gap-2"><ShoppingCart size={16} className="text-emerald-500" /> POS: {activeTable?.name || 'Table'}</h2>
+                    <button onClick={() => setSelectedPosTableId(null)} className="text-neutral-500 hover:text-rose-400"><X size={16}/></button>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center text-center text-xs text-amber-500 border border-dashed border-amber-900/30 bg-amber-950/10 rounded-xl p-6">Table {activeTable?.name} is currently inactive. Start a session to add items to their bill.</div>
+                </>
+              );
+            }
+
+            const tableCost = (session.durationMinutes / 60) * session.hourlyRate;
+            const ordersTotal = session.orders?.reduce((sum, o) => sum + (o.price * o.quantity), 0) || 0;
+            const grandTotal = tableCost + ordersTotal;
+
+            return (
+              <div className="flex flex-col flex-1 min-h-0">
+                {/* Compact Header */}
+                <div className="flex items-center justify-between mb-3 pb-3 border-b border-neutral-800 flex-none">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <ShoppingCart size={16} className="text-emerald-500" /> {activeTable.name}
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-emerald-400 font-semibold max-w-[100px] truncate" title={session.customerName}>{session.customerName}</span>
+                    <button onClick={() => setSelectedPosTableId(null)} className="text-neutral-500 hover:text-rose-400"><X size={16}/></button>
+                  </div>
+                </div>
+
+                {/* Quick Add Menu (Tighter Margins) */}
+                <div className="flex-none mb-3">
+                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-2">Quick Add Menu</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {POS_MENU.map(item => (
+                      <button key={item.id} onClick={() => handleAddOrder(item)} className="bg-neutral-950 border border-neutral-800 hover:border-emerald-500/50 rounded-lg p-2 text-left transition-colors flex flex-col group relative overflow-hidden">
+                        <span className="text-[11px] font-semibold text-neutral-300 truncate w-full group-hover:text-emerald-300">{item.name}</span>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[10px] text-neutral-500">₱{item.price.toFixed(2)}</span>
+                          <span className="text-[9px] uppercase tracking-wider font-bold text-emerald-600 group-hover:text-emerald-400 transition-colors">Add +</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Current Bill List (Compact Font & Padding) */}
+                <p className="flex-none text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-1.5">Current Bill</p>
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 mb-3 min-h-0 custom-scrollbar">
+                  {/* Table Time Item */}
+                  <div className="flex justify-between items-start bg-neutral-950 px-3 py-2 rounded-lg border border-neutral-800">
+                    <div>
+                      <p className="text-[11px] text-neutral-300 font-semibold">Table Time</p>
+                      <p className="text-[9px] text-neutral-500">@ ₱{session.hourlyRate.toFixed(2)}/hr</p>
+                    </div>
+                    <span className="text-[11px] font-bold text-neutral-200">₱{tableCost.toFixed(2)}</span>
+                  </div>
+                  
+                  {/* F&B Orders */}
+                  {session.orders?.map(o => (
+                    <div key={o.id} className="flex justify-between items-center bg-neutral-950 px-3 py-1.5 rounded-lg border border-neutral-800 group">
+                      <p className="text-[11px] text-neutral-300 font-semibold"><span className="text-neutral-500 mr-1.5">{o.quantity}x</span>{o.name}</p>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[11px] font-bold text-neutral-200">₱{(o.price * o.quantity).toFixed(2)}</span>
+                        <button type="button" onClick={() => setVoidOrderId(o.id)} className="px-1.5 py-0.5 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 border border-rose-900/50 rounded text-[9px] font-bold uppercase tracking-wider transition-colors">
+                          Void
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 🚨 COMPACT LOCKED FOOTER 🚨 */}
+                <div className="flex-none border-t border-neutral-800 pt-3 bg-neutral-900 shadow-[0_-10px_20px_-5px_rgba(23,23,23,0.8)] z-10">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] text-neutral-400">
+                      <span>Subtotal</span><span>₱{grandTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-amber-500">
+                      <span>Less: Advance</span><span>- ₱{session.amountPaid.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-black text-emerald-400 mt-2 pt-2 border-t border-neutral-800/50">
+                      <span>AMOUNT DUE</span><span>₱{Math.max(0, grandTotal - session.amountPaid).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Session Control Actions */}
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800 border-dashed">
+                    <button 
+                      onClick={() => openExtend(activeTable.id)} 
+                      className="flex-1 bg-amber-950/30 hover:bg-amber-900/40 text-amber-500 border border-amber-900/50 hover:border-amber-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5"
+                    >
+                      <Clock size={13} /> Extend
+                    </button>
+                    <button 
+                      onClick={() => openEnd(activeTable.id)} 
+                      className="flex-1 bg-rose-950/30 hover:bg-rose-900/40 text-rose-500 border border-rose-900/50 hover:border-rose-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5"
+                    >
+                      <CheckCircle size={13} /> End Session
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
 
       {/* ════════════════════════════════════════════════════════
@@ -427,18 +613,28 @@ export function Tables() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Amount Paid (PHP)</label>
-                  <input
-                    type="number"
-                    value={amountPaid}
-                    onChange={e => setAmountPaid(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                    placeholder={`₱${((durationMinutes / 60) * HOURLY_RATE).toFixed(2)}`}
-                    step="0.01"
-                  />
-                  <p className="text-[10px] text-neutral-600">Suggested: {formatPHP((durationMinutes / 60) * HOURLY_RATE)} for {durationMinutes < 60 ? `${durationMinutes}min` : `${durationMinutes / 60}hr`}</p>
-                </div>
+                {selectedCustomer?.kind === 'reservation' ? (
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Down Payment Settled (PHP)</label>
+                    <input
+                      type="number"
+                      value={amountPaid}
+                      onChange={e => setAmountPaid(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      placeholder={`₱${((durationMinutes / 60) * HOURLY_RATE * 0.25).toFixed(2)}`}
+                      step="0.01"
+                    />
+                    <p className="text-[10px] text-neutral-600">Enter the advance payment collected for this reservation.</p>
+                  </div>
+                ) : (
+                  <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-3 flex items-start gap-2">
+                    <Clock size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-400">Pending Payment</p>
+                      <p className="text-[10px] text-amber-500/70">Walk-in customers will settle their total bill at the end of the session.</p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={() => setAssigningTableId(null)}
@@ -649,7 +845,7 @@ export function Tables() {
                 </div>
               </div>
 
-              <div className="flex gap-3">
+             <div className="flex gap-3">
                 <button type="button" onClick={() => setExtendingTableId(null)}
                   className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">
                   Cancel
@@ -660,6 +856,36 @@ export function Tables() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════
+          ADMIN VOID MODAL
+      ════════════════════════════════════════════════════════ */}
+      {voidOrderId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 w-full max-w-xs shadow-2xl">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={16} className="text-rose-500" />
+              <h3 className="text-sm font-bold text-white">Admin Override Required</h3>
+            </div>
+            <p className="text-xs text-neutral-500 mb-4">Please enter an admin password to void this order.</p>
+            
+            {voidError && <p className="text-xs text-rose-400 mb-3 bg-rose-950/40 border border-rose-800/50 p-2 rounded-lg">{voidError}</p>}
+            
+            <input 
+              type="password" 
+              value={adminPassword} 
+              onChange={e => { setAdminPassword(e.target.value); setVoidError(''); }} 
+              placeholder="Enter Admin Password" 
+              className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-white mb-4 focus:outline-none focus:border-rose-500" 
+            />
+            
+            <div className="flex gap-2">
+              <button onClick={() => { setVoidOrderId(null); setAdminPassword(''); setVoidError(''); }} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 py-2.5 rounded-lg text-xs font-semibold transition-colors">Cancel</button>
+              <button onClick={handleConfirmVoid} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-lg text-xs font-semibold transition-colors">Void Item</button>
+            </div>
           </div>
         </div>
       )}

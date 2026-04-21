@@ -204,7 +204,10 @@ function MiniCalendar({
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin } = useAppContext();
+  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings } = useAppContext();
+  
+  // Safe fallbacks in case settings haven't loaded
+  const displayLogo = siteSettings?.logoUrl || logoImg;
   const [guestEmail, setGuestEmail] = useState(() => localStorage.getItem('oneshot_guest_email') || '');
   const [announcementIdx, setAnnouncementIdx] = useState(0);
   const [announcementDir, setAnnouncementDir] = useState<1 | -1>(1);
@@ -238,7 +241,7 @@ export function HomePage() {
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [resError, setResError] = useState(''); // NEW ERROR STATE
 
-  const [cancelModal, setCancelModal] = useState({ isOpen: false, id: '', reason: '', loading: false });
+  const [cancelModal, setCancelModal] = useState({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false });
 
   const handleCustomerCancel = async () => {
     if (!cancelModal.reason.trim()) {
@@ -247,11 +250,12 @@ export function HomePage() {
     }
     setCancelModal(prev => ({ ...prev, loading: true }));
     try {
-      await cancelReservation(cancelModal.id, cancelModal.reason);
+      const finalReason = `[${cancelModal.category}] ${cancelModal.reason}`;
+      await cancelReservation(cancelModal.id, finalReason);
       toast.success("Reservation cancelled.");
-      setCancelModal({ isOpen: false, id: '', reason: '', loading: false });
-    } catch (error) {
-      toast.error("Failed to cancel reservation.");
+      setCancelModal({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to cancel reservation.");
       setCancelModal(prev => ({ ...prev, loading: false }));
     }
   };
@@ -709,7 +713,7 @@ export function HomePage() {
       <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800/60 flex items-center overflow-hidden">
         <div className="h-full flex items-center px-5 pr-12 bg-emerald-700 flex-shrink-0 relative z-10" style={{ clipPath: 'polygon(0 0, 100% 0, 82% 100%, 0 100%)', minWidth: 220 }}>
           <div className="flex items-center gap-2.5">
-            <img src={logoImg} alt="One Shot Bar & Billiards" className="h-9 w-9 object-contain rounded-lg flex-shrink-0" />
+            <img src={displayLogo} alt="One Shot Bar & Billiards" className="h-9 w-9 object-contain rounded-lg flex-shrink-0" />
             <div>
               <p className="text-white font-black text-sm tracking-tight leading-tight">ONE SHOT</p>
               <p className="text-emerald-200 text-[9px] uppercase tracking-[0.2em] font-semibold">Bar & Billiards</p>
@@ -788,11 +792,11 @@ export function HomePage() {
                 <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 px-6 text-center z-10">
                   <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.5 }} className="flex flex-col items-center">
                     <p className="text-emerald-400 text-xs uppercase tracking-[0.3em] font-semibold mb-3">Welcome to</p>
-                    <h1 className="text-5xl md:text-6xl font-black text-white mb-2 tracking-tight">One Shot</h1>
-                    <p className="text-emerald-300 text-xl font-light mb-5">Bar & Billiards</p>
+                    <h1 className="text-5xl md:text-6xl font-black text-white mb-2 tracking-tight">{siteSettings?.heroTitle || 'One Shot'}</h1>
+                    <p className="text-emerald-300 text-xl font-light mb-5">{siteSettings?.heroSubtitle || 'Bar & Billiards'}</p>
 
                     <p className="text-neutral-400 text-sm max-w-md mx-auto mb-7 leading-relaxed">
-                      Your premier billiard destination at Autobase OAX, Cainta, Rizal. 10 world-class tables, refreshing drinks, and an unbeatable atmosphere.
+                      {siteSettings?.heroDescription || 'Your premier billiard destination at Autobase OAX, Cainta, Rizal. 10 world class tables, refreshing drinks, and an unbeatable atmosphere.'}
                     </p>
 
                     <div className="flex flex-wrap justify-center gap-3 mb-6">
@@ -1167,8 +1171,15 @@ export function HomePage() {
                       if (!myEmail) {
                         return (
                           <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2">
-                            <p className="text-xs text-neutral-500 mb-3">Log in to view your booking history.</p>
-                            <button onClick={() => setShowLoginModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30">Login</button>
+                            <p className="text-xs text-neutral-500 mb-3">Log in or register to view your cross-device booking history.</p>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
+                                Login
+                              </button>
+                              <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
+                                Register
+                              </button>
+                            </div>
                           </div>
                         );
                       }
@@ -1196,7 +1207,7 @@ export function HomePage() {
                               {/* 🚨 NEW: Cancel Button (Only shows for active bookings) 🚨 */}
                               {(r.status === 'pending' || r.status === 'confirmed') && (
                                 <button
-                                  onClick={() => setCancelModal({ isOpen: true, id: r.id, reason: '', loading: false })}
+                                  onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
                                   className="w-full mt-2.5 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider"
                                 >
                                   Cancel Booking
@@ -1360,15 +1371,9 @@ export function HomePage() {
                 <div>
                   <p className="text-emerald-400 text-xs uppercase tracking-widest font-semibold mb-3">Our Story</p>
                   <h3 className="text-2xl font-bold text-white mb-4">A Passion for the Game</h3>
-                  <p className="text-neutral-400 text-sm leading-relaxed mb-4">
-                    One Shot Bar & Billiards was founded with a simple mission: to create the ultimate billiard experience in Cainta, Rizal. What started as a small hobby shop has grown into the premier billiards destination in Eastern Rizal.
-                  </p>
-                  <p className="text-neutral-400 text-sm leading-relaxed mb-4">
-                    Our 10 tournament-grade tables are maintained with precision, and our staff are passionate players themselves who understand what makes a great game environment.
-                  </p>
-                  <p className="text-neutral-400 text-sm leading-relaxed">
-                    Whether you're a seasoned champion or picking up a cue for the first time, One Shot welcomes you. Come in, relax, and take your shot!
-                  </p>
+                  {(siteSettings?.aboutStory || "One Shot Bar & Billiards was founded with a simple mission: to create the ultimate billiard experience in Cainta, Rizal. What started as a small hobby shop has grown into the premier billiards destination in Eastern Rizal.\n\nOur 10 tournament grade tables are maintained with precision, and our staff are passionate players themselves who understand what makes a great game environment.\n\nWhether you are a seasoned champion or picking up a cue for the first time, One Shot welcomes you. Come in, relax, and take your shot!").split('\n').map((paragraph, idx) => (
+                    paragraph.trim() && <p key={idx} className="text-neutral-400 text-sm leading-relaxed mb-4">{paragraph}</p>
+                  ))}
                 </div>
                 <div className="rounded-2xl overflow-hidden h-72">
                   <ImageWithFallback
@@ -1439,10 +1444,10 @@ export function HomePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
                     {[
-                      { icon: MapPin, label: 'Address', value: 'Autobase OAX\nSan Juan, Cainta, Rizal 1900', color: 'emerald' },
-                      { icon: Phone, label: 'Phone / Viber', value: '0917-123-4567\n0998-765-4321', color: 'sky' },
-                      { icon: Mail, label: 'Email', value: 'oneshot.billiards@gmail.com', color: 'violet' },
-                      { icon: Clock, label: 'Operating Hours', value: 'Mon – Sat: 12:00 PM – 3:00 AM\nSunday: 5:00 PM – 3:00 AM', color: 'amber' },
+                      { icon: MapPin, label: 'Address', value: siteSettings?.contactAddress || 'Autobase OAX\nSan Juan, Cainta, Rizal 1900', color: 'emerald' },
+                      { icon: Phone, label: 'Phone / Viber', value: siteSettings?.contactPhone || '0917-123-4567\n0998-765-4321', color: 'sky' },
+                      { icon: Mail, label: 'Email', value: siteSettings?.contactEmail || 'oneshot.billiards@gmail.com', color: 'violet' },
+                      { icon: Clock, label: 'Operating Hours', value: siteSettings?.contactHours || 'Mon – Sat: 12:00 PM – 3:00 AM\nSunday: 5:00 PM – 3:00 AM', color: 'amber' },
                     ].map(({ icon: Icon, label, value, color }) => (
                       <div key={label} className={`bg-neutral-900 border border-neutral-800 hover:border-${color}-600/30 rounded-xl p-5 transition-all flex gap-4`}>
                         <div className={`w-10 h-10 rounded-xl bg-${color}-600/10 border border-${color}-600/20 flex items-center justify-center flex-shrink-0`}>
@@ -2040,20 +2045,35 @@ export function HomePage() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs text-neutral-400 mb-1.5">Reason for Cancellation <span className="text-rose-500">*</span></label>
-                <textarea
-                  value={cancelModal.reason}
-                  onChange={e => setCancelModal(prev => ({ ...prev, reason: e.target.value }))}
-                  placeholder="Please tell us why you are cancelling..."
-                  rows={3}
-                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-rose-500 resize-none transition-colors"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">Cancellation Category <span className="text-rose-500">*</span></label>
+                  <select
+                    value={cancelModal.category}
+                    onChange={e => setCancelModal(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-rose-500 transition-colors appearance-none"
+                  >
+                    <option value="Standard Cancellation">Standard Cancellation</option>
+                    <option value="Medical Emergency">Medical Emergency</option>
+                    <option value="Schedule Conflict">Schedule Conflict</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">Reason for Cancellation <span className="text-rose-500">*</span></label>
+                  <textarea
+                    value={cancelModal.reason}
+                    onChange={e => setCancelModal(prev => ({ ...prev, reason: e.target.value }))}
+                    placeholder="Please tell us why you are cancelling..."
+                    rows={3}
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-rose-500 resize-none transition-colors"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 mt-5">
                 <button
-                  onClick={() => setCancelModal({ isOpen: false, id: '', reason: '', loading: false })}
+                  onClick={() => setCancelModal({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false })}
                   disabled={cancelModal.loading}
                   className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
                 >

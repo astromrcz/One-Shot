@@ -3,6 +3,14 @@ import { supabase } from '../../utils/supabase/client';
 
 export type TableStatus = 'available' | 'occupied' | 'reserved';
 
+export type OrderItem = {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  timestamp: Date;
+};
+
 export type Session = {
   customerName: string;
   startTime: Date;
@@ -10,6 +18,7 @@ export type Session = {
   isPaid: boolean;
   hourlyRate: number;
   amountPaid: number;
+  orders?: OrderItem[];
 };
 
 export type Table = {
@@ -213,6 +222,18 @@ export type ClosedDate = {
   closeTime?: string;
 };
 
+export type SiteSettings = {
+  logoUrl: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroDescription: string;
+  aboutStory: string;
+  contactAddress: string;
+  contactPhone: string;
+  contactEmail: string;
+  contactHours: string;
+};
+
 export const HOURLY_RATE = 250;
 export const DOWN_PAYMENT_RATE = 0.25;
 
@@ -235,6 +256,7 @@ type AppContextType = {
   reservationTerms: ReservationTerms;
   announcements: Announcement[];
   closedDates: ClosedDate[];
+  siteSettings: SiteSettings | null;
   loading: boolean;
   staffLoggedIn: boolean;
   adminLoggedIn: boolean;
@@ -256,6 +278,8 @@ type AppContextType = {
   updateTable: (id: string, name: string) => Promise<void>;
   toggleTableActive: (id: string) => Promise<void>;
   deleteTable: (id: string) => Promise<void>;
+  addOrderToTable: (tableId: string, order: OrderItem) => Promise<void>;
+  removeOrderFromTable: (tableId: string, orderId: string) => Promise<void>;
   addToQueue: (item: Omit<QueueItem, 'id' | 'arrivalTime' | 'status'>) => Promise<void>;
   removeFromQueue: (id: string) => Promise<void>;
   callQueueItem: (id: string) => Promise<void>;
@@ -292,6 +316,7 @@ type AppContextType = {
   addClosedDate: (item: Omit<ClosedDate, 'id'>) => Promise<void>;
   removeClosedDate: (id: string) => Promise<void>;
   updateClosedDate: (id: string, updates: Partial<ClosedDate>) => Promise<void>;
+  updateSiteSettings: (settings: Partial<SiteSettings>) => Promise<void>;
   refreshData: (silent?: boolean) => Promise<void>;
 };
 
@@ -327,6 +352,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [closedDates, setClosedDates] = useState<ClosedDate[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [staffLoggedIn, setStaffLoggedIn] = useState(false);
@@ -347,6 +373,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isPaid: row.session_is_paid,
       hourlyRate: row.session_hourly_rate,
       amountPaid: row.session_amount_paid,
+      orders: row.session_orders || [],
     } : undefined,
   });
 
@@ -361,6 +388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     session_is_paid: table.session?.isPaid || null,
     session_hourly_rate: table.session?.hourlyRate || null,
     session_amount_paid: table.session?.amountPaid || null,
+    session_orders: table.session?.orders || null,
   });
 
   const refreshData = async (silent = false) => {
@@ -380,7 +408,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         { data: ratesData, error: ratesError },
         { data: termsData, error: termsError },
         { data: annData, error: annError },
-        { data: closedData, error: closedError }
+        { data: closedData, error: closedError },
+        { data: settingsData, error: settingsError }
       ] = await Promise.all([
         supabase.from('tables').select('*').order('name'),
         supabase.from('queue_items').select('*').order('arrival_time'),
@@ -396,7 +425,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('rates_config').select('*').eq('id', '1').maybeSingle(),
         supabase.from('reservation_terms').select('*').eq('id', '1').maybeSingle(),
         supabase.from('announcements').select('*').order('created_at', { ascending: false }),
-        supabase.from('closed_dates').select('*').order('date')
+        supabase.from('closed_dates').select('*').order('date'),
+        supabase.from('site_settings').select('*').eq('id', '1').maybeSingle()
       ]);
 
       if (tablesError) console.error('Error fetching tables:', tablesError);
@@ -578,6 +608,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         openTime: row.open_time || undefined,
         closeTime: row.close_time || undefined,
       })));
+
+      if (settingsError) console.error('Error fetching site settings:', settingsError);
+      else if (settingsData) {
+        setSiteSettings({
+          logoUrl: settingsData.logo_url || '',
+          heroTitle: settingsData.hero_title || '',
+          heroSubtitle: settingsData.hero_subtitle || '',
+          heroDescription: settingsData.hero_description || '',
+          aboutStory: settingsData.about_story || '',
+          contactAddress: settingsData.contact_address || '',
+          contactPhone: settingsData.contact_phone || '',
+          contactEmail: settingsData.contact_email || '',
+          contactHours: settingsData.contact_hours || '',
+        });
+      }
 
     } catch (err) {
       // Properly typed error catching instead of 'any'
@@ -813,7 +858,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('session_extended', `Session on ${table.name} extended by ${extraMinutes}min`, { tableId, extraMinutes });
+    await addActivity('session_extended', `Table ${table.name} extended by ${extraMinutes} mins`);
+  };
+
+  // 🚨 NEW: The actual POS order function!
+  const addOrderToTable = async (tableId: string, order: OrderItem) => {
+    const table = tables.find(t => t.id === tableId);
+    if (!table || !table.session) return;
+    
+    const updated = {
+      ...table,
+      session: { 
+        ...table.session, 
+        orders: [...(table.session.orders || []), order] 
+      }
+    };
+    
+    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    setTables(prev => prev.map(t => t.id === tableId ? updated : t));
+    await addActivity('payment_received', `Added ${order.name} to ${table.name}`);
+  };
+
+  const removeOrderFromTable = async (tableId: string, orderId: string) => {
+    const table = tables.find(t => t.id === tableId);
+    if (!table || !table.session || !table.session.orders) return;
+    
+    const orderToRemove = table.session.orders.find(o => o.id === orderId);
+    const newOrders = table.session.orders.filter(o => o.id !== orderId);
+    
+    const updated = {
+      ...table,
+      session: { 
+        ...table.session, 
+        orders: newOrders 
+      }
+    };
+    
+    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    setTables(prev => prev.map(t => t.id === tableId ? updated : t));
+    if (orderToRemove) {
+      await addActivity('admin_action', `Voided ${orderToRemove.name} from ${table.name}`);
+    }
   };
 
   const addTable = async (name: string) => {
@@ -920,7 +1005,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const cancelReservation = async (id: string, reason: string) => {
-    await supabase.from('reservations').update({ status: 'cancelled', cancellation_reason: reason }).eq('id', id);
+    const { error } = await supabase.from('reservations').update({ status: 'cancelled', cancellation_reason: reason }).eq('id', id);
+    if (error) throw new Error(error.message);
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as ReservationStatus, cancellationReason: reason } : r));
     await addActivity('reservation_cancelled', 'Reservation cancelled');
   };
@@ -1279,14 +1365,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setClosedDates(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
+  const updateSiteSettings = async (s: Partial<SiteSettings>) => {
+    const updates: any = { id: '1' };
+    if (s.logoUrl !== undefined) updates.logo_url = s.logoUrl;
+    if (s.heroTitle !== undefined) updates.hero_title = s.heroTitle;
+    if (s.heroSubtitle !== undefined) updates.hero_subtitle = s.heroSubtitle;
+    if (s.heroDescription !== undefined) updates.hero_description = s.heroDescription;
+    if (s.aboutStory !== undefined) updates.about_story = s.aboutStory;
+    if (s.contactAddress !== undefined) updates.contact_address = s.contactAddress;
+    if (s.contactPhone !== undefined) updates.contact_phone = s.contactPhone;
+    if (s.contactEmail !== undefined) updates.contact_email = s.contactEmail;
+    if (s.contactHours !== undefined) updates.contact_hours = s.contactHours;
+
+    const { error } = await supabase.from('site_settings').upsert(updates);
+    if (error) throw new Error(error.message);
+    setSiteSettings(prev => ({ ...prev, ...s } as SiteSettings));
+  };
+
   return (
     <AppContext.Provider value={{
       tables, queue, reservations, feedback, activities, promoCodes, tattooReservations, tattooArtists,
-      staffUsers, rates, reservationTerms: reservationTerms, announcements, closedDates,
+      staffUsers, rates, reservationTerms: reservationTerms, announcements, closedDates, siteSettings,
       loading,
       staffLoggedIn, adminLoggedIn, artistLoggedIn, currentArtistId, staffProfile,
       staffLogin, staffLogout, adminLogin, adminLogout, artistLogin, artistLogout, updateStaffProfile,
       assignTable, freeTable, reserveTable, extendSession, addTable, updateTable, toggleTableActive, deleteTable,
+      addOrderToTable, removeOrderFromTable,
       addToQueue, removeFromQueue, callQueueItem,
       addReservation, updateReservationStatus, cancelReservation, updateDownPayment, updateBalance,
       addFeedback, addActivity,
@@ -1297,7 +1401,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addStaffUser, updateStaffUser, resetStaffUserPassword, toggleStaffUserActive,
       updateRates, updateReservationTerms,
       addAnnouncement, updateAnnouncement, deleteAnnouncement, toggleAnnouncement,
-      addClosedDate, removeClosedDate, updateClosedDate,
+      addClosedDate, removeClosedDate, updateClosedDate, updateSiteSettings,
       refreshData,
     }}>
       {children}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard, Users, Table2, Tag, BarChart3,
-  DollarSign, FileText, Megaphone, CalendarX2,
+  DollarSign, FileText, Megaphone, CalendarX2, LayoutTemplate,
   Palette, Menu, X, LogOut, ChevronRight,
   ShieldCheck, Bell, Circle, Activity, Settings as SettingsIcon
 } from 'lucide-react';
@@ -12,6 +12,7 @@ import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
 const navItems = [
   { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',           exact: true },
+  { to: '/admin/customization', icon: LayoutTemplate,  label: 'Site Customization' },
   { to: '/admin/users',         icon: Users,           label: 'User Management' },
   { to: '/admin/tables',        icon: Table2,          label: 'Table Management' },
   { to: '/admin/tattoo-artists',icon: Palette,         label: 'Tattoo Artists' },
@@ -27,6 +28,7 @@ const navItems = [
 
 const pageTitles: Record<string, string> = {
   '/admin': 'Dashboard',
+  '/admin/customization': 'Site Customization',
   '/admin/users': 'User Management',
   '/admin/tables': 'Table Management',
   '/admin/tattoo-artists': 'Tattoo Artists',
