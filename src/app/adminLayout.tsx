@@ -43,13 +43,15 @@ const pageTitles: Record<string, string> = {
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { adminLoggedIn, staffLoggedIn, adminLogout, announcements, closedDates } = useAppContext();
+  // 👈 Grab the 'loading' state from context
+  const { adminLoggedIn, staffLoggedIn, adminLogout, announcements, closedDates, loading } = useAppContext(); 
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (loading) return; // 👈 FIREWALL: Wait for session to load first!
+
     if (!adminLoggedIn) {
-      // If they are a regular staff trying to sneak into admin, kick them to staff dashboard
       if (staffLoggedIn) {
         navigate('/staff', { replace: true });
         toast.error("Access Denied", { description: "You do not have administrator privileges." });
@@ -57,7 +59,16 @@ export function AdminLayout() {
         navigate('/', { replace: true }); // Redirect to homepage
       }
     }
-  }, [adminLoggedIn, staffLoggedIn, navigate]);
+  }, [adminLoggedIn, staffLoggedIn, loading, navigate]);
+
+  // 👈 Show a quick spinner while the session loads instead of crashing
+  if (loading) {
+    return (
+      <div className="h-screen bg-neutral-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   if (!adminLoggedIn) return null;
 

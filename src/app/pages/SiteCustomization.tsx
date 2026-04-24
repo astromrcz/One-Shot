@@ -178,7 +178,7 @@ export function SiteCustomization() {
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wider">
-              <ImageIcon size={16} /> Hero Slider Images ({form.heroSliderImages.length}/10)
+              <ImageIcon size={16} /> HomePage Slider Images ({form.heroSliderImages.length}/10)
             </h3>
             {form.heroSliderImages.length < 10 && (
               <label className="bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 border border-amber-600/30 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors">

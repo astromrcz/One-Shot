@@ -166,6 +166,7 @@ export type StaffProfile = {
   phone: string;
   joinedDate: string;
   artistId?: string;
+  isAdmin?: boolean;
 };
 
 export type StaffUser = {
@@ -718,7 +719,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStaffLoggedIn(true); 
       saveStaffSession({
         username: user.username, fullName: user.full_name, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id
+        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
+        isAdmin: user.is_admin || user.role === 'admin'
       });
       return true; 
     }
@@ -734,7 +736,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStaffLoggedIn(true); 
       saveStaffSession({
         username: user.username, fullName: user.full_name, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id
+        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
+        isAdmin: user.is_admin || user.role === 'admin'
       });
       return true;
     }
@@ -750,7 +753,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCurrentArtistId(user.artist_id);
       saveStaffSession({
         username: user.username, fullName: user.full_name, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id
+        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
+        isAdmin: user.is_admin || user.role === 'admin'
       });
       return true;
     }

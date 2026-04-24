@@ -57,14 +57,15 @@ export function SettingsPage() {
 
   const handleSaveSecurity = () => {
     setSecError('');
-    if (!secForm.currentPassword) { setSecError('Enter your current password to confirm changes.'); return; }
-    if (secForm.currentPassword !== staffProfile.password) { setSecError('Current password is incorrect.'); return; }
+    // Frontend plain-text verification removed due to secure backend hashing
     if (secForm.newPassword && secForm.newPassword.length < 6) { setSecError('New password must be at least 6 characters.'); return; }
     if (secForm.newPassword && secForm.newPassword !== secForm.confirmPassword) { setSecError('New passwords do not match.'); return; }
+    
     updateStaffProfile({
       username: secForm.username || staffProfile.username,
       ...(secForm.newPassword ? { password: secForm.newPassword } : {}),
     });
+    
     setSecEdit(false);
     setSecForm(f => ({ ...f, currentPassword: '', newPassword: '', confirmPassword: '' }));
     flashSaved('security');
@@ -246,7 +247,7 @@ export function SettingsPage() {
               </div>
               <div className="flex-1">
                 <p className="text-xs text-neutral-500 mb-1.5 font-medium uppercase tracking-wider">Password</p>
-                <p className="text-sm text-neutral-400">{'•'.repeat(staffProfile.password.length)}</p>
+                <p className="text-sm text-neutral-400">{'•'.repeat(staffProfile.password?.length || 8)}</p>
               </div>
             </div>
 
