@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Save, Image as ImageIcon, LayoutTemplate, MapPin, AlignLeft, ShieldAlert, X } from 'lucide-react';
+import { Save, Image as ImageIcon, LayoutTemplate, MapPin, AlignLeft, ShieldAlert, X, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../utils/supabase/client';
 
 export function SiteCustomization() {
-  const { siteSettings, updateSiteSettings, staffProfile, staffUsers } = useAppContext();
+  const { siteSettings, updateSiteSettings, staffProfile } = useAppContext();
   const [loading, setLoading] = useState(false);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
   
   // Password Modal States
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   
+  // Staged Form State
   const [form, setForm] = useState({
+    logoUrl: '',
     heroTitle: '',
     heroSubtitle: '',
     heroDescription: '',
@@ -24,11 +25,14 @@ export function SiteCustomization() {
     contactEmail: '',
     contactHours: '',
     heroSliderImages: [] as string[],
+    promoImage: '',
+    aboutImage: ''
   });
 
   useEffect(() => {
     if (siteSettings) {
       setForm({
+        logoUrl: siteSettings.logoUrl || '',
         heroTitle: siteSettings.heroTitle || '',
         heroSubtitle: siteSettings.heroSubtitle || '',
         heroDescription: siteSettings.heroDescription || '',
@@ -38,30 +42,33 @@ export function SiteCustomization() {
         contactEmail: siteSettings.contactEmail || '',
         contactHours: siteSettings.contactHours || '',
         heroSliderImages: siteSettings.heroSliderImages || [],
+        promoImage: siteSettings.promoImage || '',
+        aboutImage: siteSettings.aboutImage || ''
       });
     }
   }, [siteSettings]);
 
-  const handleConfirmSave = async () => {
-    // 1. Verify Password
-    const user = staffUsers.find(u => u.username === staffProfile.username);
-    if (!user || user.password !== adminPassword) {
-      setPasswordError("Incorrect admin password.");
-      return;
-    }
+  // 🚨 STAGE 1: Upload to Storage (Does NOT go live yet)
+  const uploadDirectToStorage = async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `custom-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const { error } = await supabase.storage.from('site_assets').upload(fileName, file);
+    if (error) throw error;
+    const { data } = supabase.storage.from('site_assets').getPublicUrl(fileName);
+    return data.publicUrl;
+  };
 
-    // 2. Save if password matches
-    setLoading(true);
+  const handleSingleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: keyof typeof form) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const toastId = toast.loading('Uploading image...');
     try {
-      await updateSiteSettings(form);
-      toast.success('Site settings updated successfully!');
-      setShowPasswordConfirm(false);
-      setAdminPassword('');
-      setPasswordError('');
-    } catch (error) {
-      toast.error('Failed to update site settings.');
-    } finally {
-      setLoading(false);
+      const url = await uploadDirectToStorage(file);
+      setForm(f => ({ ...f, [field]: url }));
+      toast.success("Image staged! Click Save Changes to apply.", { id: toastId });
+    } catch (error: any) {
+      toast.error("Failed to upload: " + error.message, { id: toastId });
     }
   };
 
@@ -78,65 +85,54 @@ export function SiteCustomization() {
     try {
       const newUrls: string[] = [];
       for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `slider-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const { error } = await supabase.storage.from('site_assets').upload(fileName, file);
-        if (error) throw error;
-        const { data } = supabase.storage.from('site_assets').getPublicUrl(fileName);
-        newUrls.push(data.publicUrl);
+        const url = await uploadDirectToStorage(file);
+        newUrls.push(url);
       }
       setForm(f => ({ ...f, heroSliderImages: [...f.heroSliderImages, ...newUrls] }));
-      toast.success("Images uploaded successfully!", { id: toastId });
+      toast.success("Images staged! Click Save Changes to apply.", { id: toastId });
     } catch (error: any) {
       toast.error("Failed to upload: " + error.message, { id: toastId });
     }
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingLogo(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `logo-${Date.now()}.${fileExt}`;
-      
-      const { error } = await supabase.storage.from('site_assets').upload(fileName, file);
-      if (error) throw error;
-      
-      const { data } = supabase.storage.from('site_assets').getPublicUrl(fileName);
-      await updateSiteSettings({ logoUrl: data.publicUrl });
-      toast.success("Logo updated successfully!");
-    } catch (error: any) {
-      toast.error("Failed to upload logo: " + error.message);
-    } finally {
-      setUploadingLogo(false);
+  // 🚨 STAGE 2: Secure Password Verification & Database Save
+  const handleConfirmSave = async () => {
+    if (!adminPassword) {
+      setPasswordError("Password is required.");
+      return;
     }
-  };
 
-  const handleGenericUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: keyof typeof siteSettings) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const toastId = toast.loading(`Uploading ${fieldName}...`);
+    setLoading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${fieldName}-${Date.now()}.${fileExt}`;
+      const loginIdentifier = staffProfile?.email || staffProfile?.username;
       
-      const { error } = await supabase.storage.from('site_assets').upload(fileName, file);
-      if (error) throw error;
-      
-      const { data } = supabase.storage.from('site_assets').getPublicUrl(fileName);
-      await updateSiteSettings({ [fieldName]: data.publicUrl });
-      toast.success("Image updated successfully!", { id: toastId });
-    } catch (error: any) {
-      toast.error("Failed to upload image: " + error.message, { id: toastId });
+      // Verifies the typed password against the secure Database Hash!
+      const { data: user } = await supabase.rpc('verify_staff_login', { 
+          p_username: loginIdentifier, 
+          p_password: adminPassword 
+      });
+
+      if (!user) {
+        setPasswordError("Incorrect admin password.");
+        setLoading(false);
+        return;
+      }
+
+      await updateSiteSettings(form);
+      toast.success('Site settings updated successfully!');
+      setShowPasswordConfirm(false);
+      setAdminPassword('');
+      setPasswordError('');
+    } catch (error) {
+      toast.error('Failed to update site settings.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl pb-10">
+      {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white">Site Customization</h2>
@@ -144,39 +140,41 @@ export function SiteCustomization() {
         </div>
         <button 
           onClick={() => setShowPasswordConfirm(true)} 
-          className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-colors"
+          className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-colors shadow-lg shadow-amber-900/20"
         >
           <Save size={16} /> Save Changes
         </button>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Logo Section */}
+
+        {/* 🚨 RESTORED: BRAND LOGO */}
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2 mb-4 uppercase tracking-wider"><ImageIcon size={16} /> Brand Logo</h3>
           <div className="flex items-center gap-6">
-            <div className="w-24 h-24 bg-neutral-900 border border-neutral-700 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
-              {siteSettings?.logoUrl ? (
-                <img src={siteSettings.logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+            <div className="relative w-24 h-24 bg-neutral-900 border border-neutral-700 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 group">
+              {form.logoUrl ? (
+                <>
+                  <img src={form.logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                  <button onClick={() => setForm(f => ({...f, logoUrl: ''}))} className="absolute inset-0 bg-rose-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <X size={24} />
+                  </button>
+                </>
               ) : (
                 <ImageIcon className="text-neutral-600" size={32} />
               )}
             </div>
             <div className="flex-1">
-              <p className="text-sm text-neutral-400 mb-3">Upload a transparent PNG for best results. This will replace the logo in the header and footer.</p>
-              <input 
-                type="file" 
-                accept="image/png, image/jpeg" 
-                onChange={handleLogoUpload}
-                disabled={uploadingLogo}
-                className="text-sm text-neutral-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-neutral-800 file:text-neutral-300 hover:file:bg-neutral-700 cursor-pointer"
-              />
-              {uploadingLogo && <p className="text-xs text-amber-500 mt-2 animate-pulse">Uploading...</p>}
+              <p className="text-sm text-neutral-400 mb-3">Upload a transparent PNG for best results. This replaces the logo in the header and footer.</p>
+              <label className="inline-flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-colors">
+                <Upload size={14} /> Choose Logo Image
+                <input type="file" accept="image/png, image/jpeg" onChange={e => handleSingleImageUpload(e, 'logoUrl')} className="hidden" />
+              </label>
             </div>
           </div>
         </div>
 
-        {/* 🚨 NEW COMPACT HERO SLIDER (Max 10) 🚨 */}
+        {/* HERO SLIDER (Max 10) */}
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2 uppercase tracking-wider">
@@ -191,49 +189,78 @@ export function SiteCustomization() {
           </div>
           <p className="text-xs text-neutral-500 mb-4">Upload up to 10 images. They will automatically cycle on the homepage. Click the red X to remove an image.</p>
           
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-neutral-900/50 border border-neutral-800 border-dashed rounded-xl p-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-neutral-900/50 border border-neutral-800 border-dashed rounded-xl p-4 min-h-[120px]">
              {form.heroSliderImages.map((url, idx) => (
                 <div key={idx} className="relative aspect-video bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden group">
                   <img src={url} className="w-full h-full object-cover" />
                   <button 
                     onClick={() => setForm(f => ({ ...f, heroSliderImages: f.heroSliderImages.filter((_, i) => i !== idx) }))} 
-                    className="absolute top-1.5 right-1.5 bg-rose-600 text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1.5 right-1.5 bg-rose-600 text-white p-1 rounded-md opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg"
                   >
                     <X size={12}/>
                   </button>
                 </div>
              ))}
              {form.heroSliderImages.length === 0 && (
-               <div className="col-span-full py-4 flex items-center justify-center text-neutral-600 text-xs">No images uploaded. The default system images will be shown.</div>
+               <div className="col-span-full py-6 flex flex-col items-center justify-center text-neutral-600 text-xs">
+                 <ImageIcon size={24} className="mb-2 opacity-50" />
+                 No images uploaded. The default system images will be shown.
+               </div>
              )}
           </div>
         </div>
 
-        {/* Content Images */}
+        {/* PROMO & ABOUT IMAGES */}
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2 mb-4 uppercase tracking-wider"><ImageIcon size={16} /> Content Images</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Promo Image */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-neutral-300">Promo Banner</p>
-              <div className="aspect-[21/9] bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden flex items-center justify-center">
-                {siteSettings?.promoImage ? <img src={siteSettings.promoImage} className="w-full h-full object-cover" /> : <ImageIcon className="text-neutral-600" size={24} />}
+              <div className="flex justify-between items-end">
+                <p className="text-xs font-semibold text-neutral-300">Promo Banner</p>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-sky-400 hover:text-sky-300 cursor-pointer">
+                  Upload <input type="file" accept="image/*" onChange={e => handleSingleImageUpload(e, 'promoImage')} className="hidden" />
+                </label>
               </div>
-              <input type="file" accept="image/*" onChange={e => handleGenericUpload(e, 'promoImage')} className="text-[10px] w-full text-neutral-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-neutral-800 file:text-neutral-300 hover:file:bg-neutral-700 cursor-pointer" />
+              <div className="relative aspect-[21/9] bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden flex items-center justify-center group">
+                {form.promoImage ? (
+                  <>
+                    <img src={form.promoImage} className="w-full h-full object-cover" />
+                    <button onClick={() => setForm(f => ({...f, promoImage: ''}))} className="absolute top-2 right-2 bg-rose-600 text-white p-1.5 rounded-lg opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg"><X size={14}/></button>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center text-neutral-600"><ImageIcon size={24} className="mb-1" /><span className="text-[10px]">Default active</span></div>
+                )}
+              </div>
             </div>
             
+            {/* About Image */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-neutral-300">About Us Story</p>
-              <div className="aspect-[21/9] bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden flex items-center justify-center">
-                {siteSettings?.aboutImage ? <img src={siteSettings.aboutImage} className="w-full h-full object-cover" /> : <ImageIcon className="text-neutral-600" size={24} />}
+              <div className="flex justify-between items-end">
+                <p className="text-xs font-semibold text-neutral-300">About Us Story</p>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-sky-400 hover:text-sky-300 cursor-pointer">
+                  Upload <input type="file" accept="image/*" onChange={e => handleSingleImageUpload(e, 'aboutImage')} className="hidden" />
+                </label>
               </div>
-              <input type="file" accept="image/*" onChange={e => handleGenericUpload(e, 'aboutImage')} className="text-[10px] w-full text-neutral-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-neutral-800 file:text-neutral-300 hover:file:bg-neutral-700 cursor-pointer" />
+              <div className="relative aspect-[21/9] bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden flex items-center justify-center group">
+                {form.aboutImage ? (
+                  <>
+                    <img src={form.aboutImage} className="w-full h-full object-cover" />
+                    <button onClick={() => setForm(f => ({...f, aboutImage: ''}))} className="absolute top-2 right-2 bg-rose-600 text-white p-1.5 rounded-lg opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg"><X size={14}/></button>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center text-neutral-600"><ImageIcon size={24} className="mb-1" /><span className="text-[10px]">Default active</span></div>
+                )}
+              </div>
             </div>
+
           </div>
         </div>
 
-        {/* Hero Section */}
+        {/* HERO TEXT SECTION */}
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
-          <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2 mb-4 uppercase tracking-wider"><LayoutTemplate size={16} /> Hero Section</h3>
+          <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2 mb-4 uppercase tracking-wider"><LayoutTemplate size={16} /> Hero Text Content</h3>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -252,7 +279,7 @@ export function SiteCustomization() {
           </div>
         </div>
 
-        {/* About Section */}
+        {/* ABOUT TEXT SECTION */}
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2 mb-4 uppercase tracking-wider"><AlignLeft size={16} /> About Us Story</h3>
           <div>
@@ -261,7 +288,7 @@ export function SiteCustomization() {
           </div>
         </div>
 
-        {/* Contact Section */}
+        {/* CONTACT TEXT SECTION */}
         <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
           <h3 className="text-sm font-bold text-violet-400 flex items-center gap-2 mb-4 uppercase tracking-wider"><MapPin size={16} /> Contact Information</h3>
           <div className="grid grid-cols-2 gap-4">
@@ -283,8 +310,10 @@ export function SiteCustomization() {
             </div>
           </div>
         </div>
+
       </div>
-       {/* PASSWORD CONFIRMATION MODAL */}
+
+      {/* PASSWORD CONFIRMATION MODAL */}
       {showPasswordConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-6 w-full max-w-sm shadow-2xl">

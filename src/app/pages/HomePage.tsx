@@ -377,20 +377,17 @@ export function HomePage() {
     setIsLoggingIn(true);
     setLoginForm(f => ({ ...f, error: '' }));
 
-    // 1. CHECK STAFF/ADMIN ARRAY FIRST (Strict Database Check)
-    const staffMatch = staffUsers.find(u => 
-      (u.email === loginForm.email || u.username === loginForm.email) && 
-      u.password === loginForm.password && 
-      u.isActive
-    );
+    // 1. FIREWALL: Does this email belong to a Staff/Admin account?
+    const isStaffIdentity = staffUsers.find(u => u.email === loginForm.email || u.username === loginForm.email);
 
-    if (staffMatch) {
-      const role = staffMatch.role?.toLowerCase();
-      const username = staffMatch.username;
-      const displayName = staffMatch.fullName || username; 
+    if (isStaffIdentity) {
+      const role = isStaffIdentity.role?.toLowerCase();
+      const username = isStaffIdentity.username;
+      const displayName = isStaffIdentity.fullName || username;
       let success = false;
 
-      if (role === 'admin' || staffMatch.isAdmin) {
+      // 🚨 The secure fetch bypass in AppContext handles the actual password verification now!
+      if (role === 'admin' || isStaffIdentity.isAdmin) {
         success = await adminLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/admin'); return; }
       } else if (role === 'artist' || role === 'tattoo-artist') {
@@ -400,9 +397,14 @@ export function HomePage() {
         success = await staffLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/staff'); return; }
       }
+
+      // If success is false, the database rejected the password!
+      setLoginForm(f => ({ ...f, error: 'Invalid admin/staff password.' }));
+      setIsLoggingIn(false);
+      return; 
     }
 
-    // 2. IF NOT STAFF, LOG IN AS A CUSTOMER VIA SUPABASE
+    // 2. CUSTOMER AUTH FLOW
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email: loginForm.email, 

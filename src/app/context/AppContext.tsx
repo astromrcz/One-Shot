@@ -692,34 +692,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut(); // Wipes any lingering Supabase cache!
   };
 
+ // 🚨 RAW FETCH BYPASS: Prevents the Supabase "GET/HEAD body" bug
+  const secureBackendLogin = async (username: string, password: string) => {
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/verify_staff_login`;
+      const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ p_username: username, p_password: password })
+      });
+      
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error("Secure login bypass failed:", e);
+      return null;
+    }
+  };
+
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive);
-    
+    const user = await secureBackendLogin(username, password);
     if (user) { 
       setStaffLoggedIn(true); 
       saveStaffSession({
-        username: user.username, fullName: user.fullName, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.createdAt.toISOString(), artistId: user.artistId
+        username: user.username, fullName: user.full_name, email: user.email,
+        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id
       });
       return true; 
     }
     return false;
   };
   
- const staffLogout = async () => await clearStaffSession();
+  const staffLogout = async () => await clearStaffSession();
 
   const adminLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = staffUsers.find(u => 
-      u.username === username && u.password === password && u.isActive && 
-      (u.isAdmin || u.role?.toLowerCase() === 'admin')
-    );
-    
-    if (user) {
+    const user = await secureBackendLogin(username, password);
+    if (user && (user.is_admin || user.role === 'admin')) {
       setAdminLoggedIn(true);
-      setStaffLoggedIn(true); // 🚨 Grants Admins access to the Staff Portal!
+      setStaffLoggedIn(true); 
       saveStaffSession({
-        username: user.username, fullName: user.fullName, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.createdAt.toISOString(), artistId: user.artistId
+        username: user.username, fullName: user.full_name, email: user.email,
+        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id
       });
       return true;
     }
@@ -729,19 +744,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const adminLogout = async () => await clearStaffSession();
 
   const artistLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = staffUsers.find(u => u.username === username && u.password === password && u.isActive && u.role === 'tattoo-artist');
-    if (user && user.artistId) {
+    const user = await secureBackendLogin(username, password);
+    if (user && user.role === 'tattoo-artist' && user.artist_id) {
       setArtistLoggedIn(true);
-      setCurrentArtistId(user.artistId);
+      setCurrentArtistId(user.artist_id);
       saveStaffSession({
-        username: user.username,
-        password: user.password,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        joinedDate: user.createdAt.toISOString(),
-        artistId: user.artistId
+        username: user.username, fullName: user.full_name, email: user.email,
+        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id
       });
       return true;
     }
@@ -749,7 +758,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   
   const artistLogout = async () => await clearStaffSession();
-
  const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
     // 1. Update the local screen memory immediately
     setStaffProfile(prev => ({ ...prev, ...profile }));
