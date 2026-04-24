@@ -7,6 +7,8 @@ export default function App() {
   
   // 1. Start the Push Service when the website loads
   useEffect(() => {
+    if (OneSignal.initialized) return; // 🚨 Prevent double-initialization!
+
     OneSignal.init({
       appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
       allowLocalhostAsSecureOrigin: true, // Needed for local testing

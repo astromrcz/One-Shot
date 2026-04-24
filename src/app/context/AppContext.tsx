@@ -1419,7 +1419,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // 🚨 NEW: The Anonymous Push Sender
   const sendCustomerPush = async (customerName: string, title: string, message: string) => {
     try {
-      await fetch('https://onesignal.com/api/v1/notifications', {
+      await fetch('/api/onesignal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

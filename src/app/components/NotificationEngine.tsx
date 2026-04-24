@@ -6,8 +6,7 @@ export function NotificationEngine() {
     tables, 
     adminLoggedIn, 
     staffLoggedIn, 
-    sendCustomerPush, 
-    sendAdminPush 
+    sendCustomerPush
   } = useAppContext();
 
   // We use a Set to remember what alerts we already fired so we don't spam phones!
@@ -40,7 +39,7 @@ export function NotificationEngine() {
             }
           }
           
-          // 🚨 2. CUSTOMER & ADMIN WARNING: Time is Up
+          // 🚨 2. CUSTOMER WARNING: Time is Up
           else if (timeLeftMins <= 0 && timeLeftMins > -5) {
             const alertId = `${table.id}-${startTime}-ended`;
             if (!notified.current.has(alertId)) {
@@ -52,26 +51,6 @@ export function NotificationEngine() {
                 "Time's Up! ⏰", 
                 `Your session on ${table.name} has ended. Hope you had a great game!`
               );
-              
-              // Tell the Admin
-              sendAdminPush(
-                "Table Ended 🛑", 
-                `${table.name} (${customer}) has finished their session.`
-              );
-            }
-          }
-
-          // 🚨 3. ADMIN WARNING: Overtime (5+ minutes over)
-          else if (timeLeftMins <= -5 && timeLeftMins > -60) {
-            const alertId = `${table.id}-${startTime}-overtime`;
-            if (!notified.current.has(alertId)) {
-              notified.current.add(alertId);
-              
-              // Only alert the admin that the table hasn't been cleared yet
-              sendAdminPush(
-                "Table Overtime! 🚨", 
-                `${table.name} is 5 minutes over their allotted time. Please check on them.`
-              );
             }
           }
         }
@@ -81,7 +60,7 @@ export function NotificationEngine() {
     // Run the clock watcher every 30 seconds
     const interval = setInterval(checkAlerts, 30000);
     return () => clearInterval(interval);
-  }, [tables, adminLoggedIn, staffLoggedIn, sendCustomerPush, sendAdminPush]);
+  }, [tables, adminLoggedIn, staffLoggedIn, sendCustomerPush]);
 
   // This component runs completely silently in the background
   return null;

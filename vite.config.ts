@@ -19,4 +19,15 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  // 🚨 ADDED: Proxy server to bypass CORS locally
+  server: {
+    proxy: {
+      '/api/onesignal': {
+        target: 'https://onesignal.com/api/v1/notifications',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/onesignal/, '')
+      }
+    }
+  }
 })
