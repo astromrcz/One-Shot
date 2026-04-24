@@ -232,6 +232,12 @@ export type SiteSettings = {
   contactPhone: string;
   contactEmail: string;
   contactHours: string;
+  heroImage1?: string;
+  heroImage2?: string;
+  heroImage3?: string;
+  heroSliderImages?: string[];
+  promoImage?: string;
+  aboutImage?: string;
 };
 
 export const HOURLY_RATE = 250;
@@ -369,10 +375,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     session: row.session_customer_name ? {
       customerName: row.session_customer_name,
       startTime: new Date(row.session_start_time),
-      durationMinutes: row.session_duration_minutes,
-      isPaid: row.session_is_paid,
-      hourlyRate: row.session_hourly_rate,
-      amountPaid: row.session_amount_paid,
+      durationMinutes: row.session_duration_minutes || 60,
+      isPaid: row.session_is_paid || false,
+      hourlyRate: row.session_hourly_rate || 250,
+      amountPaid: row.session_amount_paid || 0, // 🚨 FIXED: Prevents null crashes!
       orders: row.session_orders || [],
     } : undefined,
   });
@@ -621,6 +627,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           contactPhone: settingsData.contact_phone || '',
           contactEmail: settingsData.contact_email || '',
           contactHours: settingsData.contact_hours || '',
+          heroImage1: settingsData.hero_image_1 || '',
+          heroImage2: settingsData.hero_image_2 || '',
+          heroImage3: settingsData.hero_image_3 || '',
+          heroSliderImages: settingsData.hero_slider_images || [],
+          promoImage: settingsData.promo_image || '',
+          aboutImage: settingsData.about_image || '',
         });
       }
 
@@ -1376,6 +1388,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (s.contactPhone !== undefined) updates.contact_phone = s.contactPhone;
     if (s.contactEmail !== undefined) updates.contact_email = s.contactEmail;
     if (s.contactHours !== undefined) updates.contact_hours = s.contactHours;
+    if (s.heroImage1 !== undefined) updates.hero_image_1 = s.heroImage1;
+    if (s.heroImage2 !== undefined) updates.hero_image_2 = s.heroImage2;
+    if (s.heroImage3 !== undefined) updates.hero_image_3 = s.heroImage3;
+    if (s.promoImage !== undefined) updates.promo_image = s.promoImage;
+    if (s.aboutImage !== undefined) updates.about_image = s.aboutImage;
 
     const { error } = await supabase.from('site_settings').upsert(updates);
     if (error) throw new Error(error.message);

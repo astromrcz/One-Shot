@@ -22,7 +22,7 @@ type FilterStatus = 'all' | 'available' | 'occupied' | 'reserved';
 type PaymentMethod = 'gcash' | 'cash';
 type PaymentStatus = 'paid' | 'partial' | 'unpaid';
 
-const formatPHP = (amount: number) => `₱${amount.toFixed(2)}`;
+const formatPHP = (amount: number) => `₱${(amount || 0).toFixed(2)}`;
 
 type CustomerSource =
   | { kind: 'queue';        id: string; name: string; partySize: number; contact: string; notes?: string }

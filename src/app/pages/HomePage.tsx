@@ -22,13 +22,6 @@ import heroImg3 from '@/app/assets/622002b1a57eb609a09cacd650764fb95c911672.png'
 import heroImg4 from '@/app/assets/759b04149309a4f38a99d59a2ef822b4e59fd5d3.png';
 import heroImg5 from '@/app/assets/0784e9fa4728a17ea332ccf7dd013e304884f734.png';
 import { toast } from 'sonner';
-const HERO_SLIDES = [
-  { src: heroImg1, alt: 'One Shot Bar & Billiards – All It Takes Is One Shot' },
-  { src: heroImg2, alt: 'One Shot Bar and Billiards' },
-  { src: heroImg3, alt: 'One Shot Billiards Hall' },
-  { src: heroImg4, alt: 'Tournament Play' },
-  { src: heroImg5, alt: 'Precision Billiards' },
-];
 
 const ANNOUNCEMENTS = [
   "🎱 Welcome to One Shot Bar & Billiards! Book your favorite table now!",
@@ -208,6 +201,18 @@ export function HomePage() {
   
   // Safe fallbacks in case settings haven't loaded
   const displayLogo = siteSettings?.logoUrl || logoImg;
+  
+   // 🚨 Dynamically map up to 10 images!
+  const dynamicHeroSlides = siteSettings?.heroSliderImages && siteSettings.heroSliderImages.length > 0
+    ? siteSettings.heroSliderImages.map(url => ({ src: url, alt: 'One Shot Bar & Billiards' }))
+    : [
+        { src: heroImg1, alt: 'One Shot Bar & Billiards – All It Takes Is One Shot' },
+        { src: heroImg2, alt: 'One Shot Bar and Billiards' },
+        { src: heroImg3, alt: 'One Shot Billiards Hall' },
+        { src: heroImg4, alt: 'Tournament Play' },
+        { src: heroImg5, alt: 'Precision Billiards' },
+      ];
+
   const [guestEmail, setGuestEmail] = useState(() => localStorage.getItem('oneshot_guest_email') || '');
   const [announcementIdx, setAnnouncementIdx] = useState(0);
   const [announcementDir, setAnnouncementDir] = useState<1 | -1>(1);
@@ -308,10 +313,12 @@ export function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
+  // 🚨 Automatically adjust the timer to match the number of images!
   useEffect(() => {
-    const interval = setInterval(() => { setHeroSlideDir(1); setHeroSlideIdx(prev => (prev + 1) % HERO_SLIDES.length); }, 5000);
+    const slideCount = dynamicHeroSlides.length;
+    const interval = setInterval(() => { setHeroSlideDir(1); setHeroSlideIdx(prev => (prev + 1) % slideCount); }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [siteSettings?.heroSliderImages]); 
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -684,8 +691,8 @@ export function HomePage() {
     setTimeout(() => { setSimpleFeedbackSent(false); setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); }, 3000);
   };
 
-  const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + HERO_SLIDES.length) % HERO_SLIDES.length); };
-  const nextHeroSlide = () => { setHeroSlideDir(1); setHeroSlideIdx(p => (p + 1) % HERO_SLIDES.length); };
+  const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + dynamicHeroSlides.length) % dynamicHeroSlides.length); };
+  const nextHeroSlide = () => { setHeroSlideDir(1); setHeroSlideIdx(p => (p + 1) % dynamicHeroSlides.length); };
 
   const getTableTimerInfo = (tableId: string) => {
     const t = tables.find(tb => tb.id === tableId);
@@ -782,7 +789,8 @@ export function HomePage() {
               <div className="relative h-[70vh] min-h-[480px] overflow-hidden group">
                 <AnimatePresence mode="wait" custom={heroSlideDir}>
                   <motion.div key={heroSlideIdx} custom={heroSlideDir} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.9 }} className="absolute inset-0">
-                    <img src={HERO_SLIDES[heroSlideIdx].src} alt={HERO_SLIDES[heroSlideIdx].alt} className="w-full h-full object-cover" />
+                    {/* 🚨 FIXED: Now uses dynamicHeroSlides 🚨 */}
+                    <img src={dynamicHeroSlides[heroSlideIdx].src} alt={dynamicHeroSlides[heroSlideIdx].alt} className="w-full h-full object-cover" />
                   </motion.div>
                 </AnimatePresence>
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/55 to-transparent" />
@@ -805,7 +813,8 @@ export function HomePage() {
                     </div>
 
                     <div className="flex gap-2">
-                      {HERO_SLIDES.map((_, i) => (
+                      {/* 🚨 FIXED: Now uses dynamicHeroSlides 🚨 */}
+                      {dynamicHeroSlides.map((_, i) => (
                         <button
                           key={i}
                           onClick={() => { setHeroSlideDir(i > heroSlideIdx ? 1 : -1); setHeroSlideIdx(i); }}
@@ -857,7 +866,7 @@ export function HomePage() {
               {/* Second Image */}
               <div className="relative h-72 overflow-hidden">
                 <ImageWithFallback
-                  src="https://images.unsplash.com/photo-1741397112651-ee14e18f6b41?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiaWxsaWFyZHMlMjBoYWxsJTIwaW50ZXJpb3IlMjBuZW9uJTIwbGlnaHRzfGVufDF8fHx8MTc3NDk1MTMxNXww&ixlib=rb-4.1.0&q=80&w=1080"
+                  src={siteSettings?.promoImage || "https://images.unsplash.com/photo-1741397112651-ee14e18f6b41?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiaWxsaWFyZHMlMjBoYWxsJTIwaW50ZXJpb3IlMjBuZW9uJTIwbGlnaHRzfGVufDF8fHx8MTc3NDk1MTMxNXww&ixlib=rb-4.1.0&q=80&w=1080"}
                   alt="One Shot Billiards Hall"
                   className="w-full h-full object-cover"
                 />
@@ -1377,7 +1386,7 @@ export function HomePage() {
                 </div>
                 <div className="rounded-2xl overflow-hidden h-72">
                   <ImageWithFallback
-                    src="https://images.unsplash.com/photo-1761335633357-04fab36b333f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYXIlMjBsb3VuZ2UlMjBkYXJrJTIwYW1iaWFuY2V8ZW58MXx8fHwxNzc0OTUxMzE1fDA&ixlib=rb-4.1.0&q=80&w=1080"
+                    src={siteSettings?.aboutImage || "https://images.unsplash.com/photo-1761335633357-04fab36b333f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYXIlMjBsb3VuZ2UlMjBkYXJrJTIwYW1iaWFuY2V8ZW58MXx8fHwxNzc0OTUxMzE1fDA&ixlib=rb-4.1.0&q=80&w=1080"}
                     alt="One Shot Bar & Billiards"
                     className="w-full h-full object-cover"
                   />
@@ -2034,7 +2043,7 @@ export function HomePage() {
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <AlertTriangle size={18} className="text-rose-500" /> Cancel Reservation
                 </h3>
-                <button onClick={() => setCancelModal({ isOpen: false, id: '', reason: '', loading: false })} className="text-neutral-600 hover:text-neutral-300">
+                <button onClick={() => setCancelModal({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false })} className="text-neutral-600 hover:text-neutral-300">
                   <X size={18} />
                 </button>
               </div>

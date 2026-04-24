@@ -29,6 +29,7 @@ import { AdminReservationTerms } from './pages/AdminReservationTerms';
 import { AdminAnnouncements } from './pages/AdminAnnouncements';
 import { AdminCalendar } from './pages/AdminCalendar';
 import { Analytics } from './pages/Analytics';
+import { SiteCustomization } from './pages/SiteCustomization'; // 🚨 NEW IMPORT
 // Artist portal
 import { ArtistPortal } from './pages/ArtistPortal';
 import { NotFound } from './pages/NotFound';
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
         Component: AdminLayout,
         children: [
           { index: true,                    Component: AdminDashboard },
+          { path: 'customization',          Component: SiteCustomization }, // 🚨 NEW ROUTE
           { path: 'activity',               Component: ActivityLog },
           { path: 'users',                  Component: AdminUsers },
           { path: 'tables',                 Component: AdminTableManagement },
