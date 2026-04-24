@@ -9,7 +9,7 @@ import {
 import { toast } from 'sonner';
 import { useAppContext } from './context/AppContext';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
-
+import OneSignal from 'react-onesignal';
 const navItems = [
   { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',           exact: true },
   { to: '/admin/customization', icon: LayoutTemplate,  label: 'Site Customization' },
@@ -51,6 +51,10 @@ export function AdminLayout() {
   useEffect(() => {
     if (loading) return; // 👈 FIREWALL: Wait for session to load first!
 
+    if (adminLoggedIn) {
+      OneSignal.User.addTag("role", "admin");
+    }
+    
     if (!adminLoggedIn) {
       if (staffLoggedIn) {
         navigate('/staff', { replace: true });

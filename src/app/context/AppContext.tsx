@@ -325,6 +325,8 @@ type AppContextType = {
   updateClosedDate: (id: string, updates: Partial<ClosedDate>) => Promise<void>;
   updateSiteSettings: (settings: Partial<SiteSettings>) => Promise<void>;
   refreshData: (silent?: boolean) => Promise<void>;
+  sendCustomerPush: (customerName: string, title: string, message: string) => Promise<void>;
+  sendAdminPush: (title: string, message: string) => Promise<void>;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1021,6 +1023,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setReservations(prev => [...prev, reservation]);
     await addActivity('reservation_created', `New reservation for ${item.customerName}`);
+    
+    // 🚨 FIRE THE PUSH TO ADMINS!
+    await sendAdminPush("New Reservation! 📅", `${item.customerName} just booked a table for ${item.partySize} people at ${item.timeSlot}.`);
   };
   const updateReservationStatus = async (id: string, status: ReservationStatus) => {
     await supabase.from('reservations').update({ status }).eq('id', id);
@@ -1409,6 +1414,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.from('site_settings').upsert(updates);
     if (error) throw new Error(error.message);
     setSiteSettings(prev => ({ ...prev, ...s } as SiteSettings));
+  };
+
+  // 🚨 NEW: The Anonymous Push Sender
+  const sendCustomerPush = async (customerName: string, title: string, message: string) => {
+    try {
+      await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}`
+        },
+        body: JSON.stringify({
+          app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
+          // Hunt down the phone tagged with this name!
+          filters: [
+            { "field": "tag", "key": "customer_name", "relation": "=", "value": customerName.toLowerCase() }
+          ],
+          headings: { "en": title },
+          contents: { "en": message }
+        })
+      });
+    } catch (err) {
+      console.error("Push failed to send:", err);
+    }
+  };
+// 🚨 THE NEW ADMIN SENDER
+  const sendAdminPush = async (title: string, message: string) => {
+    try {
+      await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}`
+        },
+        body: JSON.stringify({
+          app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
+          // Hunt down ANY browser/phone tagged as an Admin!
+          filters: [
+            { "field": "tag", "key": "role", "relation": "=", "value": "admin" }
+          ],
+          headings: { "en": title },
+          contents: { "en": message }
+        })
+      });
+    } catch (err) {
+      console.error("Admin push failed to send:", err);
+    }
   };
 
   return (

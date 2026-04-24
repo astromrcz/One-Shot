@@ -7,6 +7,15 @@
       <link rel="icon" type="image/png" href="/favicon.png" />
       <title>One Shot bar & Billiards</title>
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+      <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+      <script>
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        OneSignalDeferred.push(async function(OneSignal) {
+          await OneSignal.init({
+            appId: "585105e8-2967-4756-8da4-f7f738979754",
+          });
+        });
+      </script>
     </head>
 
     <body>
