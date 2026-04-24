@@ -1442,7 +1442,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 // 🚨 THE NEW ADMIN SENDER
   const sendAdminPush = async (title: string, message: string) => {
     try {
-      await fetch('https://onesignal.com/api/v1/notifications', {
+      await fetch('/api/onesignal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -3,11 +3,16 @@ import { router } from './routes';
 import { LiveMonitor } from './pages/LiveMonitor';
 import OneSignal from 'react-onesignal';
 import { useEffect } from 'react';
+
+// 🚨 NEW: Global flag that React cannot override during Strict Mode
+let isOneSignalInit = false; 
+
 export default function App() {
   
   // 1. Start the Push Service when the website loads
   useEffect(() => {
-    if (OneSignal.initialized) return; // 🚨 Prevent double-initialization!
+    if (isOneSignalInit) return; 
+    isOneSignalInit = true;
 
     OneSignal.init({
       appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
