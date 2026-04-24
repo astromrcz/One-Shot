@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, X, CheckCircle, ArrowRight,
   Phone, Calendar, Clock, User, AlertCircle, FileText, Shield,
-  ImagePlus, Trash2
+  ImagePlus, Trash2, Wand2, Sparkles
 } from 'lucide-react';
 import { useAppContext, TATTOO_DEPOSIT } from '../context/AppContext';
 import { ImageWithFallback } from './figma/ImageWithFallback';
@@ -26,6 +26,14 @@ const TATTOO_TIME_SLOTS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
 const PLACEMENTS = ['Wrist', 'Forearm', 'Upper Arm', 'Shoulder', 'Chest', 'Upper Back', 'Lower Back', 'Neck', 'Thigh', 'Leg', 'Ankle', 'Other'];
 const SIZES = ['Micro (under 1 in)', 'Small (1–2 in)', 'Medium (3–5 in)', 'Large (6+ in)', 'Full piece (custom quote)'];
 const COLOR_STYLES = ['Black & Grey', 'Traditional Color', 'Neo-Traditional', 'Watercolor', 'Fine Line / Blackwork', 'Geometric', 'Other'];
+
+const AI_PROMPTS = [
+  "Neo-traditional Tiger",
+  "Fine-line Floral Sleeve",
+  "Japanese Koi Fish",
+  "Minimalist Geometric",
+  "Watercolor Abstract"
+];
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -102,33 +110,13 @@ function QRDisplay({ pattern, color }: { pattern: number[][], color: string }) {
 }
 
 // ── Agreement text ─────────────────────────────────────────────
-const AGREEMENT_TEXT = `SERVICE AGREEMENT — One Shot Bar & Billiards Tattoo Studio
+const AGREEMENT_TEXT = `SERVICE AGREEMENT — One Shot Bar & Billiards Tattoo Studio\n\n1. All tattoo services are final. No refunds once the service has begun.\n2. The ₱500 deposit is non-refundable but may be transferred to a rescheduled appointment within 7 days with prior notice.\n3. Clients must be at least 18 years of age. Valid ID may be required on the day of the appointment.\n4. One Shot Bar & Billiards reserves the right to decline service at management's discretion.\n5. Final pricing may vary based on design complexity, size, and session duration.\n6. Free touch-ups are included within 30 days for minor corrections at the artist's discretion.\n7. Please arrive 15 minutes before your scheduled appointment. A grace period of 15 minutes applies; late arrivals may result in rescheduling.\n8. One Shot Bar & Billiards is not liable for allergic reactions or complications arising from improper aftercare.`;
 
-1. All tattoo services are final. No refunds once the service has begun.
-2. The ₱500 deposit is non-refundable but may be transferred to a rescheduled appointment within 7 days with prior notice.
-3. Clients must be at least 18 years of age. Valid ID may be required on the day of the appointment.
-4. One Shot Bar & Billiards reserves the right to decline service at management's discretion.
-5. Final pricing may vary based on design complexity, size, and session duration.
-6. Free touch-ups are included within 30 days for minor corrections at the artist's discretion.
-7. Please arrive 15 minutes before your scheduled appointment. A grace period of 15 minutes applies; late arrivals may result in rescheduling.
-8. One Shot Bar & Billiards is not liable for allergic reactions or complications arising from improper aftercare.`;
-
-const CONSENT_TEXT = `INFORMED CONSENT — Tattoo Services
-
-By checking this box, I confirm the following:
-
-1. I am at least 18 years of age and of sound mind.
-2. I am NOT currently pregnant or breastfeeding.
-3. I do not have any known blood-borne diseases, keloid-prone skin, or conditions that impair healing.
-4. I am NOT currently on blood-thinning medications (e.g., aspirin, warfarin) unless cleared by a physician.
-5. I am NOT intoxicated or under the influence of any substances.
-6. I understand that tattooing involves needles and permanent body modification, and carries inherent risks including (but not limited to) infection, scarring, and allergic reactions.
-7. I acknowledge that healing results vary per individual and proper aftercare is my responsibility.
-8. I release One Shot Bar & Billiards, its staff, and its tattoo artists from liability for complications resulting from failure to follow aftercare instructions.`;
+const CONSENT_TEXT = `INFORMED CONSENT — Tattoo Services\n\nBy checking this box, I confirm the following:\n\n1. I am at least 18 years of age and of sound mind.\n2. I am NOT currently pregnant or breastfeeding.\n3. I do not have any known blood-borne diseases, keloid-prone skin, or conditions that impair healing.\n4. I am NOT currently on blood-thinning medications (e.g., aspirin, warfarin) unless cleared by a physician.\n5. I am NOT intoxicated or under the influence of any substances.\n6. I understand that tattooing involves needles and permanent body modification, and carries inherent risks including (but not limited to) infection, scarring, and allergic reactions.\n7. I acknowledge that healing results vary per individual and proper aftercare is my responsibility.\n8. I release One Shot Bar & Billiards, its staff, and its tattoo artists from liability for complications resulting from failure to follow aftercare instructions.`;
 
 // ── Main TattooSection Component ───────────────────────────────
 export function TattooSection({ currentUserName, currentUserEmail }: { currentUserName?: string; currentUserEmail?: string }) {
-  const { addTattooReservation, applyPromoCode, tattooArtists } = useAppContext();
+  const { addTattooReservation, tattooArtists } = useAppContext();
 
   // Carousel
   const [slideIdx, setSlideIdx] = useState(0);
@@ -137,8 +125,16 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
   // Modal
   const [modalStep, setModalStep] = useState(0); // 0=closed, 1=step1, 2=step2, 3=agreement, 4=payment, 5=confirmed
   const [tattooDate, setTattooDate] = useState<Date | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'gcash' | 'paymaya'>('gcash');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // AI Generator State
+  const [aiMode, setAiMode] = useState<'concept' | 'placement'>('concept');
+  const [aiReferenceImage, setAiReferenceImage] = useState<string | null>(null);
+  const [aiGeneratedImage, setAiGeneratedImage] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiBodyPart, setAiBodyPart] = useState('');
+  const [aiConsentChecked, setAiConsentChecked] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Inspiration images (data URLs)
   const [inspirationImages, setInspirationImages] = useState<string[]>([]);
@@ -172,7 +168,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
   const nextSlide = () => { setSlideDir(1); setSlideIdx(p => (p + 1) % TATTOO_SLIDES.length); };
   const prevSlide = () => { setSlideDir(-1); setSlideIdx(p => (p - 1 + TATTOO_SLIDES.length) % TATTOO_SLIDES.length); };
 
-  const availableArtists = tattooArtists.filter(a => a.isAvailableToday && a.isActive);
   const selectedArtist = tattooArtists.find(a => a.id === form.artistId);
 
   const canProceedStep1 = !!tattooDate && !!form.artistId && !!form.name && !!form.phone && !!form.email;
@@ -267,7 +262,7 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
       </div>
 
       {/* Carousel */}
-      <div className="relative rounded-2xl overflow-hidden h-[400px] mb-10 group">
+      <div className="relative rounded-2xl overflow-hidden h-[400px] mb-10 group border border-neutral-800/60 shadow-2xl">
         <AnimatePresence mode="wait" custom={slideDir}>
           <motion.div
             key={slideIdx}
@@ -308,7 +303,7 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
       </div>
 
       {/* Info + Artists + CTA */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
         {/* Info */}
         <div className="space-y-5">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
@@ -363,6 +358,156 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 🚨 NEW: Browsable Past Work & AI Inspiration 🚨 */}
+      <div className="mt-6 mb-10 pt-10 border-t border-neutral-800/60">
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-white mb-1">Past Work Gallery</h3>
+          <p className="text-sm text-neutral-400 mb-4">Browse our artists' recent sessions.</p>
+          
+          {/* Horizontal scrollable slider */}
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
+            {TATTOO_SLIDES.map((s, i) => (
+              <div key={i} className="relative rounded-xl overflow-hidden flex-shrink-0 w-40 h-40 sm:w-48 sm:h-48 snap-center border border-neutral-800 group">
+                <ImageWithFallback src={s.src} alt={s.caption} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                  <span className="text-xs font-bold text-white">{s.caption}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Improved 2-Column AI Generator */}
+        <div className="bg-neutral-900/50 border border-violet-500/20 rounded-2xl p-6 shadow-xl shadow-violet-900/5">
+          <div className="text-center mb-8">
+            <h4 className="text-lg font-bold text-violet-300 flex items-center justify-center gap-2 mb-1"><Wand2 size={18}/> AI Concept Generator</h4>
+            <p className="text-xs text-neutral-400">Upload a reference, choose a style, and generate your concept before booking.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Left Column: Image Upload */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5"><ImagePlus size={14} className="text-violet-400"/> 1. Reference Photo <span className="text-neutral-500 font-normal">(Optional for Concepts)</span></p>
+              
+              <div className="aspect-square bg-neutral-950 border border-neutral-800 rounded-xl overflow-hidden flex items-center justify-center relative group shadow-inner">
+                {aiReferenceImage ? (
+                  <>
+                    <img src={aiReferenceImage} className="w-full h-full object-cover" />
+                    <button onClick={() => setAiReferenceImage(null)} className="absolute top-2 right-2 bg-rose-600/90 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm hover:bg-rose-500"><X size={14}/></button>
+                  </>
+                ) : (
+                  <div className="text-center text-neutral-600 flex flex-col items-center">
+                    <ImagePlus size={32} className="mb-2 opacity-30"/>
+                    <span className="text-xs font-medium">No image selected</span>
+                  </div>
+                )}
+              </div>
+              
+              <label className="block w-full text-center bg-neutral-800 hover:bg-neutral-700 text-neutral-300 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors border border-neutral-700">
+                Choose File
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if(file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => setAiReferenceImage(e.target?.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                }} />
+              </label>
+            </div>
+
+            {/* Right Column: Generation Settings & Result */}
+            <div className="space-y-3 flex flex-col">
+              <p className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5"><Sparkles size={14} className="text-violet-400"/> 2. Generation Settings</p>
+              
+              {/* Generation Mode Toggle */}
+              <div className="flex p-1 bg-neutral-950 rounded-lg border border-neutral-800 shrink-0">
+                <button onClick={() => setAiMode('concept')} className={`flex-1 text-[10px] font-semibold py-1.5 rounded-md transition-all ${aiMode === 'concept' ? 'bg-violet-600 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}>New Concept Design</button>
+                <button onClick={() => setAiMode('placement')} className={`flex-1 text-[10px] font-semibold py-1.5 rounded-md transition-all ${aiMode === 'placement' ? 'bg-violet-600 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}>Visualize Placement</button>
+              </div>
+
+              <div className="aspect-square bg-neutral-950 border border-neutral-800 rounded-xl overflow-hidden flex items-center justify-center relative shadow-inner">
+                {aiGeneratedImage ? (
+                  <img src={aiGeneratedImage} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center text-neutral-600 flex flex-col items-center">
+                    {isGenerating ? (
+                      <>
+                        <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mb-3"/>
+                        <span className="text-xs font-medium text-violet-400 animate-pulse">Generating art...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 size={32} className="mb-2 opacity-30"/>
+                        <span className="text-xs font-medium">Awaiting prompt</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 mt-auto pt-2">
+                {aiMode === 'concept' ? (
+                  <>
+                    <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Design Prompt:</p>
+                    <input type="text" placeholder="Describe your idea..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} className="w-full text-xs bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-300 focus:border-violet-500 outline-none mb-2" />
+                    <div className="flex flex-wrap gap-2">
+                      {AI_PROMPTS.map(p => (
+                        <button key={p} onClick={() => setAiPrompt(p)} 
+                          className={`text-[10px] px-2.5 py-1.5 rounded-lg border transition-all ${
+                            aiPrompt === p 
+                              ? 'bg-violet-600/20 border-violet-500 text-violet-300 shadow-[0_0_10px_rgba(139,92,246,0.15)]' 
+                              : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:border-neutral-500 hover:text-neutral-300'
+                          }`}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Select Body Part:</p>
+                    <select value={aiBodyPart} onChange={e => setAiBodyPart(e.target.value)} className="w-full text-xs bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-300 focus:border-violet-500 outline-none">
+                      <option value="" disabled>Choose placement area...</option>
+                      {PLACEMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    {!aiReferenceImage && <p className="text-[10px] text-rose-400 mt-1">⚠️ Reference photo is required to visualize placement.</p>}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Submission / Consent Section */}
+          <div className="mt-8 pt-6 border-t border-neutral-800/60 space-y-5">
+            <label className="flex items-start gap-3 cursor-pointer group bg-neutral-950/60 p-3.5 rounded-xl border border-neutral-800 hover:border-violet-500/30 transition-colors">
+              <div className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center border flex-shrink-0 transition-all ${aiConsentChecked ? 'bg-violet-600 border-violet-600' : 'border-neutral-600 bg-neutral-800 group-hover:border-violet-500'}`}
+                onClick={() => setAiConsentChecked(p => !p)}>
+                {aiConsentChecked && <CheckCircle size={10} className="text-white" />}
+              </div>
+              <span className="text-[11px] text-neutral-400 leading-relaxed" onClick={() => setAiConsentChecked(p => !p)}>
+                I agree that uploaded reference photos are processed securely and confidentially to generate inspiration art. They will not be stored permanently or shared with third parties.
+              </span>
+            </label>
+
+            <button
+              disabled={!aiConsentChecked || isGenerating || (aiMode === 'concept' ? (!aiReferenceImage && !aiPrompt) : (!aiReferenceImage || !aiBodyPart))}
+              onClick={() => {
+                setIsGenerating(true);
+                // Mocking the AI generation delay
+                setTimeout(() => { 
+                  setIsGenerating(false); 
+                  setAiGeneratedImage('https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=500&q=80'); 
+                }, 2500);
+              }}
+              className="w-full bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-800 disabled:text-neutral-600 text-white py-3.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
+            >
+              {isGenerating ? 'Processing...' : aiMode === 'concept' ? 'Generate Concept Art' : 'Visualize'} <Sparkles size={16}/>
+            </button>
           </div>
         </div>
       </div>
@@ -641,7 +786,7 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
                   </div>
                 )}
 
-                {/* ─── STEP 4: Payment ─── */}
+                {/* ─── STEP 4: Payment (GCash Only) ─── */}
                 {modalStep === 4 && (
                   <div className="space-y-5">
                     <div className="bg-violet-950/30 border border-violet-800/30 rounded-xl p-4 text-center">
@@ -657,22 +802,13 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
                       <div className="flex justify-between"><span className="text-neutral-500">Placement</span><span className="text-neutral-200">{form.placement}</span></div>
                     </div>
 
-                    <div className="flex gap-2">
-                      {(['gcash', 'paymaya'] as const).map(m => (
-                        <button key={m} onClick={() => setPaymentMethod(m)}
-                          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${paymentMethod === m ? m === 'gcash' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}>
-                          {m === 'gcash' ? '💙 GCash' : '💚 PayMaya'}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-col items-center gap-3">
-                      <QRDisplay pattern={QR_GCASH} color={paymentMethod === 'gcash' ? '#1d4ed8' : '#15803d'} />
+                    <div className="flex flex-col items-center gap-3 bg-blue-900/10 border border-blue-900/30 p-6 rounded-2xl">
+                      <QRDisplay pattern={QR_GCASH} color="#1d4ed8" />
                       <div className="text-center">
-                        <p className={`text-sm font-bold ${paymentMethod === 'gcash' ? 'text-blue-400' : 'text-green-400'}`}>ONE SHOT BAR & BILLIARDS</p>
+                        <p className="text-sm font-bold text-blue-400">ONE SHOT BAR & BILLIARDS</p>
                         <p className="text-xs text-neutral-500">+63 917-123-4567</p>
                       </div>
-                      <p className="text-xs text-neutral-500 text-center">Scan with your {paymentMethod === 'gcash' ? 'GCash' : 'PayMaya'} app · Send exactly <span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00</span></p>
+                      <p className="text-xs text-neutral-500 text-center">Scan with your GCash app · Send exactly <span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00</span></p>
                     </div>
                   </div>
                 )}
