@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
-import { Search, Calendar, Clock, User, Phone } from 'lucide-react';
+import { Search, Calendar, Clock, User, Phone, Receipt, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function TattooReservationsPage() {
   const { tattooReservations, updateTattooReservationStatus } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
+  const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const filtered = (tattooReservations || []).filter(r =>
     r.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -66,6 +69,14 @@ export function TattooReservationsPage() {
                     <td className="p-4">
                       <p className="text-white">{res.placement}</p>
                       <p className="text-xs text-neutral-500">{res.estimatedSize}</p>
+                      {res.receiptUrl && (
+                        <button
+                          onClick={() => setReceiptViewer({ url: res.receiptUrl!, ref: res.paymentReference || '', name: res.customerName })}
+                          className="mt-2 px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors flex items-center gap-1 w-fit"
+                        >
+                          <Receipt size={10} /> View Receipt
+                        </button>
+                      )}
                     </td>
                     <td className="p-4">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold border ${
@@ -96,6 +107,51 @@ export function TattooReservationsPage() {
           </table>
         </div>
       </div>
+
+      {/* Receipt Viewer Modal */}
+      <AnimatePresence>
+        {receiptViewer && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => { setReceiptViewer(null); setIsZoomed(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-4 flex-none">
+                <div>
+                  <h3 className="text-lg font-bold text-white">GCash Receipt</h3>
+                  <p className="text-xs text-neutral-500">{receiptViewer.name}</p>
+                </div>
+                <button onClick={() => { setReceiptViewer(null); setIsZoomed(false); }} className="text-neutral-600 hover:text-neutral-300">
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <div className={`relative w-full h-[55vh] min-h-[300px] max-h-[500px] bg-black rounded-lg border border-neutral-800 mb-4 flex ${isZoomed ? 'overflow-auto items-start p-0' : 'overflow-hidden items-center justify-center p-2'}`}>
+                <img 
+                  src={receiptViewer.url} 
+                  alt="Receipt" 
+                  onClick={() => setIsZoomed(!isZoomed)}
+                  className={`transition-all duration-300 rounded mx-auto ${
+                    isZoomed 
+                      ? 'w-[150%] h-auto max-w-none cursor-zoom-out' 
+                      : 'w-full h-full object-contain cursor-zoom-in'
+                  }`}
+                />
+              </div>
+
+              <div className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-4 text-center flex-none">
+                <p className="text-[10px] text-blue-500 uppercase tracking-widest font-semibold mb-1">Reference Number</p>
+                <p className="text-lg font-mono font-bold text-blue-400">{receiptViewer.ref || 'N/A'}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

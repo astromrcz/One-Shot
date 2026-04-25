@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAppContext, TATTOO_DEPOSIT } from '../context/AppContext';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { supabase } from '../../utils/supabase/client';
 
 import tattooImg1 from '@/app/assets/4ecf05cd3c60cfbf6be0fc00794d2398915a7b40.png';
 import tattooImg2 from '@/app/assets/afb5043a13bb3505979bbbad912e2d572ebed207.png';
@@ -125,7 +126,11 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
   // Modal
   const [modalStep, setModalStep] = useState(0); // 0=closed, 1=step1, 2=step2, 3=agreement, 4=payment, 5=confirmed
   const [tattooDate, setTattooDate] = useState<Date | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   // AI Generator State
   const [aiMode, setAiMode] = useState<'concept' | 'placement'>('concept');
@@ -185,6 +190,9 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
     setAgreementChecked(false);
     setConsentChecked(false);
     setInspirationImages([]);
+    setReferenceNumber('');
+    setReceiptFile(null);
+    setUploadError('');
     setForm({ name: currentUserName || '', email: currentUserEmail || '', phone: '', artistId: '', timeSlot: '14:00', placement: '', estimatedSize: '', colorStyle: '', designDescription: '' });
   };
 
@@ -216,15 +224,47 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
     setInspirationImages(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     if (!selectedArtist || !tattooDate) return;
-    setIsSubmitting(true);
-    setTimeout(() => {
+    
+    const cleanRef = referenceNumber.replace(/\s/g, '');
+    if (!referenceNumber || cleanRef.length !== 13) {
+      setUploadError("Please enter a valid 13-digit GCash Reference Number.");
+      return;
+    }
+    if (!receiptFile) {
+      setUploadError("Please upload a screenshot of your GCash receipt.");
+      return;
+    }
+
+    setConfirmingPayment(true);
+    setUploadError('');
+
+    try {
+      const { data: existingRef } = await supabase
+        .from('tattoo_reservations')
+        .select('id')
+        .eq('payment_reference', referenceNumber)
+        .maybeSingle();
+
+      if (existingRef) {
+        throw new Error("This GCash reference number has already been used. Please provide a valid, unique receipt.");
+      }
+
+      let receiptUrl = '';
+      if (receiptFile) {
+        const fileExt = receiptFile.name.split('.').pop();
+        const fileName = `tattoo-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const { data, error } = await supabase.storage.from('receipts').upload(fileName, receiptFile);
+        if (error) throw error;
+        receiptUrl = supabase.storage.from('receipts').getPublicUrl(fileName).data.publicUrl;
+      }
+
       const resDate = new Date(tattooDate);
       const [h, m] = form.timeSlot.split(':').map(Number);
       resDate.setHours(h, m, 0, 0);
 
-      addTattooReservation({
+      await addTattooReservation({
         customerName: form.name,
         contactNumber: form.phone,
         email: form.email,
@@ -243,11 +283,16 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
         depositAmount: TATTOO_DEPOSIT,
         depositPaid: true,
         inspirationImages: inspirationImages.length > 0 ? inspirationImages : undefined,
+        paymentReference: referenceNumber,
+        receiptUrl: receiptUrl,
       });
 
-      setIsSubmitting(false);
+      setConfirmingPayment(false);
       setModalStep(5);
-    }, 1500);
+    } catch (err: any) {
+      setUploadError(err.message || "Failed to process payment details.");
+      setConfirmingPayment(false);
+    }
   };
 
   return (
@@ -810,6 +855,39 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
                       </div>
                       <p className="text-xs text-neutral-500 text-center">Scan with your GCash app · Send exactly <span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00</span></p>
                     </div>
+
+                    <div className="w-full space-y-3 pt-2 text-left border-t border-neutral-800">
+                      {uploadError && (
+                        <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg">
+                          {uploadError}
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference Number <span className="text-rose-500">*</span></label>
+                        <input
+                          type="text"
+                          value={referenceNumber}
+                          onChange={e => { 
+                            const val = e.target.value;
+                            if (val.replace(/\s/g, '').length <= 13) {
+                              setReferenceNumber(val); 
+                              setUploadError(''); 
+                            }
+                          }}
+                          placeholder="e.g. 10023948293"
+                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-rose-500">*</span></label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={e => { setReceiptFile(e.target.files?.[0] || null); setUploadError(''); }}
+                          className="w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 transition-all cursor-pointer"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -835,9 +913,9 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
                   </button>
                 )}
                 {modalStep === 4 && (
-                  <button onClick={handleFinalSubmit} disabled={isSubmitting}
-                    className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800 text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2">
-                    {isSubmitting ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Processing...</> : <><CheckCircle size={15} /> I've Sent the Deposit</>}
+                  <button onClick={handleFinalSubmit} disabled={confirmingPayment || !referenceNumber}
+                    className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2">
+                    {confirmingPayment ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Verifying...</> : <><CheckCircle size={15} /> I've Sent the Deposit</>}
                   </button>
                 )}
               </div>

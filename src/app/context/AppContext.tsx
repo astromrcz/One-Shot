@@ -153,6 +153,8 @@ export type TattooReservation = {
   proposedDate?: Date;
   proposedTimeSlot?: string;
   customerRescheduleConfirmed?: boolean | null;
+  paymentReference?: string;
+  receiptUrl?: string;
 };
 
 export const TATTOO_DEPOSIT = 500;
@@ -554,6 +556,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined,
         proposedTimeSlot: row.proposed_time_slot || undefined,
         customerRescheduleConfirmed: row.customer_reschedule_confirmed,
+        paymentReference: row.payment_reference || undefined,
+        receiptUrl: row.receipt_url || undefined,
       })));
 
       if (staffError) console.error('Error fetching staff users:', staffError);
@@ -1139,6 +1143,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       proposed_date: item.proposedDate?.toISOString(),
       proposed_time_slot: item.proposedTimeSlot,
       customer_reschedule_confirmed: item.customerRescheduleConfirmed,
+      payment_reference: item.paymentReference,
+      receipt_url: item.receiptUrl,
     }]);
     setTattooReservations(prev => [reservation, ...prev]);
     await addActivity('tattoo_reservation_created', `Tattoo reservation for ${item.customerName}`);

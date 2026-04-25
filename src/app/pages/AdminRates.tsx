@@ -54,7 +54,7 @@ export function AdminRates() {
     <div className="space-y-5 max-w-3xl">
       {saved && (
         <div className="flex items-center gap-2.5 bg-emerald-950/40 border border-emerald-700/40 text-emerald-400 text-sm px-4 py-3 rounded-xl">
-          <CheckCircle size={15} /> Rates updated and applied immediately!
+          <CheckCircle size={15} /> Rates updated and applied!
         </div>
       )}
 

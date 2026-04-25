@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useAppContext, StaffUser } from '../context/AppContext';
-import { Plus, X, User, Mail, Phone, ToggleLeft, ToggleRight, RefreshCw, Pencil, CheckCircle, ShieldCheck, Palette, BadgeDollarSign } from 'lucide-react';
+import { 
+  Plus, X, User, Mail, Phone, RefreshCw, Pencil, CheckCircle, 
+  ShieldCheck, Palette, BadgeDollarSign, Archive, ArchiveRestore, ChevronDown, ChevronUp,
+  Lock, AlertTriangle
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 const ROLES: { value: StaffUser['role']; label: string; color: string; icon: React.ReactNode }[] = [
   { value: 'manager',       label: 'Manager',       color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',   icon: <User size={11} /> },
@@ -15,12 +20,23 @@ type FormState = {
 const blankForm: FormState = { username: '', fullName: '', email: '', role: 'manager', isAdmin: false, artistId: '', phone: '', isActive: true };
 
 export function AdminUsers() {
-  const { staffUsers, tattooArtists, addStaffUser, updateStaffUser, toggleStaffUserActive, resetStaffUserPassword } = useAppContext();
+  const { staffUsers, tattooArtists, addStaffUser, updateStaffUser, toggleStaffUserActive, resetStaffUserPassword, staffProfile, adminLogin } = useAppContext();
+  
+  // Modals & States
   const [showForm, setShowForm]     = useState(false);
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [form, setForm]             = useState<FormState>(blankForm);
   const [resetMsg, setResetMsg]     = useState<string | null>(null);
   const [filterRole, setFilterRole] = useState<'all' | StaffUser['role']>('all');
+  const [showArchived, setShowArchived] = useState(false);
+
+  // Loading & Security States
+  const [isSaving, setIsSaving]           = useState(false);
+  const [isResettingId, setIsResettingId] = useState<string | null>(null);
+  const [restoringId, setRestoringId]     = useState<string | null>(null);
+  const [archivingUser, setArchivingUser] = useState<StaffUser | null>(null);
+  const [archivePassword, setArchivePassword] = useState('');
+  const [isArchiving, setIsArchiving]     = useState(false);
 
   const openAdd = () => { setEditingId(null); setForm(blankForm); setShowForm(true); };
   const openEdit = (u: StaffUser) => {
@@ -29,41 +45,167 @@ export function AdminUsers() {
     setShowForm(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  // ── Database Actions ────────────────────────────────────────────────────────
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.username || !form.fullName || !form.email) return;
     
+    setIsSaving(true);
     const payload = {
       ...form,
       artistId: form.role === 'tattoo-artist' && form.artistId ? form.artistId : undefined,
     };
     
-    if (editingId) {
-      updateStaffUser(editingId, payload);
-    } else {
-      // Automatically assign the default password for new users
-      addStaffUser({ ...payload, password: 'oneshotdefaultpw' });
+    try {
+      if (editingId) {
+        await updateStaffUser(editingId, payload);
+        toast.success("User Updated", { description: "Staff account changes saved." });
+      } else {
+        await addStaffUser({ ...payload, password: 'oneshotdefaultpw' });
+        toast.success("User Created", { description: "New staff account added." });
+      }
+      setShowForm(false); setEditingId(null); setForm(blankForm);
+    } catch (err) {
+      toast.error("Database Error", { description: "Failed to save user data." });
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleReset = async (id: string, name: string) => {
+    setIsResettingId(id);
+    try {
+      await resetStaffUserPassword(id);
+      setResetMsg(`Password for "${name}" reset to: oneshotdefaultpw`);
+      toast.success("Password Reset", { description: "Password returned to default." });
+      setTimeout(() => setResetMsg(null), 5000);
+    } catch(err) {
+      toast.error("Database Error", { description: "Could not reset password." });
+    } finally {
+      setIsResettingId(null);
+    }
+  };
+
+  // ── Archive & Restore Security ──────────────────────────────────────────────
+  const handleArchiveClick = (u: StaffUser) => {
+    // SECURITY: Prevent archiving the very last admin
+    if (u.isAdmin) {
+      const activeAdmins = staffUsers.filter(su => su.isAdmin && su.isActive);
+      if (activeAdmins.length <= 1) {
+        toast.error("Action Denied", { description: "You must leave at least one Admin account active to prevent system lockout." });
+        return;
+      }
+    }
+    setArchivingUser(u);
+    setArchivePassword('');
+  };
+
+  const confirmArchive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!archivingUser) return;
+    setIsArchiving(true);
     
-    setShowForm(false); setEditingId(null); setForm(blankForm);
+    // Verify the current admin's password before executing
+    const isValid = await adminLogin(staffProfile.username, archivePassword);
+    if (!isValid) {
+      toast.error("Authentication Failed", { description: "Incorrect admin password." });
+      setIsArchiving(false);
+      return;
+    }
+
+    try {
+      await toggleStaffUserActive(archivingUser.id);
+      toast.success("Account Archived", { description: `${archivingUser.fullName}'s access has been revoked.` });
+      setArchivingUser(null);
+    } catch (err) {
+      toast.error("Database Error", { description: "Failed to archive account." });
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
-  const handleReset = (id: string, name: string) => {
-    resetStaffUserPassword(id);
-    setResetMsg(`Password for "${name}" reset to: oneshotdefaultpw`);
-    setTimeout(() => setResetMsg(null), 4000);
+  const handleRestore = async (u: StaffUser) => {
+    setRestoringId(u.id);
+    try {
+      await toggleStaffUserActive(u.id);
+      toast.success("Account Restored", { description: `${u.fullName} is active again.` });
+    } catch(err) {
+      toast.error("Database Error", { description: "Failed to restore account." });
+    } finally {
+      setRestoringId(null);
+    }
   };
 
+  // ── Rendering Helpers ───────────────────────────────────────────────────────
   const filtered = staffUsers.filter(u => filterRole === 'all' || u.role === filterRole);
-
+  const activeUsers = filtered.filter(u => u.isActive);
+  const archivedUsers = filtered.filter(u => !u.isActive);
   const roleConfig = (role: StaffUser['role']) => ROLES.find(r => r.value === role) ?? ROLES[0];
+
+  const renderUserCard = (u: StaffUser, isArchived: boolean) => {
+    const rc = roleConfig(u.role);
+    const linkedArtist = u.artistId ? tattooArtists.find(a => a.id === u.artistId) : null;
+    return (
+      <div key={u.id} className={`bg-neutral-950 border rounded-xl p-5 transition-colors ${!isArchived ? 'border-neutral-800' : 'border-neutral-800/50 opacity-60'}`}>
+        <div className="flex items-start gap-4">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-base font-black flex-shrink-0 border ${u.isAdmin ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : u.role === 'tattoo-artist' ? 'bg-pink-500/10 border-pink-500/20 text-pink-400' : 'bg-neutral-800 border-neutral-700 text-neutral-300'}`}>
+            {u.fullName.charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <p className="text-sm font-bold text-neutral-100">{u.fullName}</p>
+              {u.isAdmin && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <ShieldCheck size={9} /> Admin
+                </span>
+              )}
+              <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${rc.color}`}>
+                {rc.icon} {rc.label}
+              </span>
+              {isArchived && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-500 border border-neutral-700">Archived</span>}
+            </div>
+            <div className="flex items-center gap-4 text-xs text-neutral-500 flex-wrap">
+              <span className="flex items-center gap-1"><User size={10} /> @{u.username}</span>
+              <span className="flex items-center gap-1"><Mail size={10} /> {u.email}</span>
+              {u.phone && <span className="flex items-center gap-1"><Phone size={10} /> {u.phone}</span>}
+            </div>
+            {linkedArtist && (
+              <p className="text-[10px] text-pink-400/70 mt-0.5 flex items-center gap-1">
+                <Palette size={9} /> Linked: {linkedArtist.name} ({linkedArtist.specialty})
+              </p>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button onClick={() => openEdit(u)} title="Edit User" className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
+              <Pencil size={14} />
+            </button>
+            <button onClick={() => handleReset(u.id, u.fullName)} disabled={isResettingId === u.id} title="Reset Password" className="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 transition-colors disabled:opacity-50">
+              {isResettingId === u.id ? <RefreshCw size={14} className="animate-spin text-amber-500" /> : <RefreshCw size={14} />}
+            </button>
+            
+            {/* Archive / Restore Toggle */}
+            {isArchived ? (
+              <button onClick={() => handleRestore(u)} disabled={restoringId === u.id} title="Restore Account" className="p-2 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-emerald-950/20 transition-colors disabled:opacity-50">
+                {restoringId === u.id ? <RefreshCw size={16} className="animate-spin text-emerald-500" /> : <ArchiveRestore size={16} />}
+              </button>
+            ) : (
+              <button onClick={() => handleArchiveClick(u)} title="Archive Account" className="p-2 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-colors">
+                <Archive size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Total Users',     value: staffUsers.length,                                      color: 'text-white' },
+          { label: 'Total Users',     value: staffUsers.length,                                       color: 'text-white' },
           { label: 'Active',          value: staffUsers.filter(u => u.isActive).length,               color: 'text-emerald-400' },
           { label: 'Tattoo Artists',  value: staffUsers.filter(u => u.role === 'tattoo-artist').length, color: 'text-pink-400' },
           { label: 'Admins',          value: staffUsers.filter(u => u.isAdmin).length,                color: 'text-amber-400' },
@@ -97,58 +239,88 @@ export function AdminUsers() {
         </button>
       </div>
 
-      {/* User List */}
+      {/* Active User List */}
       <div className="space-y-3">
-        {filtered.length === 0 ? (
+        {activeUsers.length === 0 ? (
           <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-12 text-center">
             <User size={32} className="mx-auto text-neutral-700 mb-3" />
-            <p className="text-neutral-500">No users found</p>
+            <p className="text-neutral-500">No active users found.</p>
           </div>
-        ) : filtered.map(u => {
-          const rc = roleConfig(u.role);
-          const linkedArtist = u.artistId ? tattooArtists.find(a => a.id === u.artistId) : null;
-          return (
-            <div key={u.id} className={`bg-neutral-950 border rounded-xl p-5 transition-colors ${u.isActive ? 'border-neutral-800' : 'border-neutral-800/50 opacity-60'}`}>
-              <div className="flex items-start gap-4">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-base font-black flex-shrink-0 border ${u.isAdmin ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : u.role === 'tattoo-artist' ? 'bg-pink-500/10 border-pink-500/20 text-pink-400' : 'bg-neutral-800 border-neutral-700 text-neutral-300'}`}>
-                  {u.fullName.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <p className="text-sm font-bold text-neutral-100">{u.fullName}</p>
-                    {u.isAdmin && (
-                      <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        <ShieldCheck size={9} /> Admin
-                      </span>
-                    )}
-                    <span className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${rc.color}`}>
-                      {rc.icon} {rc.label}
-                    </span>
-                    {!u.isActive && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-500 border border-neutral-700">Inactive</span>}
+        ) : (
+          activeUsers.map(u => renderUserCard(u, false))
+        )}
+      </div>
+
+      {/* Archived Accounts Section */}
+      {archivedUsers.length > 0 && (
+        <div className="pt-6 mt-6 border-t border-neutral-800/60">
+          <button 
+            onClick={() => setShowArchived(p => !p)} 
+            className="flex items-center gap-2 text-neutral-400 hover:text-neutral-200 transition-colors text-sm font-semibold mb-4"
+          >
+            {showArchived ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            Archived Accounts ({archivedUsers.length})
+          </button>
+          
+          {showArchived && (
+            <div className="space-y-3">
+              {archivedUsers.map(u => renderUserCard(u, true))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {archivingUser && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-rose-900/30 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-500/20">
+                <AlertTriangle size={24} />
+              </div>
+              <h2 className="text-lg font-bold text-neutral-100 mb-2">Archive Account?</h2>
+              <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
+                You are about to archive <strong className="text-neutral-200">{archivingUser.fullName}</strong>. They will immediately lose access to the system. Enter your admin password to confirm.
+              </p>
+              
+              <form onSubmit={confirmArchive}>
+                <div className="relative mb-6 text-left">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                    <Lock size={16} className="text-neutral-500" />
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-neutral-500 flex-wrap">
-                    <span className="flex items-center gap-1"><User size={10} /> @{u.username}</span>
-                    <span className="flex items-center gap-1"><Mail size={10} /> {u.email}</span>
-                    {u.phone && <span className="flex items-center gap-1"><Phone size={10} /> {u.phone}</span>}
-                  </div>
-                  {linkedArtist && (
-                    <p className="text-[10px] text-pink-400/70 mt-0.5 flex items-center gap-1">
-                      <Palette size={9} /> Linked: {linkedArtist.name} ({linkedArtist.specialty})
-                    </p>
-                  )}
+                  <input 
+                    type="password" 
+                    value={archivePassword}
+                    onChange={e => setArchivePassword(e.target.value)}
+                    required
+                    autoFocus
+                    placeholder="Your admin password"
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-10 pr-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-rose-500/50 transition-colors placeholder-neutral-600"
+                  />
                 </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button onClick={() => openEdit(u)} className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"><Pencil size={14} /></button>
-                  <button onClick={() => handleReset(u.id, u.fullName)} title="Reset Password" className="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 transition-colors"><RefreshCw size={14} /></button>
-                  <button onClick={() => toggleStaffUserActive(u.id)} className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
-                    {u.isActive ? <ToggleRight size={18} className="text-emerald-400" /> : <ToggleLeft size={18} />}
+                
+                <div className="flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setArchivingUser(null)}
+                    disabled={isArchiving}
+                    className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors font-semibold disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isArchiving || !archivePassword}
+                    className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl transition-colors font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isArchiving ? <RefreshCw size={16} className="animate-spin" /> : "Archive User"}
                   </button>
                 </div>
-              </div>
+              </form>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Modal */}
       {showForm && (
@@ -200,7 +372,7 @@ export function AdminUsers() {
                 </div>
               </div>
 
-              {/* Artist linkage (visible only for tattoo-artist role) */}
+              {/* Artist linkage */}
               {form.role === 'tattoo-artist' && (
                 <div className="bg-pink-950/20 border border-pink-900/30 rounded-xl p-3">
                   <label className="text-xs text-neutral-400 mb-1.5 block font-medium">Link to Artist Profile</label>
@@ -232,21 +404,12 @@ export function AdminUsers() {
                 </label>
               </div>
 
-              {/* Active toggle */}
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div className={`w-10 h-5 rounded-full transition-colors relative ${form.isActive ? 'bg-emerald-600' : 'bg-neutral-700'}`}
-                  onClick={() => setForm(f => ({ ...f, isActive: !f.isActive }))}>
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </div>
-                <span className="text-xs text-neutral-400">Account Active</span>
-              </label>
-
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)}
                   className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
-                <button type="submit"
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-xl font-semibold transition-all py-2.5 flex items-center justify-center gap-2">
-                  {editingId ? <><Pencil size={14} /> Save Changes</> : <><Plus size={14} /> Create User</>}
+                <button type="submit" disabled={isSaving}
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-xl font-semibold transition-all py-2.5 flex items-center justify-center gap-2 disabled:opacity-50">
+                  {isSaving ? <RefreshCw size={14} className="animate-spin" /> : editingId ? <><Pencil size={14} /> Save Changes</> : <><Plus size={14} /> Create User</>}
                 </button>
               </div>
             </form>
