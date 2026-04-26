@@ -46,7 +46,7 @@ export function Reservations() {
         const balance = r.totalAmount - r.downPaymentAmount;
         
         await emailjs.send(
-          'service_d5kmgtc',   // ⚠️ Replace with your EmailJS Service ID
+          'service_d5kmgtc',   
           'template_48a5pgd',  // ⚠️ Replace with your EmailJS Template ID
           {
             to_email: r.email,
@@ -562,10 +562,37 @@ export function Reservations() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (cancelTarget) {
-                      cancelReservation(cancelTarget, cancelReason);
+                      // 1. Find the reservation details so we know who to email
+                      const r = reservations.find(res => res.id === cancelTarget);
+                      
+                      // 2. Cancel it in the database
+                      await cancelReservation(cancelTarget, cancelReason);
+                      
+                      // 3. Send the Cancellation Email!
+                      if (r && r.email) {
+                        try {
+                          await emailjs.send(
+                            'service_d5kmgtc',       
+                            'template_0wj40mo', 
+                            {
+                              to_email: r.email,
+                              customer_name: r.customerName,
+                              date: r.date ? format(new Date(r.date), 'MMM d, yyyy') : '',
+                              reason: cancelReason || 'Cancelled by Management',
+                            },
+                            'agtFkbRS7r_lgBWMV'        // ⚠️ Replace with your Public Key
+                          );
+                          console.log("Cancellation email sent!");
+                        } catch (error) {
+                          console.error("Failed to send cancellation email:", error);
+                        }
+                      }
+                      
                       setShowCancelDialog(false);
+                      setCancelTarget(null);
+                      setCancelReason('');
                     }
                   }}
                   className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl font-semibold transition-all shadow-lg shadow-rose-900/30 flex items-center justify-center gap-2"

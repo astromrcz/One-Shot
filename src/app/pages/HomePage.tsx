@@ -688,10 +688,27 @@ export function HomePage() {
     setResError('');
   };
 
-  const handleSimpleFeedbackSubmit = () => {
+  const handleSimpleFeedbackSubmit = async () => {
     if (!simpleFeedbackForm.name || !simpleFeedbackForm.type || !simpleFeedbackForm.contact) return;
-    setSimpleFeedbackSent(true);
-    setTimeout(() => { setSimpleFeedbackSent(false); setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); }, 3000);
+    
+    try {
+      // 🚨 ACTUALLY SAVE TO SUPABASE!
+      await addFeedback({
+        customerName: simpleFeedbackForm.name,
+        contactNumber: simpleFeedbackForm.contact,
+        rating: 5, // Default rating for general messages
+        comment: `[${simpleFeedbackForm.type.toUpperCase()}] ${simpleFeedbackForm.message}`,
+        status: 'new'
+      });
+      
+      setSimpleFeedbackSent(true);
+      setTimeout(() => { 
+        setSimpleFeedbackSent(false); 
+        setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); 
+      }, 3000);
+    } catch (error) {
+      toast.error("Failed to send message. Please try again.");
+    }
   };
 
   const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + dynamicHeroSlides.length) % dynamicHeroSlides.length); };
