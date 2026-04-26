@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
+import { supabase } from '../../utils/supabase/client'; // 🚨 ADD THIS IMPORT
 
 type Section = 'profile' | 'security' | 'account';
 
@@ -55,20 +56,31 @@ export function SettingsPage() {
     flashSaved('profile');
   };
 
-  const handleSaveSecurity = () => {
+  const handleSaveSecurity = async () => {
     setSecError('');
-    // Frontend plain-text verification removed due to secure backend hashing
     if (secForm.newPassword && secForm.newPassword.length < 6) { setSecError('New password must be at least 6 characters.'); return; }
     if (secForm.newPassword && secForm.newPassword !== secForm.confirmPassword) { setSecError('New passwords do not match.'); return; }
     
-    updateStaffProfile({
-      username: secForm.username || staffProfile.username,
-      ...(secForm.newPassword ? { password: secForm.newPassword } : {}),
-    });
-    
-    setSecEdit(false);
-    setSecForm(f => ({ ...f, currentPassword: '', newPassword: '', confirmPassword: '' }));
-    flashSaved('security');
+    try {
+      // 1. Update username in your custom table
+      updateStaffProfile({
+        username: secForm.username || staffProfile.username,
+      });
+
+      // 2. 🚨 ACTUALLY Update the password in Supabase Auth!
+      if (secForm.newPassword) {
+        const { error } = await supabase.auth.updateUser({
+          password: secForm.newPassword
+        });
+        if (error) throw error;
+      }
+      
+      setSecEdit(false);
+      setSecForm(f => ({ ...f, currentPassword: '', newPassword: '', confirmPassword: '' }));
+      flashSaved('security');
+    } catch (error: any) {
+      setSecError(error.message || 'Failed to update security settings.');
+    }
   };
 
   const handleLogout = async () => {

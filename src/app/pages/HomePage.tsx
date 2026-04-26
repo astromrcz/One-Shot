@@ -24,13 +24,10 @@ import heroImg5 from '@/app/assets/0784e9fa4728a17ea332ccf7dd013e304884f734.png'
 import gcashQrImg from '@/app/assets/GcashOneShot.jpg';
 import { toast } from 'sonner';
 
-const ANNOUNCEMENTS = [
+const DEFAULT_ANNOUNCEMENTS = [
   "🎱 Welcome to One Shot Bar & Billiards! Book your favorite table now!",
   "📍 Visit us at Autobase OAX, San Juan, Cainta, Rizal · Mon–Sat 12PM–3AM · Sun 5PM–3AM",
   "💸 Happy Hour: 6PM – 8PM – Get 20% off walk-in rates every weekday!",
-  "📅 Reserve in advance and secure your preferred date & time slot!",
-  "🏆 Tournament Night every Saturday! Cash prizes await champions!",
-  "🎉 FREE pool lessons every Sunday evening — visit us at Autobase OAX!",
   "☎️ For inquiries: 0917-123-4567 | oneshot.billiards@gmail.com",
 ];
 
@@ -198,8 +195,13 @@ function MiniCalendar({
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings } = useAppContext();
+  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings, announcements } = useAppContext();
   
+  // Setup dynamic announcements from the database
+  const activeAnnouncements = announcements && announcements.filter(a => a.isActive).length > 0
+    ? announcements.filter(a => a.isActive).map(a => a.content)
+    : DEFAULT_ANNOUNCEMENTS;
+
   // Safe fallbacks in case settings haven't loaded
   const displayLogo = siteSettings?.logoUrl || logoImg;
   
@@ -310,9 +312,9 @@ export function HomePage() {
   const downPayment = Math.ceil(totalAmount * ((rates?.downPaymentPercent || 25) / 100));
 
   useEffect(() => {
-    const interval = setInterval(() => { setAnnouncementDir(1); setAnnouncementIdx(prev => (prev + 1) % ANNOUNCEMENTS.length); }, 4500);
+    const interval = setInterval(() => { setAnnouncementDir(1); setAnnouncementIdx(prev => (prev + 1) % activeAnnouncements.length); }, 4500);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeAnnouncements.length]);
 
   // 🚨 Automatically adjust the timer to match the number of images!
   useEffect(() => {
@@ -353,10 +355,13 @@ export function HomePage() {
 
     // 3. Listen for changes (like logging out in another tab)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
+      // 🚨 FIX: Catch BOTH standard recovery and the hash fragment
+      if (event === 'PASSWORD_RECOVERY' || window.location.hash.includes('type=recovery')) {
         setShowForgotPwModal(false);
         setShowLoginModal(false);
         setShowUpdatePwModal(true);
+        // Clear the hash so it doesn't trigger again on refresh
+        if (window.location.hash) window.history.replaceState(null, '', window.location.pathname);
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
       }
@@ -757,7 +762,7 @@ export function HomePage() {
             <div className="flex-1 overflow-hidden text-center">
               <AnimatePresence mode="wait">
                 <motion.p key={announcementIdx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35 }} className="text-xs text-neutral-300 truncate">
-                  {ANNOUNCEMENTS[announcementIdx]}
+                  {activeAnnouncements[announcementIdx]}
                 </motion.p>
               </AnimatePresence>
             </div>

@@ -133,9 +133,11 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
 }
 
 // ── Queue Row ──────────────────────────────────────────────────
-function QueueRow({ item, position }: { item: QueueItem; position: number }) {
+function QueueRow({ item, position, onSeat }: { item: QueueItem; position: number, onSeat: () => void }) {
   return (
-    <div className={`flex items-center gap-4 px-4 py-3 rounded-xl border ${
+    <div 
+      onClick={item.status === 'called' ? onSeat : undefined}
+      className={`flex items-center gap-4 px-4 py-3 rounded-xl border ${item.status === 'called' ? 'cursor-pointer hover:bg-emerald-950/60' : ''} ${
       item.status === 'called'
         ? 'bg-emerald-950/40 border-emerald-700/40'
         : 'bg-neutral-900/60 border-neutral-800/60'
@@ -302,7 +304,15 @@ export function LiveMonitor() {
             ) : (
               <div className="space-y-2">
                 {waitingQueue.map((item, i) => (
-                  <QueueRow key={item.id} item={item} position={i + 1} />
+                  <QueueRow 
+                    key={item.id} 
+                    item={item} 
+                    position={i + 1} 
+                    onSeat={() => {
+                      // Just navigate them directly to the table management page!
+                      window.location.href = '/staff/tables';
+                    }}
+                  />
                 ))}
               </div>
             )}
