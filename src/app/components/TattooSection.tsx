@@ -14,6 +14,7 @@ import tattooImg2 from '@/app/assets/afb5043a13bb3505979bbbad912e2d572ebed207.pn
 import tattooImg3 from '@/app/assets/2f188da8dacd0f992505b4f11fbe67f8e9f7c369.png';
 import tattooImg4 from '@/app/assets/fd6942fee056e3b615efe7cd116d0c2bba0f1f84.png';
 import tattooImg5 from '@/app/assets/830c44fd25fb8f30ae66601d56b2e9f05cebeec7.png';
+import gcashQrImg from '@/app/assets/GcashOneShot.jpg';
 
 const TATTOO_SLIDES = [
   { src: tattooImg1, caption: 'Black & Grey Masterwork' },
@@ -847,8 +848,10 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
                       <div className="flex justify-between"><span className="text-neutral-500">Placement</span><span className="text-neutral-200">{form.placement}</span></div>
                     </div>
 
-                    <div className="flex flex-col items-center gap-3 bg-blue-900/10 border border-blue-900/30 p-6 rounded-2xl">
-                      <QRDisplay pattern={QR_GCASH} color="#1d4ed8" />
+                   <div className="flex flex-col items-center gap-3 bg-blue-900/10 border border-blue-900/30 p-6 rounded-2xl">
+                      <div className="bg-white p-2 rounded-xl inline-block w-32 h-32 flex items-center justify-center shadow-lg">
+                        <img src={gcashQrImg} alt="GCash QR Code" className="w-full h-full object-contain rounded-lg" />
+                      </div>
                       <div className="text-center">
                         <p className="text-sm font-bold text-blue-400">ONE SHOT BAR & BILLIARDS</p>
                         <p className="text-xs text-neutral-500">+63 917-123-4567</p>

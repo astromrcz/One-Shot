@@ -21,6 +21,7 @@ import heroImg2 from '@/app/assets/f80be24577ead53e120a2e3792c660d627f94c6f.png'
 import heroImg3 from '@/app/assets/622002b1a57eb609a09cacd650764fb95c911672.png';
 import heroImg4 from '@/app/assets/759b04149309a4f38a99d59a2ef822b4e59fd5d3.png';
 import heroImg5 from '@/app/assets/0784e9fa4728a17ea332ccf7dd013e304884f734.png';
+import gcashQrImg from '@/app/assets/GcashOneShot.jpg';
 import { toast } from 'sonner';
 
 const ANNOUNCEMENTS = [
@@ -1199,33 +1200,47 @@ export function HomePage() {
                       }
                       return (
                         <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
-                          {myReservations.map(r => (
-                            <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
-                              <div className="flex justify-between items-start mb-1.5">
-                                <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                  r.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
-                                  r.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
-                                  r.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
-                                  'bg-rose-500/10 text-rose-400'
-                                }`}>{r.status}</span>
+                          {myReservations.map(r => {
+                            // 🚨 TIME CHECK: Is this reservation from yesterday or earlier?
+                            const rDate = new Date(r.date);
+                            rDate.setHours(0,0,0,0);
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            
+                            const isPastDate = rDate.getTime() < today.getTime();
+                            
+                            // If it's a past date and not cancelled, force the display to show 'completed'
+                            const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
+
+                            return (
+                              <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
+                                <div className="flex justify-between items-start mb-1.5">
+                                  <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                    displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                    displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                    displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                    'bg-rose-500/10 text-rose-400'
+                                  }`}>{displayStatus}</span>
+                                </div>
+                                <div className="flex justify-between text-neutral-500 text-[11px]">
+                                  <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
+                                  <span>₱{r.totalAmount}</span>
+                                </div>
+                                
+                                {/* 🚨 CANCEL BUTTON LOGIC 🚨 */}
+                                {/* Only show Cancel if it's an active status AND NOT a past date! */}
+                                {!isPastDate && (r.status === 'pending' || r.status === 'confirmed') && (
+                                  <button
+                                    onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
+                                    className="w-full mt-2.5 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider"
+                                  >
+                                    Cancel Booking
+                                  </button>
+                                )}
                               </div>
-                              <div className="flex justify-between text-neutral-500 text-[11px]">
-                                <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
-                                <span>₱{r.totalAmount}</span>
-                              </div>
-                              
-                              {/* 🚨 NEW: Cancel Button (Only shows for active bookings) 🚨 */}
-                              {(r.status === 'pending' || r.status === 'confirmed') && (
-                                <button
-                                  onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
-                                  className="w-full mt-2.5 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider"
-                                >
-                                  Cancel Booking
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       );
                     })()}
@@ -1953,7 +1968,9 @@ export function HomePage() {
 
                 <div className="flex flex-col items-center gap-4">
                   <div className="flex flex-col items-center gap-2">
-                    <QRDisplay pattern={QR_GCASH} color="#1d4ed8" />
+                    <div className="bg-white p-2 rounded-xl inline-block w-36 h-36 flex items-center justify-center shadow-lg">
+                      <img src={gcashQrImg} alt="GCash QR Code" className="w-full h-full object-contain rounded-lg" />
+                    </div>
                     <div className="text-center">
                       <p className="text-sm font-bold text-blue-400">GCash</p>
                       <p className="text-xs text-neutral-300 font-semibold">ONE SHOT BAR & BILLIARDS</p>

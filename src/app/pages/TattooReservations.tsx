@@ -119,7 +119,7 @@ export function TattooReservationsPage() {
             <motion.div
               initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
               onClick={e => e.stopPropagation()}
-              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl flex flex-col max-h-[90vh]"
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-xl shadow-2xl flex flex-col max-h-[95vh]"
             >
               <div className="flex items-center justify-between mb-4 flex-none">
                 <div>
@@ -131,14 +131,14 @@ export function TattooReservationsPage() {
                 </button>
               </div>
               
-              <div className={`relative w-full h-[55vh] min-h-[300px] max-h-[500px] bg-black rounded-lg border border-neutral-800 mb-4 flex ${isZoomed ? 'overflow-auto items-start p-0' : 'overflow-hidden items-center justify-center p-2'}`}>
+              <div className={`relative w-full h-[70vh] min-h-[400px] max-h-[800px] bg-black rounded-lg border border-neutral-800 mb-4 flex ${isZoomed ? 'overflow-auto items-start p-0' : 'overflow-hidden items-center justify-center p-2'}`}>
                 <img 
                   src={receiptViewer.url} 
                   alt="Receipt" 
                   onClick={() => setIsZoomed(!isZoomed)}
                   className={`transition-all duration-300 rounded mx-auto ${
                     isZoomed 
-                      ? 'w-[150%] h-auto max-w-none cursor-zoom-out' 
+                      ? 'w-[200%] h-auto max-w-none cursor-zoom-out' 
                       : 'w-full h-full object-contain cursor-zoom-in'
                   }`}
                 />
