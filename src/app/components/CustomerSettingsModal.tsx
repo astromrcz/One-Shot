@@ -4,7 +4,7 @@ import {
   User, Lock, Shield, Pencil, X, Save, CheckCircle,
   AlertTriangle, LogOut, Mail, Phone, EyeOff, Eye, Award
 } from 'lucide-react';
-
+import { supabase } from '../../utils/supabase/client';
 type Section = 'profile' | 'security' | 'account';
 
 // Define the shape of our customer data based on what HomePage uses
@@ -62,15 +62,37 @@ export function CustomerSettingsModal({
     flashSaved('profile');
   };
 
-  const handleSaveSecurity = () => {
+  const handleSaveSecurity = async () => {
     setSecError('');
-    if (!secForm.currentPassword) { setSecError('Enter current password to save changes.'); return; }
+    if (!secForm.currentPassword) { setSecError('Enter your current password to confirm.'); return; }
     if (secForm.newPassword !== secForm.confirmPassword) { setSecError('New passwords do not match.'); return; }
+    if (secForm.newPassword.length < 6) { setSecError('New password must be at least 6 characters.'); return; }
     
-    // In a real app, verify old password with Supabase here
-    setSecEdit(false);
-    setSecForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    flashSaved('security');
+    try {
+      // 1. Verify their current password is correct by attempting a silent login
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: secForm.currentPassword
+      });
+
+      if (signInError) {
+        setSecError('Incorrect current password.');
+        return;
+      }
+
+      // 2. Actually update their password in the Supabase Vault
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: secForm.newPassword
+      });
+
+      if (updateError) throw updateError;
+
+      setSecEdit(false);
+      setSecForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      flashSaved('security');
+    } catch (error: any) {
+      setSecError(error.message || 'Failed to update password.');
+    }
   };
 
   if (!isOpen) return null;
