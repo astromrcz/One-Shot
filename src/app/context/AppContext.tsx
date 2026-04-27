@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../../utils/supabase/client';
-
+import { toast } from 'sonner';
 export type TableStatus = 'available' | 'occupied' | 'reserved';
 
 export type OrderItem = {
@@ -1453,6 +1453,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}`
+          
         },
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
@@ -1464,6 +1465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           contents: { "en": message }
         })
       });
+      console.log("TESTING MY REST KEY:", import.meta.env.VITE_ONESIGNAL_REST_KEY);
     } catch (err) {
       console.error("Admin push failed to send:", err);
     }
