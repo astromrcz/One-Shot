@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Clock, Play, X, User, Zap, Calendar } from 'lucide-react';
 import { addMinutes, differenceInSeconds, differenceInMinutes, format, isToday, isTomorrow } from 'date-fns';
-import { Table, HOURLY_RATE } from '../context/AppContext';
+import { Table, useAppContext } from '../context/AppContext';
 import clsx from 'clsx';
 
 interface TableCardProps {
@@ -16,22 +16,41 @@ const formatPHP = (amount: number) => `₱${amount.toFixed(2)}`;
 
 export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }: TableCardProps) {
   const [now, setNow] = useState(new Date());
+  const { rates } = useAppContext(); // 🚨 STEP 21: Fetch live dynamic rates!
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
+    const interval = setInterval(() => {
+      const newNow = new Date();
+      setNow(newNow);
+      
+      // 🚨 STEP 7: TTS Notification Logic (15 min and 1 min)
+      if (table.session && table.session.durationMinutes > 0) {
+        const endTime = addMinutes(new Date(table.session.startTime), table.session.durationMinutes);
+        const secsLeft = differenceInSeconds(endTime, newNow);
+        
+        if (secsLeft === 900) { // Exactly 15 mins
+          const u = new SpeechSynthesisUtterance(`Table ${table.name.replace('Table ', '')}, 15 minutes remaining.`);
+          window.speechSynthesis.speak(u);
+        } else if (secsLeft === 60) { // Exactly 1 min
+          const u = new SpeechSynthesisUtterance(`Table ${table.name.replace('Table ', '')}, 1 minute remaining.`);
+          window.speechSynthesis.speak(u);
+        }
+      }
+    }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [table]);
 
   const getTimerInfo = () => {
     if (!table.session) return null;
     const { startTime, durationMinutes } = table.session;
+    const activeRate = rates.hourlyRate; // Use live rate
 
     // 🚨 STEP 3: "Open Time" Feature Integration
     if (durationMinutes === 0) {
       const totalSecsElapsed = Math.max(0, differenceInSeconds(now, new Date(startTime)));
       const mins = Math.floor(totalSecsElapsed / 60);
       const secs = totalSecsElapsed % 60;
-      const currentCharge = (totalSecsElapsed / 3600) * HOURLY_RATE;
+      const currentCharge = (totalSecsElapsed / 3600) * activeRate;
       return {
         formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
         isAlert: false, isOvertime: false, overtimeCharge: 0,
@@ -48,7 +67,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     const isAlert = !isOvertime && totalSecsLeft <= 900;
 
     const overMins = isOvertime ? Math.ceil(absSecs / 60) : 0;
-    const overtimeCharge = (overMins / 60) * HOURLY_RATE;
+    const overtimeCharge = (overMins / 60) * activeRate; // 🚨 STEP 21: Used activeRate instead of HOURLY_RATE
 
     return {
       formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
@@ -147,7 +166,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
             {/* Payment info */}
             <div className="flex justify-between text-[10px] text-neutral-600 border-t border-neutral-800/60 pt-2">
               <span>Paid: <span className="text-neutral-400">{formatPHP(table.session.amountPaid)}</span></span>
-              <span>Rate: <span className="text-neutral-400">₱{HOURLY_RATE}/hr</span></span>
+              <span>Rate: <span className="text-neutral-400">₱{rates.hourlyRate}/hr</span></span> {/* 🚨 STEP 21: Dynamic rate */}
             </div>
             {/* Actions */}
             <div className="flex gap-1.5">

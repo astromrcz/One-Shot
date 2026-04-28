@@ -114,7 +114,8 @@ export function generateReferralCode(name: string): string {
   return `${prefix}-${suffix}`;
 }
 
-export type TattooReservationStatus = 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
+// 🚨 STEP 15: Added 'denied' status
+export type TattooReservationStatus = 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'denied';
 
 export type TattooArtist = {
   id: string;

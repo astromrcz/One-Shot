@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useAppContext, HOURLY_RATE } from '../context/AppContext';
+import { useState, useEffect } from 'react';
+import { useAppContext } from '../context/AppContext';
 import { TableCard } from '../components/TableCard';
 import {
   Search, Play, Zap, X, UserPlus, Clock,
@@ -33,7 +33,8 @@ export function Tables() {
     tables, queue, reservations, staffUsers,
     assignTable, extendSession, freeTable,
     removeFromQueue, updateReservationStatus,
-    addOrderToTable, removeOrderFromTable
+    addOrderToTable, removeOrderFromTable,
+    rates // 🚨 STEP 21: Fetch live dynamic rates
   } = useAppContext();
   
   const [filter, setFilter]       = useState<FilterStatus>('all');
@@ -123,14 +124,24 @@ export function Tables() {
     if (!endingTable?.session) return null;
     const { startTime, durationMinutes: bookedMins, amountPaid: alreadyPaid, hourlyRate } = endingTable.session;
     const now = new Date();
-    const elapsedSecs = differenceInSeconds(now, new Date(startTime));
+    const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(startTime)));
     const elapsedMins = Math.ceil(elapsedSecs / 60);
-    const endTime = addMinutes(new Date(startTime), bookedMins);
-    const isOvertime = now > endTime;
-    const overtimeMins = isOvertime ? Math.ceil(differenceInSeconds(now, endTime) / 60) : 0;
-    const bookedCharge = (bookedMins / 60) * hourlyRate;
-    const overtimeCharge = (overtimeMins / 60) * hourlyRate;
-    const totalDue = bookedCharge + overtimeCharge;
+    
+    let bookedCharge = 0, overtimeCharge = 0, totalDue = 0, isOvertime = false, overtimeMins = 0;
+
+    // 🚨 STEP 3: Handle "Open Time" math for End Session
+    if (bookedMins === 0) {
+      totalDue = (elapsedSecs / 3600) * hourlyRate;
+      bookedCharge = totalDue;
+    } else {
+      const endTime = addMinutes(new Date(startTime), bookedMins);
+      isOvertime = now > endTime;
+      overtimeMins = isOvertime ? Math.ceil(differenceInSeconds(now, endTime) / 60) : 0;
+      bookedCharge = (bookedMins / 60) * hourlyRate;
+      overtimeCharge = (overtimeMins / 60) * hourlyRate;
+      totalDue = bookedCharge + overtimeCharge;
+    }
+
     const balance = Math.max(0, totalDue - alreadyPaid);
     return { elapsedMins, alreadyPaid, bookedCharge, overtimeCharge, totalDue, balance, isOvertime, overtimeMins };
   };
@@ -138,7 +149,7 @@ export function Tables() {
 
   // ── Extend derived values ──────────────────────────────────────
   const extendingTable = tables.find(t => t.id === extendingTableId);
-  const extendCharge = (extendMinutes / 60) * HOURLY_RATE;
+  const extendCharge = (extendMinutes / 60) * rates.hourlyRate; // 🚨 STEP 21
 
   // ── Handlers ──────────────────────────────────────────────────
   const openAssign = (tableId: string) => {
@@ -164,15 +175,15 @@ export function Tables() {
     setExtendPartialAmount('');
   };
 
-  const pickCustomer = (c: CustomerSource) => {
+ const pickCustomer = (c: CustomerSource) => {
     setSelectedCustomer(c);
     setCustomerName(c.name);
     if (c.kind === 'reservation') {
       const mins = c.durationHours * 60;
       setDurationMinutes(mins);
-      setAmountPaid(((mins / 60) * HOURLY_RATE).toFixed(2));
+      setAmountPaid(((mins / 60) * rates.hourlyRate).toFixed(2));
     } else {
-      setAmountPaid(((durationMinutes / 60) * HOURLY_RATE).toFixed(2));
+      setAmountPaid(((durationMinutes / 60) * rates.hourlyRate).toFixed(2));
     }
   };
 
@@ -191,7 +202,7 @@ export function Tables() {
       durationMinutes,
       startTime: new Date(),
       isPaid: true,
-      hourlyRate: HOURLY_RATE,
+      hourlyRate: rates.hourlyRate, // 🚨 STEP 21
       amountPaid: finalAmountPaid,
     });
 
@@ -247,8 +258,8 @@ export function Tables() {
     { key: 'reserved',  label: 'Reserved',  count: reserved,      color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
   ];
 
-  const durationOptions = [30, 60, 90, 120, 180, 240];
-  const extendOptions   = [30, 60, 90, 120];
+  const durationOptions = [0, 60, 120, 180, 240, 300]; // 🚨 STEP 3: 0 is Open Time, removed 30m
+  const extendOptions   = [60, 90, 120];
 
   // Payment status / method helpers
   const PayStatusBtn = ({ value, current, label, onChange }: { value: PaymentStatus; current: PaymentStatus; label: string; onChange: (v: PaymentStatus) => void }) => (
@@ -383,7 +394,15 @@ export function Tables() {
               );
             }
 
-            const tableCost = (session.durationMinutes / 60) * session.hourlyRate;
+            // 🚨 STEP 3: Live POS cost calculation for "Open Time"
+            let tableCost = 0;
+            if (session.durationMinutes === 0) {
+              const elapsedSecs = Math.max(0, differenceInSeconds(new Date(), new Date(session.startTime)));
+              tableCost = (elapsedSecs / 3600) * session.hourlyRate;
+            } else {
+              tableCost = (session.durationMinutes / 60) * session.hourlyRate;
+            }
+
             const ordersTotal = session.orders?.reduce((sum, o) => sum + (o.price * o.quantity), 0) || 0;
             const grandTotal = tableCost + ordersTotal;
 
@@ -487,7 +506,7 @@ export function Tables() {
             <div className="px-6 py-5 border-b border-neutral-800 flex justify-between items-center flex-none">
               <div>
                 <h2 className="text-base font-bold text-neutral-100">Start Session</h2>
-                <p className="text-xs text-neutral-500">{tables.find(t => t.id === assigningTableId)?.name} · ₱{HOURLY_RATE}/hour</p>
+                <p className="text-xs text-neutral-500">{tables.find(t => t.id === assigningTableId)?.name} · ₱{rates.hourlyRate}/hour</p>
               </div>
               <button onClick={() => setAssigningTableId(null)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg transition-colors">
                 <X size={16} />
@@ -604,11 +623,11 @@ export function Tables() {
                   <div className="grid grid-cols-3 gap-2">
                     {durationOptions.map(d => (
                       <button key={d} type="button"
-                        onClick={() => { setDurationMinutes(d); setAmountPaid(((d / 60) * HOURLY_RATE).toFixed(2)); }}
+                        onClick={() => { setDurationMinutes(d); setAmountPaid(((d / 60) * rates.hourlyRate).toFixed(2)); }}
                         className={`py-2 rounded-xl border text-xs font-semibold transition-all ${
                           durationMinutes === d ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
                         }`}
-                      >{d < 60 ? `${d}m` : `${d / 60}h`}</button>
+                      >{d === 0 ? 'Open Time' : d < 60 ? `${d}m` : `${d / 60}h`}</button>
                     ))}
                   </div>
                 </div>
@@ -798,7 +817,7 @@ export function Tables() {
                     >
                       +{d < 60 ? `${d}min` : `${d / 60}hr`}
                       <br />
-                      <span className="text-[10px] font-normal opacity-70">+{formatPHP((d / 60) * HOURLY_RATE)}</span>
+                      <span className="text-[10px] font-normal opacity-70">+{formatPHP((d / 60) * rates.hourlyRate)}</span>
                     </button>
                   ))}
                 </div>
@@ -812,7 +831,7 @@ export function Tables() {
                 </div>
                 <div className="flex justify-between text-neutral-500 mt-1">
                   <span>Rate</span>
-                  <span>₱{HOURLY_RATE}/hr</span>
+                  <span>₱{rates.hourlyRate}/hr</span>
                 </div>
               </div>
 

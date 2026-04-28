@@ -208,8 +208,13 @@ export function Queue() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 flex-none">
+                    {/* 🚨 STEP 10: TTS implemented */}
                     <button
-                      onClick={() => callQueueItem(item.id)}
+                      onClick={() => {
+                        const utterance = new SpeechSynthesisUtterance(`Calling customer ${item.customerName}. Please proceed to the counter.`);
+                        window.speechSynthesis.speak(utterance);
+                        callQueueItem(item.id);
+                      }}
                       title="Call customer"
                       className="p-2 bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 rounded-lg transition-colors border border-amber-700/30"
                     >
@@ -275,7 +280,8 @@ export function Queue() {
                   </div>
                   {waiting.length > 0 && (
                     <button
-                      onClick={() => navigate('/staff/tables')}
+                      /* 🚨 STEP 10: Passes context so the Table page knows exactly what to do */
+                      onClick={() => navigate(`/staff/tables?assignTable=${table.id}&queueId=${waiting[0].id}`)}
                       className="w-full text-xs bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-700/30 py-2 rounded-lg transition-colors font-medium"
                     >
                       Assign to {waiting[0]?.customerName}

@@ -83,6 +83,7 @@ export function TattooReservationsPage() {
                         res.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                         res.status === 'confirmed' ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' :
                         res.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                        res.status === 'denied' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                         'bg-rose-500/10 text-rose-400 border-rose-500/20'
                       }`}>
                         {res.status}
@@ -98,6 +99,7 @@ export function TattooReservationsPage() {
                         <option value="confirmed">Confirmed</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
+                        <option value="denied">Denied</option> {/* 🚨 STEP 15: Added Denied */}
                       </select>
                     </td>
                   </tr>
