@@ -4,9 +4,6 @@ import { Layout } from './layout';
 import { AdminLayout } from './adminLayout';
 import { ArtistLayout } from './artistLayout';
 import { HomePage } from './pages/HomePage';
-import { StaffLogin } from './pages/StaffLogin';
-import { AdminLogin } from './pages/AdminLogin';
-import { ArtistLogin } from './pages/ArtistLogin';
 import { LiveMonitor } from './pages/LiveMonitor';
 // Staff pages
 import { OverviewDashboard } from './pages/OverviewDashboard';
@@ -29,7 +26,7 @@ import { AdminReservationTerms } from './pages/AdminReservationTerms';
 import { AdminAnnouncements } from './pages/AdminAnnouncements';
 import { AdminCalendar } from './pages/AdminCalendar';
 import { Analytics } from './pages/Analytics';
-import { SiteCustomization } from './pages/SiteCustomization'; // 🚨 NEW IMPORT
+import { SiteCustomization } from './pages/SiteCustomization';
 // Artist portal
 import { ArtistPortal } from './pages/ArtistPortal';
 import { NotFound } from './pages/NotFound';
@@ -39,9 +36,6 @@ export const router = createBrowserRouter([
     Component: RootWrapper,
     children: [
       { path: '/',             Component: HomePage },
-      { path: '/staff/login',  Component: StaffLogin },
-      { path: '/admin/login',  Component: AdminLogin },
-      { path: '/artist/login', Component: ArtistLogin },
       { path: '/monitor',      Component: LiveMonitor },
       // ── Staff Portal ──────────────────────────────────────
       {
@@ -64,7 +58,7 @@ export const router = createBrowserRouter([
         Component: AdminLayout,
         children: [
           { index: true,                    Component: AdminDashboard },
-          { path: 'customization',          Component: SiteCustomization }, // 🚨 NEW ROUTE
+          { path: 'customization',          Component: SiteCustomization },
           { path: 'activity',               Component: ActivityLog },
           { path: 'users',                  Component: AdminUsers },
           { path: 'tables',                 Component: AdminTableManagement },

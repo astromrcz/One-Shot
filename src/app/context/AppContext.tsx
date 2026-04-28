@@ -177,8 +177,7 @@ export type StaffUser = {
   password: string;
   fullName: string;
   email: string;
-  role: 'manager' | 'tattoo-artist' | 'cashier';
-  isAdmin: boolean;
+  role: 'admin' | 'manager' | 'tattoo-artist';
   artistId?: string;
   phone: string;
   isActive: boolean;
@@ -669,6 +668,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         else if (r === 'artist' || r === 'tattoo-artist') {
           setArtistLoggedIn(true);
           setCurrentArtistId(profile.artistId || null);
+          setStaffLoggedIn(true); // 🚨 FIX: Ensure artists also get staff routing access on refresh
         }
         else setStaffLoggedIn(true); // Managers and standard staff
       } catch (e) {
@@ -697,8 +697,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setArtistLoggedIn(false);
     setCurrentArtistId(null);
     await supabase.auth.signOut(); // Wipes any lingering Supabase cache!
+    
+    // 🚨 NEW: Instantly redirect to the homepage upon logging out!
+    window.location.href = '/'; 
   };
-
  // 🚨 RAW FETCH BYPASS: Prevents the Supabase "GET/HEAD body" bug
   const secureBackendLogin = async (username: string, password: string) => {
     try {
@@ -723,6 +725,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const user = await secureBackendLogin(username, password);
     if (user) { 
       setStaffLoggedIn(true); 
+      // 🚨 FIX: Automatically configure Admin and Artist permissions if they use the main login
+      if (user.is_admin || user.role === 'admin') setAdminLoggedIn(true);
+      if (user.role === 'tattoo-artist') {
+        setArtistLoggedIn(true);
+        setCurrentArtistId(user.artist_id || null);
+      }
       saveStaffSession({
         username: user.username, fullName: user.full_name, email: user.email,
         role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
@@ -754,9 +762,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const artistLogin = async (username: string, password: string): Promise<boolean> => {
     const user = await secureBackendLogin(username, password);
-    if (user && user.role === 'tattoo-artist' && user.artist_id) {
+    // 🚨 FIX: Make artistLogin behave identically to staffLogin so they can use either page freely
+    if (user && user.role === 'tattoo-artist') {
+      setStaffLoggedIn(true);
       setArtistLoggedIn(true);
-      setCurrentArtistId(user.artist_id);
+      setCurrentArtistId(user.artist_id || null);
       saveStaffSession({
         username: user.username, fullName: user.full_name, email: user.email,
         role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,

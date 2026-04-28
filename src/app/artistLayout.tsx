@@ -1,24 +1,30 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router';
-import { Palette, LogOut, Calendar, CalendarX2, Menu, X } from 'lucide-react';
+import { Palette, LogOut, CalendarX2 } from 'lucide-react';
 import { useAppContext } from './context/AppContext';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
 export function ArtistLayout() {
-  const { artistLoggedIn, artistLogout, currentArtistId, tattooArtists, tattooReservations } = useAppContext();
+  // 🚨 FIX 1: We must extract 'loading' from the context so the layout knows when to wait
+  const { artistLoggedIn, artistLogout, currentArtistId, tattooArtists, tattooReservations, loading } = useAppContext();
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!artistLoggedIn) navigate('/artist/login', { replace: true });
-  }, [artistLoggedIn, navigate]);
+    // 🚨 FIX 2: Wait until loading is FALSE before we judge if they are logged in!
+    // Also updated the redirect to '/' since we deleted the old login pages.
+    if (!loading && !artistLoggedIn) {
+      navigate('/', { replace: true });
+    }
+  }, [artistLoggedIn, loading, navigate]);
 
-  if (!artistLoggedIn) return null;
+  // Show a blank screen while verifying credentials to prevent flickering
+  if (loading || !artistLoggedIn) return null;
 
   const artist = tattooArtists.find(a => a.id === currentArtistId);
   const myPending = tattooReservations.filter(r => r.artistId === currentArtistId && r.status === 'pending').length;
 
-  const handleLogout = () => { artistLogout(); navigate('/artist/login'); };
+  // 🚨 FIX 3: Update logout to redirect to the home page
+  const handleLogout = () => { artistLogout(); navigate('/'); };
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">

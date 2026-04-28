@@ -8,22 +8,23 @@ import {
 import { toast } from 'sonner';
 
 const ROLES: { value: StaffUser['role']; label: string; color: string; icon: React.ReactNode }[] = [
+  { value: 'admin',         label: 'Admin',         color: 'bg-rose-500/10 text-rose-400 border-rose-500/20',      icon: <ShieldCheck size={11} /> },
   { value: 'manager',       label: 'Manager',       color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',   icon: <User size={11} /> },
   { value: 'tattoo-artist', label: 'Tattoo Artist', color: 'bg-pink-500/10 text-pink-400 border-pink-500/20',     icon: <Palette size={11} /> },
-  { value: 'cashier',       label: 'Cashier',       color: 'bg-violet-500/10 text-violet-400 border-violet-500/20', icon: <BadgeDollarSign size={11} /> },
 ];
 
 type FormState = {
   username: string; fullName: string;
-  email: string; role: StaffUser['role']; isAdmin: boolean; artistId: string; phone: string; isActive: boolean;
+  email: string; role: StaffUser['role']; artistId: string; phone: string; isActive: boolean;
 };
-const blankForm: FormState = { username: '', fullName: '', email: '', role: 'manager', isAdmin: false, artistId: '', phone: '', isActive: true };
+const blankForm: FormState = { username: '', fullName: '', email: '', role: 'manager', artistId: '', phone: '', isActive: true };
 
 export function AdminUsers() {
   const { staffUsers, tattooArtists, addStaffUser, updateStaffUser, toggleStaffUserActive, resetStaffUserPassword, staffProfile, adminLogin } = useAppContext();
   
   // Modals & States
   const [showForm, setShowForm]     = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [form, setForm]             = useState<FormState>(blankForm);
   const [resetMsg, setResetMsg]     = useState<string | null>(null);
@@ -383,7 +384,7 @@ export function AdminUsers() {
                       <option key={a.id} value={a.id}>{a.name} ({a.specialty})</option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-neutral-600 mt-1.5">This artist will log in at /artist/login</p>
+                  <p className="text-[10px] text-neutral-600 mt-1.5">This artist will log in at /staff/login</p>
                 </div>
               )}
 
