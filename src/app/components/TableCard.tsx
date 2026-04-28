@@ -25,6 +25,20 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
   const getTimerInfo = () => {
     if (!table.session) return null;
     const { startTime, durationMinutes } = table.session;
+
+    // 🚨 STEP 3: "Open Time" Feature Integration
+    if (durationMinutes === 0) {
+      const totalSecsElapsed = Math.max(0, differenceInSeconds(now, new Date(startTime)));
+      const mins = Math.floor(totalSecsElapsed / 60);
+      const secs = totalSecsElapsed % 60;
+      const currentCharge = (totalSecsElapsed / 3600) * HOURLY_RATE;
+      return {
+        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+        isAlert: false, isOvertime: false, overtimeCharge: 0,
+        elapsed: mins, endTime: new Date(), currentCharge, isOpenTime: true
+      };
+    }
+
     const endTime = addMinutes(new Date(startTime), durationMinutes);
     const totalSecsLeft = differenceInSeconds(endTime, now);
     const isOvertime = totalSecsLeft < 0;
@@ -40,7 +54,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
       formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
       isAlert, isOvertime, overtimeCharge,
       elapsed: Math.floor(differenceInSeconds(now, new Date(startTime)) / 60),
-      endTime,
+      endTime, isOpenTime: false, currentCharge: table.session.amountPaid
     };
   };
 
@@ -113,7 +127,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
             {/* Timer */}
             <div className="text-center py-1">
               <p className="text-[10px] text-neutral-600 uppercase tracking-wider mb-0.5">
-                {timer.isOvertime ? '⚠ Overtime' : timer.isAlert ? '⚡ Time Left' : 'Time Left'}
+                {timer.isOpenTime ? '⏱ Elapsed Time (Open)' : timer.isOvertime ? '⚠ Overtime' : timer.isAlert ? '⚡ Time Left' : 'Time Left'}
               </p>
               <p className={clsx(
                 'font-mono text-2xl font-black tabular-nums tracking-tight',

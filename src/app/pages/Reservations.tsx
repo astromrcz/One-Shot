@@ -241,20 +241,24 @@ export function Reservations() {
                         {cfg.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1">
-                          {r.downPaymentPaid
-                            ? <CheckCircle size={11} className="text-emerald-400" />
-                            : <XCircle size={11} className="text-neutral-600" />}
-                          <span className="text-[10px] text-neutral-500">DP {formatPHP(r.downPaymentAmount)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {r.balancePaid
-                            ? <CheckCircle size={11} className="text-emerald-400" />
-                            : <XCircle size={11} className="text-neutral-600" />}
-                          <span className="text-[10px] text-neutral-500">Bal {formatPHP(r.totalAmount - r.downPaymentAmount)}</span>
-                        </div>
+                    {/* STEP 4: Moved Payment/Collect buttons directly to the dashboard table! */}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <div className="space-y-1.5 flex flex-col items-start">
+                        <button onClick={() => updateDownPayment(r.id, !r.downPaymentPaid)}
+                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                            r.downPaymentPaid ? 'bg-emerald-600/20 text-emerald-400 border-emerald-700/30' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-emerald-400'
+                          }`}>
+                          {r.downPaymentPaid ? <CheckCircle size={11} /> : <XCircle size={11} />}
+                          DP: {formatPHP(r.downPaymentAmount)}
+                        </button>
+                        
+                        <button onClick={() => updateBalance(r.id, !r.balancePaid)}
+                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                            r.balancePaid ? 'bg-emerald-600/20 text-emerald-400 border-emerald-700/30' : 'bg-rose-600/10 text-rose-400 border-rose-700/30 hover:bg-rose-600/30'
+                          }`}>
+                          {r.balancePaid ? <CheckCircle size={11} /> : <AlertTriangle size={11} />}
+                          Bal: {formatPHP(r.totalAmount - r.downPaymentAmount)}
+                        </button>
                         {/* Reference Number displayed inline */}
                         {r.paymentReference && (
                           <p className="text-[9px] text-neutral-500 pt-1">
@@ -459,9 +463,12 @@ export function Reservations() {
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 placeholder-neutral-600"
                     placeholder="Full name" />
                 </div>
+                {/* STEP 16: Limit Phone Field to exactly 11 numbers */}
                 <div className="space-y-1.5">
                   <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Contact Number *</label>
-                  <input required value={form.contactNumber} onChange={e => setForm(f => ({ ...f, contactNumber: e.target.value }))}
+                  <input required value={form.contactNumber} 
+                    onChange={e => setForm(f => ({ ...f, contactNumber: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
+                    maxLength={11}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 placeholder-neutral-600"
                     placeholder="09xx-xxx-xxxx" />
                 </div>

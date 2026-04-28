@@ -2,16 +2,23 @@ import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { FileText, Save, CheckCircle, Info } from 'lucide-react';
 
+import { RefreshCw } from 'lucide-react'; // Need this for the spinner
+
 export function AdminReservationTerms() {
   const { reservationTerms, updateReservationTerms } = useAppContext();
   const [form, setForm] = useState({ ...reservationTerms });
   const [saved, setSaved] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false); // STEP 2
+  const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'rules' | 'policy' | 'tnc'>('rules');
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateReservationTerms(form);
+    setIsSaving(true);
+    await updateReservationTerms(form);
     setSaved(true);
+    setConfirmSave(false);
+    setIsSaving(false);
     setTimeout(() => setSaved(false), 2500);
   };
 
@@ -49,16 +56,20 @@ export function AdminReservationTerms() {
         {activeTab === 'rules' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
+              {/* STEP 13: Changed to text box with regex validation, no incrementers */}
               {[
-                { label: 'Minimum Hours', field: 'minHours' as const, min: 1, max: 12 },
-                { label: 'Maximum Hours', field: 'maxHours' as const, min: 1, max: 24 },
-                { label: 'Min Party Size', field: 'minPartySize' as const, min: 1, max: 10 },
-                { label: 'Max Party Size', field: 'maxPartySize' as const, min: 1, max: 50 },
+                { label: 'Minimum Hours', field: 'minHours' as const },
+                { label: 'Maximum Hours', field: 'maxHours' as const },
+                { label: 'Min Party Size', field: 'minPartySize' as const },
+                { label: 'Max Party Size', field: 'maxPartySize' as const },
               ].map(f => (
                 <div key={f.field} className="bg-neutral-950 border border-neutral-800 rounded-xl p-4">
                   <label className="text-xs text-neutral-400 uppercase tracking-wider font-medium block mb-2">{f.label}</label>
-                  <input type="number" value={form[f.field]} min={f.min} max={f.max}
-                    onChange={e => setForm(prev => ({ ...prev, [f.field]: parseInt(e.target.value) || f.min }))}
+                  <input type="text" value={form[f.field]}
+                    onChange={e => {
+                      const numericValue = e.target.value.replace(/\D/g, '');
+                      setForm(prev => ({ ...prev, [f.field]: numericValue === '' ? 0 : parseInt(numericValue) }));
+                    }}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 transition-colors" />
                   <p className="text-lg font-black text-amber-400 mt-2">{form[f.field]}</p>
                 </div>
@@ -68,8 +79,11 @@ export function AdminReservationTerms() {
               <label className="text-xs text-neutral-400 uppercase tracking-wider font-medium block mb-2">
                 Cancellation Notice (hours)
               </label>
-              <input type="number" value={form.cancellationHours} min={1} max={168}
-                onChange={e => setForm(prev => ({ ...prev, cancellationHours: parseInt(e.target.value) || 1 }))}
+              <input type="text" value={form.cancellationHours}
+                onChange={e => {
+                  const numericValue = e.target.value.replace(/\D/g, '');
+                  setForm(prev => ({ ...prev, cancellationHours: numericValue === '' ? 0 : parseInt(numericValue) }));
+                }}
                 className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 transition-colors" />
               <p className="text-[11px] text-neutral-600 mt-2">Customers must cancel at least {form.cancellationHours} hours before their reservation.</p>
             </div>
