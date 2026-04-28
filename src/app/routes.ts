@@ -15,6 +15,7 @@ import { FeedbackPage } from './pages/Feedback';
 import { PromoCodesPage } from './pages/PromoCodes';
 import { TattooReservationsPage } from './pages/TattooReservations';
 import { SettingsPage } from './pages/Settings';
+import { HistoryPage } from './pages/History'; // 🚨 STEPS 6 & 19
 // Admin pages
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminUsers } from './pages/AdminUsers';
@@ -26,6 +27,7 @@ import { AdminReservationTerms } from './pages/AdminReservationTerms';
 import { AdminAnnouncements } from './pages/AdminAnnouncements';
 import { AdminCalendar } from './pages/AdminCalendar';
 import { Analytics } from './pages/Analytics';
+import { ReportsPage } from './pages/Reports'; // 🚨 STEP 20
 import { SiteCustomization } from './pages/SiteCustomization';
 // Artist portal
 import { ArtistPortal } from './pages/ArtistPortal';
@@ -49,6 +51,7 @@ export const router = createBrowserRouter([
           { path: 'feedback',             Component: FeedbackPage },
           { path: 'promo-codes',          Component: PromoCodesPage },
           { path: 'tattoo-reservations',  Component: TattooReservationsPage },
+          { path: 'history',              Component: HistoryPage }, // 🚨 STEPS 6 & 19
           { path: 'settings',             Component: SettingsPage },
         ],
       },
@@ -69,6 +72,7 @@ export const router = createBrowserRouter([
           { path: 'announcements',          Component: AdminAnnouncements },
           { path: 'calendar',               Component: AdminCalendar },
           { path: 'analytics',              Component: Analytics },
+          { path: 'reports',                Component: ReportsPage }, // 🚨 STEP 20
           { path: 'settings',               Component: SettingsPage },
         ],
       },
