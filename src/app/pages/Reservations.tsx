@@ -3,7 +3,7 @@ import { useAppContext, HOURLY_RATE, DOWN_PAYMENT_RATE, ReservationStatus } from
 import emailjs from '@emailjs/browser';
 import {
   Plus, X, Calendar, Clock, Users, Phone, Mail, ChevronDown, CheckCircle,
-  XCircle, Search, Filter, PhilippinePeso, AlertTriangle, Receipt, RefreshCw
+  XCircle, Search, Filter, PhilippinePeso, AlertTriangle, Receipt, RefreshCw, CalendarDays
 } from 'lucide-react';
 import { format, isToday, isTomorrow, isPast, isThisMonth, isThisYear } from 'date-fns';
 
@@ -27,7 +27,7 @@ const formatDate = (d: Date) => {
 };
 
 export function Reservations() {
-  const { reservations, addReservation, updateReservationStatus, cancelReservation, updateDownPayment, updateBalance, tables } = useAppContext();
+  const { reservations, addReservation, updateReservationStatus, cancelReservation, updateDownPayment, updateBalance, tables, proposeReschedule } = useAppContext();
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | ReservationStatus>('all');
@@ -39,6 +39,11 @@ export function Reservations() {
   const [toast, setToast] = useState<string | null>(null);
   const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
+  
+  // 🚨 Reschedule State
+  const [showRescheduleForm, setShowRescheduleForm] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('');
 
   const handleVerify = async (r: any) => {
     updateReservationStatus(r.id, 'confirmed');
@@ -104,6 +109,18 @@ export function Reservations() {
     });
     setShowForm(false);
     setForm({ customerName: '', contactNumber: '', email: '', date: '', timeSlot: '', durationHours: 2, partySize: 2, tableId: '' });
+  };
+
+  const handleProposeReschedule = async () => {
+    if (!selectedId || !rescheduleDate || !rescheduleTime) return;
+    const [year, month, day] = rescheduleDate.split('-').map(Number);
+    const [hour, minute] = rescheduleTime.split(':').map(Number);
+    const proposedDateObj = new Date(year, month - 1, day, hour, minute);
+    
+    await proposeReschedule(selectedId, proposedDateObj, rescheduleTime);
+    setToast(`Reschedule proposed for ${format(proposedDateObj, 'MMM d')} at ${rescheduleTime}`);
+    setTimeout(() => setToast(null), 3500);
+    setShowRescheduleForm(false);
   };
 
   const filtered = reservations
@@ -335,7 +352,7 @@ export function Reservations() {
                 <h2 className="text-base font-bold text-neutral-100">{selected.customerName}</h2>
                 <p className="text-xs text-neutral-500">Reservation #{selected.id.toUpperCase()}</p>
               </div>
-              <button onClick={() => setSelectedId(null)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg">
+              <button onClick={() => { setSelectedId(null); setShowRescheduleForm(false); }} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg">
                 <X size={16} />
               </button>
             </div>
@@ -419,6 +436,36 @@ export function Reservations() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* 🚨 Rescheduling UI */}
+              <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-amber-500 uppercase tracking-wider font-semibold flex items-center gap-1.5"><CalendarDays size={12}/> Reschedule</p>
+                  {selected.rescheduleRequested && (
+                     <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Pending Customer Approval</span>
+                  )}
+                </div>
+                
+                {showRescheduleForm ? (
+                  <div className="space-y-3 mt-3">
+                    <div className="flex gap-2">
+                      <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50" />
+                      <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowRescheduleForm(false)} className="flex-1 py-2 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg font-semibold transition-colors">Cancel</button>
+                      <button onClick={handleProposeReschedule} disabled={!rescheduleDate || !rescheduleTime} className="flex-1 py-2 text-xs bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg font-bold transition-colors">Propose New Time</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-neutral-500 mb-3">Propose a new date/time to the customer. They must accept it via their portal.</p>
+                    <button onClick={() => setShowRescheduleForm(true)} className="w-full py-2 text-xs border border-amber-600/50 text-amber-500 hover:bg-amber-600/10 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+                      <CalendarDays size={14}/> Propose Reschedule
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Status Actions */}

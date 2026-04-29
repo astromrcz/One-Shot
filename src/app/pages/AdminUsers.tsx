@@ -15,9 +15,9 @@ const ROLES: { value: StaffUser['role']; label: string; color: string; icon: Rea
 
 type FormState = {
   username: string; fullName: string;
-  email: string; role: StaffUser['role']; artistId: string; phone: string; isActive: boolean;
+  email: string; role: StaffUser['role']; artistId: string; phone: string; isActive: boolean; isAdmin: boolean;
 };
-const blankForm: FormState = { username: '', fullName: '', email: '', role: 'manager', artistId: '', phone: '', isActive: true };
+const blankForm: FormState = { username: '', fullName: '', email: '', role: 'manager', artistId: '', phone: '', isActive: true, isAdmin: false };
 
 export function AdminUsers() {
   const { staffUsers, tattooArtists, addStaffUser, updateStaffUser, toggleStaffUserActive, resetStaffUserPassword, staffProfile, adminLogin } = useAppContext();
@@ -46,7 +46,6 @@ export function AdminUsers() {
     setShowForm(true);
   };
 
-  // ── Database Actions ────────────────────────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.username || !form.fullName || !form.email) return;
@@ -87,9 +86,7 @@ export function AdminUsers() {
     }
   };
 
-  // ── Archive & Restore Security ──────────────────────────────────────────────
   const handleArchiveClick = (u: StaffUser) => {
-    // SECURITY: Prevent archiving the very last admin
     if (u.isAdmin) {
       const activeAdmins = staffUsers.filter(su => su.isAdmin && su.isActive);
       if (activeAdmins.length <= 1) {
@@ -106,7 +103,6 @@ export function AdminUsers() {
     if (!archivingUser) return;
     setIsArchiving(true);
     
-    // Verify the current admin's password before executing
     const isValid = await adminLogin(staffProfile.username, archivePassword);
     if (!isValid) {
       toast.error("Authentication Failed", { description: "Incorrect admin password." });
@@ -137,7 +133,6 @@ export function AdminUsers() {
     }
   };
 
-  // ── Rendering Helpers ───────────────────────────────────────────────────────
   const filtered = staffUsers.filter(u => filterRole === 'all' || u.role === filterRole);
   const activeUsers = filtered.filter(u => u.isActive);
   const archivedUsers = filtered.filter(u => !u.isActive);
@@ -185,7 +180,6 @@ export function AdminUsers() {
               {isResettingId === u.id ? <RefreshCw size={14} className="animate-spin text-amber-500" /> : <RefreshCw size={14} />}
             </button>
             
-            {/* Archive / Restore Toggle */}
             {isArchived ? (
               <button onClick={() => handleRestore(u)} disabled={restoringId === u.id} title="Restore Account" className="p-2 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-emerald-950/20 transition-colors disabled:opacity-50">
                 {restoringId === u.id ? <RefreshCw size={16} className="animate-spin text-emerald-500" /> : <ArchiveRestore size={16} />}
@@ -203,7 +197,6 @@ export function AdminUsers() {
 
   return (
     <div className="space-y-5">
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Total Users',     value: staffUsers.length,                                       color: 'text-white' },
@@ -224,7 +217,6 @@ export function AdminUsers() {
         </div>
       )}
 
-      {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1.5 flex-wrap">
           {[{ id: 'all', label: 'All' }, ...ROLES.map(r => ({ id: r.value, label: r.label }))].map(f => (
@@ -240,7 +232,6 @@ export function AdminUsers() {
         </button>
       </div>
 
-      {/* Active User List */}
       <div className="space-y-3">
         {activeUsers.length === 0 ? (
           <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-12 text-center">
@@ -252,7 +243,6 @@ export function AdminUsers() {
         )}
       </div>
 
-      {/* Archived Accounts Section */}
       {archivedUsers.length > 0 && (
         <div className="pt-6 mt-6 border-t border-neutral-800/60">
           <button 
@@ -271,7 +261,6 @@ export function AdminUsers() {
         </div>
       )}
 
-      {/* Archive Confirmation Modal */}
       {archivingUser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-neutral-950 border border-rose-900/30 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -323,7 +312,6 @@ export function AdminUsers() {
         </div>
       )}
 
-      {/* Add / Edit Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-neutral-950 border border-amber-900/30 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
@@ -359,18 +347,18 @@ export function AdminUsers() {
                   className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 transition-colors placeholder-neutral-600" placeholder="09XXXXXXXXX" />
               </div>
 
-              {/* Role selector */}
+              {/* 🚨 STRICT ROLES DROPDOWN */}
               <div>
                 <label className="text-xs text-neutral-400 mb-2 block font-medium">Role *</label>
-                <div className="grid grid-cols-3 gap-2">
+                <select 
+                  value={form.role} 
+                  onChange={e => setForm(f => ({ ...f, role: e.target.value as StaffUser['role'] }))}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 transition-colors appearance-none cursor-pointer"
+                >
                   {ROLES.map(r => (
-                    <button key={r.value} type="button" onClick={() => setForm(f => ({ ...f, role: r.value }))}
-                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-semibold transition-all ${form.role === r.value ? r.color : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:border-neutral-700'}`}>
-                      {r.icon}
-                      {r.label}
-                    </button>
+                    <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {/* Artist linkage */}
@@ -388,22 +376,23 @@ export function AdminUsers() {
                 </div>
               )}
 
-              {/* Admin toggle */}
-              <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <div className="flex items-center gap-2.5">
-                    <ShieldCheck size={16} className={form.isAdmin ? 'text-amber-400' : 'text-neutral-600'} />
-                    <div>
-                      <p className="text-sm font-semibold text-neutral-200">Admin Access</p>
-                      <p className="text-[11px] text-neutral-500">Can access the Admin Portal</p>
+              {/* Admin toggle - Only shows if role is explicitly Admin */}
+              {form.role === 'admin' && (
+                <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center gap-2.5">
+                      <ShieldCheck size={16} className={form.isAdmin ? 'text-amber-400' : 'text-neutral-600'} />
+                      <div>
+                        <p className="text-sm font-semibold text-neutral-200">Admin Access Granted</p>
+                        <p className="text-[11px] text-neutral-500">Can access the Admin Portal</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 ${form.isAdmin ? 'bg-amber-600' : 'bg-neutral-700'}`}
-                    onClick={() => setForm(f => ({ ...f, isAdmin: !f.isAdmin }))}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.isAdmin ? 'translate-x-5' : 'translate-x-1'}`} />
-                  </div>
-                </label>
-              </div>
+                    <div className={`w-11 h-6 rounded-full relative transition-colors flex-shrink-0 bg-amber-600`}>
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform translate-x-5`} />
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)}

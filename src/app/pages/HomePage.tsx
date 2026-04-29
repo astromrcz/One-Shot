@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, X, Star, Phone, MapPin,
   Clock, LogIn, UserPlus, Eye, EyeOff,
   Calendar, CheckCircle, ArrowRight,
-  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle
+  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check
 } from 'lucide-react';
 import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
@@ -132,7 +132,7 @@ function MiniCalendar({
   const isPast = (date: Date) => date < today;
   const isSelected = (date: Date) =>
     selectedDate ? date.getTime() === (() => { const s = new Date(selectedDate); s.setHours(0,0,0,0); return s.getTime(); })() : false;
-  const isToday = (date: Date) => date.getTime() === today.getTime();
+  const isTodayDate = (date: Date) => date.getTime() === today.getTime();
 
   const prevMonth = () => { const d = new Date(viewDate); d.setMonth(d.getMonth() - 1); setViewDate(d); };
   const nextMonth = () => { const d = new Date(viewDate); d.setMonth(d.getMonth() + 1); setViewDate(d); };
@@ -140,11 +140,11 @@ function MiniCalendar({
   return (
     <div className="bg-neutral-900 rounded-2xl border border-neutral-700 p-4 select-none">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
+        <button type="button" onClick={prevMonth} className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
           <ChevronLeft size={16} />
         </button>
         <span className="text-sm font-semibold text-white">{MONTHS[month]} {year}</span>
-        <button onClick={nextMonth} className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
+        <button type="button" onClick={nextMonth} className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors">
           <ChevronRight size={16} />
         </button>
       </div>
@@ -157,7 +157,7 @@ function MiniCalendar({
         {cells.map(({ day, currentMonth, date }, idx) => {
           const past = isPast(date);
           const selected = isSelected(date);
-          const today_ = isToday(date);
+          const today_ = isTodayDate(date);
           const reserved = isReserved(date) && currentMonth;
           const clickable = currentMonth && !past;
           
@@ -166,15 +166,15 @@ function MiniCalendar({
 
           return (
             <button
-              key={idx} disabled={!clickable} onClick={() => clickable && onSelect(date)}
+              key={idx} type="button" disabled={!clickable} onClick={() => clickable && onSelect(date)}
               className={`
                 relative aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all
                 ${!currentMonth ? 'opacity-20 cursor-default' : ''}
                 ${past && currentMonth ? 'opacity-30 cursor-default text-neutral-600' : ''}
-                ${selected && !closedInfo ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : ''}
+                ${selected && !closedInfo ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/50' : ''}
                 ${selected && closedInfo ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50' : ''}
                 ${!selected && closedInfo && clickable ? 'bg-rose-950/30 border border-rose-800/50 text-rose-400 hover:bg-rose-900/40' : ''}
-                ${!selected && !closedInfo && today_ ? 'border border-emerald-500 text-emerald-400' : ''}
+                ${!selected && !closedInfo && today_ ? 'border border-amber-500 text-amber-400' : ''}
                 ${!selected && !closedInfo && clickable && !today_ ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
               `}
             >
@@ -195,17 +195,14 @@ function MiniCalendar({
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings, announcements } = useAppContext();
+  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings, announcements, proposeReschedule, confirmReschedule } = useAppContext(); 
   
-  // Setup dynamic announcements from the database
   const activeAnnouncements = announcements && announcements.filter(a => a.isActive).length > 0
     ? announcements.filter(a => a.isActive).map(a => a.content)
     : DEFAULT_ANNOUNCEMENTS;
 
-  // Safe fallbacks in case settings haven't loaded
   const displayLogo = siteSettings?.logoUrl || logoImg;
   
-   // 🚨 Dynamically map up to 10 images!
   const dynamicHeroSlides = siteSettings?.heroSliderImages && siteSettings.heroSliderImages.length > 0
     ? siteSettings.heroSliderImages.map(url => ({ src: url, alt: 'One Shot Bar & Billiards' }))
     : [
@@ -247,9 +244,52 @@ export function HomePage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null); 
   const [resForm, setResForm] = useState({ name: '', email: '', phone: '', pax: 2, timeSlot: '18:00', duration: 2 });
   const [confirmingPayment, setConfirmingPayment] = useState(false);
-  const [resError, setResError] = useState(''); // NEW ERROR STATE
+  const [resError, setResError] = useState(''); 
 
   const [cancelModal, setCancelModal] = useState({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false });
+
+  // 🚨 State for Rescheduling inside My Bookings
+  const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | null>(null);
+  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
+
+  // 🚨 Helper Functions for Timers
+  const getTableTimerInfo = (tableId: string) => {
+    const t = tables.find(tb => tb.id === tableId);
+    if (!t || t.status !== 'occupied' || !t.session) return null;
+
+    if (t.session.durationMinutes === 0) {
+      const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(t.session.startTime)));
+      const mins = Math.floor(elapsedSecs / 60);
+      const secs = elapsedSecs % 60;
+      return { 
+        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
+        isOvertime: false, 
+        isAlert: false, 
+        isOpenTime: true,
+        customerName: t.session.customerName 
+      };
+    }
+
+    const endTime = addMinutes(new Date(t.session.startTime), t.session.durationMinutes);
+    const secsLeft = differenceInSeconds(endTime, now);
+    const isOvertime = secsLeft < 0;
+    const absSecs = Math.abs(secsLeft);
+    const mins = Math.floor(absSecs / 60);
+    const secs = absSecs % 60;
+    return { 
+      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
+      isOvertime, 
+      isAlert: !isOvertime && secsLeft <= 900, 
+      isOpenTime: false,
+      customerName: t.session.customerName 
+    };
+  };
+
+  const getNextResForTable = (tableId: string) => {
+    return reservations.filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && isToday(new Date(r.date)) && new Date(r.date) >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null;
+  };
 
   const handleCustomerCancel = async () => {
     if (!cancelModal.reason.trim()) {
@@ -266,6 +306,21 @@ export function HomePage() {
       toast.error(error.message || "Failed to cancel reservation.");
       setCancelModal(prev => ({ ...prev, loading: false }));
     }
+  };
+
+  const handleSubmitReschedule = async () => {
+    if (!rescheduleTargetId || !rescheduleDate || !rescheduleTimeSlot) return;
+    
+    const finalDate = new Date(rescheduleDate);
+    const [hours, minutes] = rescheduleTimeSlot.split(':').map(Number);
+    finalDate.setHours(hours, minutes, 0, 0);
+
+    await proposeReschedule(rescheduleTargetId, finalDate, rescheduleTimeSlot);
+    
+    setRescheduleTargetId(null);
+    setRescheduleDate(null);
+    setRescheduleTimeSlot('');
+    toast.success('Reschedule request sent! Management will review shortly.');
   };
 
   const [referenceNumber, setReferenceNumber] = useState('');
@@ -287,22 +342,21 @@ export function HomePage() {
   const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
 
   const slotCounts = reservations.reduce((acc, r) => {
-    // PROTECT: Skip cancelled, or missing time slots/dates
-    if (r.status === 'cancelled' || !r.timeSlot || !r.date) return acc; 
+    if (r.status === 'cancelled' || !r.timeSlot || !r.date || r.id === rescheduleTargetId) return acc; 
     
     try {
       const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
-      if (rDateStr === selectedDateStr) {
+      const activeCheckStr = rescheduleDate ? format(rescheduleDate, 'yyyy-MM-dd') : selectedDateStr;
+
+      if (rDateStr === activeCheckStr) {
         const startHour = parseInt(r.timeSlot.split(':')[0]);
-        const duration = r.durationHours || 1; // Fallback if duration is missing
+        const duration = r.durationHours || 1; 
         for (let i = 0; i < duration; i++) {
           const hourStr = `${String(startHour + i).padStart(2, '0')}:00`;
           acc[hourStr] = (acc[hourStr] || 0) + 1;
         }
       }
-    } catch (e) {
-      // Ignore old reservations with completely broken date formats
-    }
+    } catch (e) { }
     return acc;
   }, {} as Record<string, number>);
 
@@ -316,7 +370,6 @@ export function HomePage() {
     return () => clearInterval(interval);
   }, [activeAnnouncements.length]);
 
-  // 🚨 Automatically adjust the timer to match the number of images!
   useEffect(() => {
     const slideCount = dynamicHeroSlides.length;
     const interval = setInterval(() => { setHeroSlideDir(1); setHeroSlideIdx(prev => (prev + 1) % slideCount); }, 5000);
@@ -333,7 +386,6 @@ export function HomePage() {
   }, [currentUser]);
 
   useEffect(() => {
-    // 1. Automatically check Supabase for a saved session when the app opens
     const restoreSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
@@ -345,7 +397,6 @@ export function HomePage() {
     };
     restoreSession();
 
-    // 2. Handle password recovery routing
     if (window.location.hash.includes('type=recovery')) {
       setShowForgotPwModal(false);
       setShowLoginModal(false);
@@ -353,14 +404,11 @@ export function HomePage() {
       window.history.replaceState(null, '', window.location.pathname);
     }
 
-    // 3. Listen for changes (like logging out in another tab)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // 🚨 FIX: Catch BOTH standard recovery and the hash fragment
       if (event === 'PASSWORD_RECOVERY' || window.location.hash.includes('type=recovery')) {
         setShowForgotPwModal(false);
         setShowLoginModal(false);
         setShowUpdatePwModal(true);
-        // Clear the hash so it doesn't trigger again on refresh
         if (window.location.hash) window.history.replaceState(null, '', window.location.pathname);
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
@@ -383,7 +431,6 @@ export function HomePage() {
     setIsLoggingIn(true);
     setLoginForm(f => ({ ...f, error: '' }));
 
-    // 1. FIREWALL: Does this email belong to a Staff/Admin account?
     const isStaffIdentity = staffUsers.find(u => u.email === loginForm.email || u.username === loginForm.email);
 
     if (isStaffIdentity) {
@@ -392,7 +439,6 @@ export function HomePage() {
       const displayName = isStaffIdentity.fullName || username;
       let success = false;
 
-      // 🚨 The secure fetch bypass in AppContext handles the actual password verification now!
       if (role === 'admin' || isStaffIdentity.isAdmin) {
         success = await adminLogin(username, loginForm.password);
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/admin'); return; }
@@ -404,13 +450,11 @@ export function HomePage() {
         if (success) { toast.success(`Welcome back, ${displayName}!`); navigate('/staff'); return; }
       }
 
-      // If success is false, the database rejected the password!
       setLoginForm(f => ({ ...f, error: 'Invalid admin/staff password.' }));
       setIsLoggingIn(false);
       return; 
     }
 
-    // 2. CUSTOMER AUTH FLOW
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email: loginForm.email, 
@@ -441,8 +485,8 @@ export function HomePage() {
 
   const handleCustomerLogout = async () => {
     try {
-      setCurrentUser(null); // Instantly clear the UI
-      await supabase.auth.signOut(); // Securely tell the database to destroy the session
+      setCurrentUser(null);
+      await supabase.auth.signOut();
       toast.info("Logged out", { description: "You have been securely signed out." });
     } catch (error) {
       toast.error("Logout failed", { description: "Please try again." });
@@ -455,7 +499,6 @@ export function HomePage() {
       return;
     }
     
-    // Validate Phone for Registration
     const cleanPhone = registerForm.phone.replace(/\D/g, '');
     if (!/^09\d{9}$/.test(cleanPhone)) {
       setRegisterForm(f => ({ ...f, error: 'Contact number must be exactly 11 digits and start with 09.' }));
@@ -557,15 +600,12 @@ export function HomePage() {
       return; 
     }
     
-    // Validate Phone for Reservation
     const cleanPhone = resForm.phone.replace(/\D/g, '');
     if (!/^09\d{9}$/.test(cleanPhone)) {
       setResError('Contact number must be exactly 11 digits and start with 09 (e.g., 09123456789).');
       return;
     }
 
-    // 🚨 FAST-FAIL DURATION CHECK 🚨
-    // Ensures a 3-hour booking doesn't bleed into an hour that is already full!
     const targetStartHour = parseInt(resForm.timeSlot.split(':')[0]);
     for (let i = 0; i < resForm.duration; i++) {
       const hourStr = `${String(targetStartHour + i).padStart(2, '0')}:00`;
@@ -580,7 +620,7 @@ export function HomePage() {
   };
 
   const handlePaymentConfirm = async () => {
-    const cleanRef = referenceNumber.replace(/\s/g, ''); // Remove spaces for validation
+    const cleanRef = referenceNumber.replace(/\s/g, ''); 
     
     if (!referenceNumber || cleanRef.length !== 13) {
       setUploadError("Please enter a valid 13-digit GCash Reference Number.");
@@ -595,7 +635,6 @@ export function HomePage() {
     setUploadError('');
 
     try {
-      // --- 🚨 GCASH DUPLICATE REFERENCE FIX 🚨 ---
       const { data: existingRef } = await supabase
         .from('reservations')
         .select('id')
@@ -605,15 +644,12 @@ export function HomePage() {
       if (existingRef) {
         throw new Error("This GCash reference number has already been used. Please provide a valid, unique receipt.");
       }
-      // ------------------------------------------------------------
 
-      // --- 🚨 RACE CONDITION FIX: LIVE DATABASE DOUBLE-CHECK 🚨 ---
       const dateStart = new Date(selectedDate!);
       dateStart.setHours(0,0,0,0);
       const dateEnd = new Date(selectedDate!);
       dateEnd.setHours(23,59,59,999);
 
-      // Fetch the absolute latest active reservations for this day directly from the DB
       const { data: latestReservations, error: fetchError } = await supabase
         .from('reservations')
         .select('time_slot, duration_hours')
@@ -625,7 +661,6 @@ export function HomePage() {
 
       const targetStartHour = parseInt(resForm.timeSlot.split(':')[0]);
       
-      // Verify every hour of the requested duration against live DB data
       for (let i = 0; i < resForm.duration; i++) {
          const checkHour = targetStartHour + i;
          let countForThisHour = 0;
@@ -639,12 +674,10 @@ export function HomePage() {
             }
          });
 
-         // If the exact hour they want hit 5 tables while they were paying...
          if (countForThisHour >= 5) {
              throw new Error(`We're sorry! The ${checkHour}:00 slot was just taken by someone else while you were completing payment. Please close this modal and select a different time.`);
          }
       }
-      // ------------------------------------------------------------
 
       let receiptUrl = '';
       
@@ -660,7 +693,6 @@ export function HomePage() {
       const [hours, minutes] = resForm.timeSlot.split(':').map(Number);
       reservationDate.setHours(hours, minutes, 0, 0);
 
-      // Await the reservation to ensure database insertion succeeds
       await addReservation({
         customerName: resForm.name, contactNumber: resForm.phone, email: resForm.email,
         date: reservationDate, timeSlot: resForm.timeSlot, durationHours: resForm.duration,
@@ -686,7 +718,6 @@ export function HomePage() {
 
   const closeReservation = () => {
     setReservationStep(0); setSelectedDate(null);
-    // Notice how phone correctly resets back to the current user's actual phone now
     setResForm({ name: currentUser?.name || '', email: currentUser?.email || '', phone: currentUser?.phone || '', pax: 2, timeSlot: '18:00', duration: 2 });
     setPromoCodeInput(''); setAppliedPromo(null); setPromoError('');
     setReferenceNumber(''); setReceiptFile(null); setUploadError('');
@@ -697,11 +728,10 @@ export function HomePage() {
     if (!simpleFeedbackForm.name || !simpleFeedbackForm.type || !simpleFeedbackForm.contact) return;
     
     try {
-      // 🚨 ACTUALLY SAVE TO SUPABASE!
       await addFeedback({
         customerName: simpleFeedbackForm.name,
         contactNumber: simpleFeedbackForm.contact,
-        rating: 5, // Default rating for general messages
+        rating: 5,
         comment: `[${simpleFeedbackForm.type.toUpperCase()}] ${simpleFeedbackForm.message}`,
         status: 'new'
       });
@@ -718,23 +748,6 @@ export function HomePage() {
 
   const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + dynamicHeroSlides.length) % dynamicHeroSlides.length); };
   const nextHeroSlide = () => { setHeroSlideDir(1); setHeroSlideIdx(p => (p + 1) % dynamicHeroSlides.length); };
-
-  const getTableTimerInfo = (tableId: string) => {
-    const t = tables.find(tb => tb.id === tableId);
-    if (!t || t.status !== 'occupied' || !t.session) return null;
-    const endTime = addMinutes(new Date(t.session.startTime), t.session.durationMinutes);
-    const secsLeft = differenceInSeconds(endTime, now);
-    const isOvertime = secsLeft < 0;
-    const absSecs = Math.abs(secsLeft);
-    const mins = Math.floor(absSecs / 60);
-    const secs = absSecs % 60;
-    return { formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, isOvertime, isAlert: !isOvertime && secsLeft <= 900, customerName: t.session.customerName };
-  };
-
-  const getNextResForTable = (tableId: string) => {
-    return reservations.filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && isToday(new Date(r.date)) && new Date(r.date) >= now)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null;
-  };
 
   const reservedDates = reservations.filter(r => r.status !== 'cancelled').map(r => new Date(r.date));
   const navSections: { id: Section; label: string }[] = [{ id: 'home', label: 'Home' }, { id: 'reservations', label: 'Reservations' }, { id: 'rates', label: 'Rates' }, { id: 'tattoo', label: 'Tattoo Studio' }, { id: 'about', label: 'About Us' }, { id: 'reviews', label: 'Feedback' }];
@@ -814,7 +827,6 @@ export function HomePage() {
               <div className="relative h-[70vh] min-h-[480px] overflow-hidden group">
                 <AnimatePresence mode="wait" custom={heroSlideDir}>
                   <motion.div key={heroSlideIdx} custom={heroSlideDir} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.9 }} className="absolute inset-0">
-                    {/* 🚨 FIXED: Now uses dynamicHeroSlides 🚨 */}
                     <img src={dynamicHeroSlides[heroSlideIdx].src} alt={dynamicHeroSlides[heroSlideIdx].alt} className="w-full h-full object-cover" />
                   </motion.div>
                 </AnimatePresence>
@@ -838,7 +850,6 @@ export function HomePage() {
                     </div>
 
                     <div className="flex gap-2">
-                      {/* 🚨 FIXED: Now uses dynamicHeroSlides 🚨 */}
                       {dynamicHeroSlides.map((_, i) => (
                         <button
                           key={i}
@@ -924,7 +935,7 @@ export function HomePage() {
                 {/* --- MAIN CONTENT AREA (LEFT) --- */}
                 <div className="flex-1 min-w-0 space-y-10">
                   
-                  {/* Live Status Overview (Now 2 columns instead of 3) */}
+                  {/* Live Status Overview */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Table Status Card */}
                     <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
@@ -945,19 +956,25 @@ export function HomePage() {
                           
                           const timerInfo = getTableTimerInfo(t.id);
                           const nextRes = getNextResForTable(t.id);
-                          const dotColor = timerInfo?.isOvertime ? 'bg-rose-500 animate-pulse' : t.status === 'occupied' ? 'bg-amber-500' : t.status === 'reserved' ? 'bg-blue-500' : 'bg-emerald-500';
+                          
+                          // Handle color formatting correctly
+                          let dotColor = 'bg-emerald-500';
+                          if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
+                          else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
+                          else if (t.status === 'occupied') dotColor = 'bg-amber-500';
+                          else if (t.status === 'reserved') dotColor = 'bg-blue-500';
                           
                           return (
-                            <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
+                            <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
                               <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
                               <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
                               <div className="flex-1 min-w-0 flex items-center gap-2">
                                 {timerInfo ? (
                                   <>
-                                    <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : 'text-amber-500'}`}>
-                                      {timerInfo.isOvertime ? 'OVERTIME' : 'IN USE'}
+                                    <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
+                                      {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN TIME' : 'IN USE'}
                                     </span>
-                                    <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : 'text-amber-500'}`}>
+                                    <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
                                       {timerInfo.formatted}
                                     </span>
                                   </>
@@ -1194,76 +1211,182 @@ export function HomePage() {
                 <div className="w-full lg:w-[320px] flex-none">
                   {/* Sticky wrapper so it stays in view when scrolling down the form */}
                   <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex flex-col sticky top-24">
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
-                    </div>
                     
                     {(() => {
                       const myEmail = currentUser?.email || guestEmail;
                       const myReservations = myEmail ? reservations.filter(r => r.email === myEmail).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
                       
-                      if (!myEmail) {
+                      // 🚨 RESCHEDULE FORM INJECTION 🚨
+                      if (rescheduleTargetId) {
                         return (
-                          <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2">
-                            <p className="text-xs text-neutral-500 mb-3">Log in or register to view your cross-device booking history.</p>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
-                                Login
+                          <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                            <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
+                              <button onClick={() => setRescheduleTargetId(null)} className="p-1.5 bg-neutral-950 rounded-lg text-neutral-400 hover:text-white transition-colors">
+                                <ChevronLeft size={14}/>
                               </button>
-                              <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
-                                Register
-                              </button>
+                              <div>
+                                <h3 className="text-sm font-bold text-white">Reschedule Booking</h3>
+                              </div>
                             </div>
+
+                            <div className="space-y-3">
+                              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">1. Choose New Date</p>
+                              <MiniCalendar selectedDate={rescheduleDate} onSelect={setRescheduleDate} reservedDates={reservedDates} closedDates={closedDates} />
+                            </div>
+
+                            <div className="space-y-3">
+                              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">2. Choose New Time</p>
+                              {!rescheduleDate ? (
+                                <div className="bg-neutral-950 border border-dashed border-neutral-800 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
+                                  <Calendar size={20} className="text-neutral-600" />
+                                  <p className="text-neutral-500 text-xs">Select a date first.</p>
+                                </div>
+                              ) : selectedClosedDate ? (
+                                 <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
+                                  <AlertTriangle size={20} className="text-rose-500" />
+                                  <p className="text-rose-400 text-xs font-bold">Store Closed</p>
+                                </div>
+                              ) : (
+                                <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
+                                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                    {TIME_SLOTS.map(t => {
+                                      const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                      const isPastTime = isToday(rescheduleDate) && parseInt(t.split(':')[0]) <= new Date().getHours() + 1;
+                                      if (isHappyHour || isPastTime) return null; 
+                                      
+                                      const count = slotCounts[t] || 0;
+                                      const isFull = count >= 5;
+
+                                      return (
+                                        <button 
+                                          key={t} 
+                                          disabled={isFull} 
+                                          onClick={() => setRescheduleTimeSlot(t)} 
+                                          className={`relative py-1.5 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                            isFull
+                                              ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                              : rescheduleTimeSlot === t 
+                                              ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40' 
+                                              : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+                                          }`}
+                                        >
+                                          {formatTime(t)}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <button 
+                              onClick={handleSubmitReschedule}
+                              disabled={!rescheduleDate || !rescheduleTimeSlot || !!selectedClosedDate}
+                              className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2"
+                            >
+                              Submit Request <ArrowRight size={12}/>
+                            </button>
                           </div>
                         );
                       }
-                      if (myReservations.length === 0) {
-                        return <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>;
-                      }
-                      return (
-                        <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
-                          {myReservations.map(r => {
-                            // 🚨 TIME CHECK: Is this reservation from yesterday or earlier?
-                            const rDate = new Date(r.date);
-                            rDate.setHours(0,0,0,0);
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
-                            
-                            const isPastDate = rDate.getTime() < today.getTime();
-                            
-                            // If it's a past date and not cancelled, force the display to show 'completed'
-                            const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
 
-                            return (
-                              <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
-                                <div className="flex justify-between items-start mb-1.5">
-                                  <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
-                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                    displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
-                                    displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
-                                    displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
-                                    'bg-rose-500/10 text-rose-400'
-                                  }`}>{displayStatus}</span>
-                                </div>
-                                <div className="flex justify-between text-neutral-500 text-[11px]">
-                                  <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
-                                  <span>₱{r.totalAmount}</span>
-                                </div>
-                                
-                                {/* 🚨 CANCEL BUTTON LOGIC 🚨 */}
-                                {/* Only show Cancel if it's an active status AND NOT a past date! */}
-                                {!isPastDate && (r.status === 'pending' || r.status === 'confirmed') && (
-                                  <button
-                                    onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
-                                    className="w-full mt-2.5 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider"
-                                  >
-                                    Cancel Booking
-                                  </button>
-                                )}
+                      // 🚨 NORMAL BOOKINGS VIEW 🚨
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-3">
+                            <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
+                          </div>
+                          
+                          {!myEmail ? (
+                            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2">
+                              <p className="text-xs text-neutral-500 mb-3">Log in or register to view your cross-device booking history.</p>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
+                                  Login
+                                </button>
+                                <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
+                                  Register
+                                </button>
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          ) : myReservations.length === 0 ? (
+                            <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>
+                          ) : (
+                            <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
+                              {myReservations.map(r => {
+                                const rDate = new Date(r.date);
+                                rDate.setHours(0,0,0,0);
+                                const today = new Date();
+                                today.setHours(0,0,0,0);
+                                
+                                const isPastDate = rDate.getTime() < today.getTime();
+                                const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
+                                const isActiveStatus = displayStatus === 'pending' || displayStatus === 'confirmed';
+
+                                return (
+                                  <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
+                                    <div className="flex justify-between items-start mb-1.5">
+                                      <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                        displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                        displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                        displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                        'bg-rose-500/10 text-rose-400'
+                                      }`}>{displayStatus}</span>
+                                    </div>
+                                    <div className="flex justify-between text-neutral-500 text-[11px]">
+                                      <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
+                                      <span>₱{r.totalAmount}</span>
+                                    </div>
+                                    
+                                    {/* Action Required: Staff Proposed Reschedule */}
+                                    {r.rescheduleRequested && r.proposedDate && (
+                                      <div className="mt-3 bg-amber-950/30 border border-amber-800/50 rounded-xl p-3 animate-pulse-slow">
+                                        <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1.5 mb-1.5"><AlertTriangle size={12}/> Reschedule Proposed</p>
+                                        <p className="text-[10px] text-neutral-300 mb-3 leading-relaxed">Management proposed moving to <strong className="text-amber-300 font-black">{format(new Date(r.proposedDate), 'MMM d')} at {r.proposedTimeSlot}</strong>.</p>
+                                        <div className="flex gap-2">
+                                          <button onClick={() => confirmReschedule(r.id, true)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
+                                            <Check size={12}/> Accept
+                                          </button>
+                                          <button onClick={() => confirmReschedule(r.id, false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
+                                            <X size={12}/> Decline
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Action Buttons Container */}
+                                    <div className="flex gap-2 mt-2.5">
+                                      {/* Reschedule Button */}
+                                      {!isPastDate && isActiveStatus && !r.rescheduleRequested && (
+                                        <button 
+                                          onClick={() => {
+                                            setRescheduleTargetId(r.id);
+                                            setRescheduleDate(null);
+                                            setRescheduleTimeSlot('');
+                                          }} 
+                                          className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                          <CalendarDays size={12}/> Reschedule
+                                        </button>
+                                      )}
+                                      
+                                      {/* Cancel Button */}
+                                      {!isPastDate && isActiveStatus && (
+                                        <button
+                                          onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
+                                          className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
+                                        >
+                                          Cancel
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                       );
                     })()}
                   </div>
@@ -2061,7 +2184,7 @@ export function HomePage() {
               <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
                 <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Email</span><span className="text-neutral-200">{resForm.email}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold\">₱{downPayment}.00 ✓</span></div>
+                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold">₱{downPayment}.00 ✓</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Verification</span></div>
               </div>
               <button
