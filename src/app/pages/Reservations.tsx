@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppContext, HOURLY_RATE, DOWN_PAYMENT_RATE, ReservationStatus } from '../context/AppContext';
 import emailjs from '@emailjs/browser';
 import {
   Plus, X, Calendar, Clock, Users, Phone, Mail, ChevronDown, CheckCircle,
-  XCircle, Search, Filter, DollarSign, AlertTriangle, Receipt
+  XCircle, Search, Filter, PhilippinePeso, AlertTriangle, Receipt, RefreshCw
 } from 'lucide-react';
-import { format, isToday, isTomorrow, isPast } from 'date-fns';
+import { format, isToday, isTomorrow, isPast, isThisMonth, isThisYear } from 'date-fns';
+
+type DateFilter = 'all' | 'today' | 'month' | 'year'; // 🚨 STEP 5
 import { motion, AnimatePresence } from 'framer-motion';
 
 const formatPHP = (amount: number) => `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;

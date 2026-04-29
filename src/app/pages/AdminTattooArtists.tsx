@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useAppContext, TattooArtist } from '../context/AppContext';
 import {
   Plus, X, Pencil, Trash2, Palette, ToggleLeft, ToggleRight,
-  CheckCircle, Phone, Mail, CalendarX2, ChevronLeft, ChevronRight,
+  CheckCircle, Phone, Mail, CalendarX2, ChevronLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval,
   startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, parseISO } from 'date-fns';
+import { toast } from 'sonner';
 
 type FormState = Omit<TattooArtist, 'id' | 'unavailableDates'>;
 const blank: FormState = { name: '', specialty: '', contactNumber: '', email: '', bio: '', isAvailableToday: true, isActive: true };
@@ -124,10 +125,12 @@ export function AdminTattooArtists() {
   const [editingId, setEditingId]       = useState<string | null>(null);
   const [form, setForm]                 = useState<FormState>(blank);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [toast, setToast]               = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [calendarArtist, setCalendarArtist] = useState<TattooArtist | null>(null);
+  const [confirmSave, setConfirmSave]   = useState(false);
+  const [isSaving, setIsSaving]         = useState(false);
 
-  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+  const flash = (msg: string) => { setToastMessage(msg); setTimeout(() => setToastMessage(null), 2500); };
 
   const openAdd  = () => { setEditingId(null); setForm(blank); setShowForm(true); };
   const openEdit = (a: TattooArtist) => {
@@ -136,11 +139,20 @@ export function AdminTattooArtists() {
     setShowForm(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 🚨 BULLETPROOF GUARD: Stops Enter-key bypass
+    if (!confirmSave) {
+      setConfirmSave(true);
+      return;
+    }
+
     if (!form.name || !form.specialty) return;
-    if (editingId) { updateTattooArtist(editingId, form); flash('Artist updated!'); }
-    else { addTattooArtist({ ...form, unavailableDates: [] }); flash('Artist added!'); }
+    setIsSaving(true);
+    if (editingId) { await updateTattooArtist(editingId, form); toast.success('Artist updated!'); }
+    else { await addTattooArtist({ ...form, unavailableDates: [] }); toast.success('Artist added!'); }
+    setConfirmSave(false); setIsSaving(false);
     setShowForm(false); setEditingId(null); setForm(blank);
   };
 
@@ -153,9 +165,9 @@ export function AdminTattooArtists() {
 
   return (
     <div className="space-y-5">
-      {toast && (
+      {toastMessage && (
         <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-700/40 text-emerald-400 text-sm px-4 py-3 rounded-xl">
-          <CheckCircle size={14} /> {toast}
+          <CheckCircle size={14} /> {toastMessage}
         </div>
       )}
 
@@ -312,13 +324,22 @@ export function AdminTattooArtists() {
                   <span className="text-xs text-neutral-400">Active</span>
                 </label>
               </div>
+              
+              {/* 🚨 BULLETPROOF BUTTONS */}
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)}
+                <button type="button" onClick={() => { setShowForm(false); setConfirmSave(false); }}
                   className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
-                <button type="submit"
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-xl font-semibold py-2.5 flex items-center justify-center gap-2">
-                  {editingId ? <><Pencil size={14} /> Save</> : <><Plus size={14} /> Add Artist</>}
-                </button>
+                {confirmSave ? (
+                  <button type="submit" disabled={isSaving}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl font-bold py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-rose-900/20 animate-pulse">
+                    {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <><CheckCircle size={14} /> Confirm Changes?</>}
+                  </button>
+                ) : (
+                  <button type="submit" disabled={isSaving}
+                    className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-xl font-semibold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50">
+                    {editingId ? <><Pencil size={14} /> Save</> : <><Plus size={14} /> Add Artist</>}
+                  </button>
+                )}
               </div>
             </form>
           </div>

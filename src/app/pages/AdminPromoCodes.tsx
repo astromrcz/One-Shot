@@ -4,20 +4,31 @@ import { useAppContext, generateRandomPromoCode, PromoCode } from '../context/Ap
 import { Plus, X, Tag, Copy, ToggleLeft, ToggleRight, Trash2, Wand2, CheckCircle, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
+
 export function AdminPromoCodes() {
   const { promoCodes, addPromoCode, togglePromoCode, deletePromoCode } = useAppContext();
 
   const [showForm, setShowForm] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [confirmSave, setConfirmSave] = useState(false); 
+  const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({ code: '', discountPercent: 10, description: '', maxUsage: 100, isActive: true, hasExpiry: false, expiresAt: '' });
-
+  
   const handleGenerateCode = () => setForm(f => ({ ...f, code: generateRandomPromoCode() }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 🚨 BULLETPROOF GUARD: Stops Enter-key bypass
+    if (!confirmSave) {
+      setConfirmSave(true);
+      return;
+    }
+
     if (!form.code || !form.description) return;
-    addPromoCode({
+    setIsSaving(true);
+    await addPromoCode({
       code: form.code.toUpperCase(),
       discountPercent: form.discountPercent,
       description: form.description,
@@ -25,6 +36,8 @@ export function AdminPromoCodes() {
       maxUsage: form.maxUsage,
       expiresAt: form.hasExpiry && form.expiresAt ? new Date(form.expiresAt) : undefined,
     });
+    setConfirmSave(false);
+    setIsSaving(false);
     setShowForm(false);
     setForm({ code: '', discountPercent: 10, description: '', maxUsage: 100, isActive: true, hasExpiry: false, expiresAt: '' });
   };
@@ -204,11 +217,19 @@ export function AdminPromoCodes() {
                   </div>
                 </div>
               )}
+              
+              {/* 🚨 BULLETPROOF BUTTONS */}
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
-                <button type="submit" className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded-xl font-semibold py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-violet-900/30">
-                  <RefreshCw size={14} /> Create Promo Code
-                </button>
+                <button type="button" onClick={() => { setShowForm(false); setConfirmSave(false); }} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
+                {confirmSave ? (
+                  <button type="submit" disabled={isSaving} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl font-bold py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-rose-900/30 animate-pulse">
+                    {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <><CheckCircle size={14} /> Confirm Addition?</>}
+                  </button>
+                ) : (
+                  <button type="submit" disabled={isSaving} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded-xl font-semibold py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-violet-900/30">
+                    <Wand2 size={14} /> Add Promo Code
+                  </button>
+                )}
               </div>
             </form>
           </div>

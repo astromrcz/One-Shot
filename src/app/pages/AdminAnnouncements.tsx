@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAppContext, Announcement, AnnouncementType } from '../context/AppContext';
-import { Plus, X, Pencil, Trash2, Megaphone, ToggleLeft, ToggleRight, CheckCircle, Info, AlertTriangle, Star, Calendar } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, Megaphone, ToggleLeft, ToggleRight, CheckCircle, Info, AlertTriangle, Star, Calendar, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
 const TYPE_CONFIG: Record<AnnouncementType, { label: string; color: string; bg: string; border: string; icon: React.ElementType }> = {
@@ -18,6 +18,8 @@ export function AdminAnnouncements() {
   const [showForm, setShowForm]   = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm]           = useState<FormState>(blank);
+  const [confirmSave, setConfirmSave] = useState(false);
+  const [isSaving, setIsSaving]   = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toast, setToast]         = useState<string | null>(null);
 
@@ -30,12 +32,15 @@ export function AdminAnnouncements() {
     setShowForm(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.content) return;
+    setIsSaving(true);
     const payload = { title: form.title, content: form.content, type: form.type, isActive: form.isActive, expiresAt: form.hasExpiry && form.expiresAt ? new Date(form.expiresAt) : undefined };
-    if (editingId) { updateAnnouncement(editingId, payload); flash('Announcement updated!'); }
-    else { addAnnouncement(payload); flash('Announcement posted!'); }
+    if (editingId) { await updateAnnouncement(editingId, payload); flash('Announcement updated!'); }
+    else { await addAnnouncement(payload); flash('Announcement posted!'); }
+    setConfirmSave(false);
+    setIsSaving(false);
     setShowForm(false); setEditingId(null); setForm(blank);
   };
 
@@ -177,12 +182,19 @@ export function AdminAnnouncements() {
                 <span className="text-xs text-neutral-400">Publish immediately</span>
               </label>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)}
+                <button type="button" onClick={() => { setShowForm(false); setConfirmSave(false); }}
                   className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
-                <button type="submit"
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-xl font-semibold py-2.5 flex items-center justify-center gap-2">
-                  {editingId ? <><Pencil size={14} /> Update</> : <><Plus size={14} /> Post</>}
-                </button>
+                {confirmSave ? (
+                  <button type="submit" disabled={isSaving}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl font-bold py-2.5 flex items-center justify-center gap-2 shadow-lg shadow-rose-900/20 animate-pulse">
+                    {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <><CheckCircle size={14} /> Confirm Changes?</>}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setConfirmSave(true)} disabled={isSaving}
+                    className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-xl font-semibold py-2.5 flex items-center justify-center gap-2 disabled:opacity-50">
+                    {editingId ? <><Pencil size={14} /> Update</> : <><Plus size={14} /> Post</>}
+                  </button>
+                )}
               </div>
             </form>
           </div>

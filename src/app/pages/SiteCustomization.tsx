@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Save, Image as ImageIcon, LayoutTemplate, MapPin, AlignLeft, ShieldAlert, X, Upload } from 'lucide-react';
+import { Save, Image as ImageIcon, LayoutTemplate, MapPin, AlignLeft, ShieldAlert, X, Upload, CheckCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../utils/supabase/client';
 
 export function SiteCustomization() {
   const { siteSettings, updateSiteSettings, staffProfile } = useAppContext();
   const [loading, setLoading] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
   
   // Password Modal States
-  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);  
   const [adminPassword, setAdminPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   

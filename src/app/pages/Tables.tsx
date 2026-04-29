@@ -15,7 +15,6 @@ const POS_MENU = [
   { id: 'm2', name: 'Red Horse', price: 85, category: 'Drinks' },
   { id: 'm3', name: 'Nachos Platter', price: 150, category: 'Snacks' },
   { id: 'm4', name: 'French Fries', price: 120, category: 'Snacks' },
-  { id: 'm5', name: 'Premium Cue Rental', price: 50, category: 'Misc' },
 ];
 
 type FilterStatus = 'all' | 'available' | 'occupied' | 'reserved';
@@ -396,15 +395,24 @@ export function Tables() {
 
             // 🚨 STEP 3: Live POS cost calculation for "Open Time"
             let tableCost = 0;
+            let overtimeCost = 0;
+            let overtimeMins = 0;
+
             if (session.durationMinutes === 0) {
               const elapsedSecs = Math.max(0, differenceInSeconds(new Date(), new Date(session.startTime)));
               tableCost = (elapsedSecs / 3600) * session.hourlyRate;
             } else {
               tableCost = (session.durationMinutes / 60) * session.hourlyRate;
+              const endTime = addMinutes(new Date(session.startTime), session.durationMinutes);
+              const now = new Date();
+              if (now > endTime) {
+                overtimeMins = Math.ceil(differenceInSeconds(now, endTime) / 60);
+                overtimeCost = (overtimeMins / 60) * session.hourlyRate;
+              }
             }
 
             const ordersTotal = session.orders?.reduce((sum, o) => sum + (o.price * o.quantity), 0) || 0;
-            const grandTotal = tableCost + ordersTotal;
+            const grandTotal = tableCost + overtimeCost + ordersTotal;
 
             return (
               <div className="flex flex-col flex-1 min-h-0">
@@ -446,6 +454,17 @@ export function Tables() {
                     </div>
                     <span className="text-[11px] font-bold text-neutral-200">₱{tableCost.toFixed(2)}</span>
                   </div>
+
+                  {/* Overtime Item (if applicable) */}
+                  {overtimeMins > 0 && (
+                    <div className="flex justify-between items-start bg-amber-950/20 px-3 py-2 rounded-lg border border-amber-900/30">
+                      <div>
+                        <p className="text-[11px] text-amber-500 font-semibold flex items-center gap-1"><AlertTriangle size={10} /> Overtime ({overtimeMins}m)</p>
+                        <p className="text-[9px] text-amber-500/70">@ ₱{session.hourlyRate.toFixed(2)}/hr</p>
+                      </div>
+                      <span className="text-[11px] font-bold text-amber-500">₱{overtimeCost.toFixed(2)}</span>
+                    </div>
+                  )}
                   
                   {/* F&B Orders */}
                   {session.orders?.map(o => (
