@@ -74,6 +74,7 @@ export const router = createBrowserRouter([
           { path: 'analytics',              Component: Analytics },
           { path: 'reports',                Component: ReportsPage }, // 🚨 STEP 20
           { path: 'settings',               Component: SettingsPage },
+          { path: 'tattoo-reservations', Component: TattooReservationsPage },
         ],
       },
       // ── Artist Portal ─────────────────────────────────────

@@ -87,11 +87,17 @@ export function TattooReservationsPage() {
             <Calendar size={32} className="mx-auto text-neutral-700 mb-3" />
             <p className="text-neutral-400 font-semibold">No tattoo bookings found</p>
           </div>
-        ) : filtered.map(r => (
+        ) : filtered.map(r => {
+          const isVerified = ['confirmed', 'in-progress', 'completed'].includes(r.status);
+          
+          return (
           <div key={r.id} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 hover:border-neutral-700 transition-colors flex flex-col">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="font-bold text-neutral-200 text-base">{r.customerName}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-neutral-200 text-base">{r.customerName}</h3>
+                  {isVerified && <CheckCircle size={14} className="text-emerald-500" title="Verified Customer" />}
+                </div>
                 <p className="text-[10px] text-neutral-500 mt-0.5">Booking #{r.id.split('-')[0].toUpperCase()}</p>
               </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold border ${
@@ -186,7 +192,8 @@ export function TattooReservationsPage() {
             </div>
 
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

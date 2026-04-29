@@ -642,7 +642,17 @@ export function Tables() {
                 )}
 
                 <div className="flex gap-3 pt-1">
-                  <button type="button" onClick={() => setAssigningTableId(null)} className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setAssigningTableId(null);
+                      setSelectedCustomer(null);
+                      setCustomerName('');
+                      setDurationMinutes(60);
+                      setAmountPaid('');
+                    }} 
+                    className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors"
+                  >
                     Cancel
                   </button>
                   <button type="submit" className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-xl shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 font-semibold">

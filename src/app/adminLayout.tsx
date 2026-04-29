@@ -4,12 +4,14 @@ import {
   LayoutDashboard, Users, Table2, Tag, BarChart3,
   DollarSign, FileText, Megaphone, CalendarX2, LayoutTemplate,
   Palette, Menu, X, LogOut, ChevronRight,
-  ShieldCheck, Bell, Circle, Activity, Settings as SettingsIcon
+  ShieldCheck, Bell, Circle, Activity, Settings as SettingsIcon, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppContext } from './context/AppContext';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 import OneSignal from 'react-onesignal';
+
+// 🚨 ADDED "Reports" to the Navigation Array
 const navItems = [
   { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',           exact: true },
   { to: '/admin/customization', icon: LayoutTemplate,  label: 'Site Customization' },
@@ -22,7 +24,9 @@ const navItems = [
   { to: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
   { to: '/admin/calendar',      icon: CalendarX2,      label: 'Closing Calendar' },
   { to: '/admin/analytics',     icon: BarChart3,       label: 'Analytics' },
+  { to: '/admin/reports',       icon: FileSpreadsheet, label: 'Reports' }, // 👈 Added
   { to: '/admin/activity',      icon: Activity,        label: 'Activity Log' },
+  { to: '/admin/tattoo-reservations', icon: Palette, label: 'Tattoo Bookings' },
   { to: '/admin/settings',      icon: SettingsIcon,    label: 'Account Settings' },
 ];
 
@@ -38,18 +42,19 @@ const pageTitles: Record<string, string> = {
   '/admin/announcements': 'Announcements',
   '/admin/calendar': 'Closing Calendar',
   '/admin/analytics': 'Analytics',
+  '/admin/reports': 'Reports', // 👈 Added
   '/admin/activity': 'Activity Log',
+  '/admin/settings': 'Settings',
 };
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // 👈 Grab the 'loading' state from context
   const { adminLoggedIn, staffLoggedIn, adminLogout, announcements, closedDates, loading } = useAppContext(); 
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (loading) return; // 👈 FIREWALL: Wait for session to load first!
+    if (loading) return; 
 
     if (adminLoggedIn) {
       OneSignal.User.addTag("role", "admin");
@@ -60,12 +65,11 @@ export function AdminLayout() {
         navigate('/staff', { replace: true });
         toast.error("Access Denied", { description: "You do not have administrator privileges." });
       } else {
-        navigate('/', { replace: true }); // Redirect to homepage
+        navigate('/', { replace: true }); 
       }
     }
   }, [adminLoggedIn, staffLoggedIn, loading, navigate]);
 
-  // 👈 Show a quick spinner while the session loads instead of crashing
   if (loading) {
     return (
       <div className="h-screen bg-neutral-900 flex items-center justify-center">
@@ -76,13 +80,11 @@ export function AdminLayout() {
 
   if (!adminLoggedIn) return null;
 
-  const activeAnnouncements = announcements.filter(a => a.isActive).length;
-  const upcomingClosed = closedDates.filter(c => new Date(c.date) >= new Date()).length;
   const pageTitle = pageTitles[location.pathname] || 'Admin';
 
   const handleLogout = async () => {
     try {
-      await adminLogout(); // or staffLogout()
+      await adminLogout(); 
       navigate('/');
       toast.info("Signed out", { 
         description: "Admin session ended successfully.",
@@ -116,8 +118,6 @@ export function AdminLayout() {
             <X size={18} />
           </button>
         </div>
-
-        
 
         {/* System Health Widget */}
         <div className="px-4 pb-3">
@@ -177,7 +177,6 @@ export function AdminLayout() {
           >
             <ShieldCheck size={13} />
             <span className="flex-1 text-left">Staff Portal</span>
-            {/* Changed the arrow to point right instead of up-right since it's no longer opening a new tab */}
             <span className="text-[9px] text-neutral-600 font-black">→</span> 
           </button>
         </div>

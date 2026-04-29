@@ -43,7 +43,8 @@ function formatWaitTime(arrivalTime: Date, position: number): string {
 function TableCard({ table, tick }: { table: Table; tick: number }) {
   const timer = getSessionTimer(table);
   const isAlert = !timer.isOvertime && !timer.isOpenTime && timer.secsLeft <= 900 && timer.secsLeft > 0;
-  const alertPulseDuration = Math.max(0.4, (timer.secsLeft / 900) * 2.5) + 's';
+  // Adjusted minimum speed to 0.8s so it's not too harsh
+  const alertPulseDuration = Math.max(0.8, (timer.secsLeft / 900) * 2.5) + 's';
 
   if (table.status === 'available') {
     return (

@@ -33,6 +33,9 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
         } else if (secsLeft === 60) { 
           const u = new SpeechSynthesisUtterance(`Table ${table.name.replace('Table ', '')}, 1 minute remaining.`);
           window.speechSynthesis.speak(u);
+        } else if (secsLeft === 0) { 
+          const u = new SpeechSynthesisUtterance(`Table ${table.name.replace('Table ', '')}, time is up.`);
+          window.speechSynthesis.speak(u);
         }
       }
     }, 1000);
@@ -100,8 +103,8 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     return 'border-neutral-800';
   };
 
-  // 🚨 Dynamic Acceleration Math (Max 2.5s -> Min 0.4s)
-  const pulseDuration = timer?.isAlert ? Math.max(0.4, (timer.secsLeft / 900) * 2.5) + 's' : undefined;
+  // 🚨 Dynamic Acceleration Math (Max 2.5s -> Min 0.8s so it isn't too fast)
+  const pulseDuration = timer?.isAlert ? Math.max(0.8, (timer.secsLeft / 900) * 2.5) + 's' : undefined;
 
   return (
     <div className={clsx(

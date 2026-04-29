@@ -8,7 +8,7 @@ import { supabase } from '../../utils/supabase/client';
 import { useAppContext } from '../context/AppContext';
 import { format, isToday, differenceInMinutes } from 'date-fns';
 
-type Section = 'profile' | 'security' | 'bookings';
+type Section = 'profile' | 'security';
 
 // Define the shape of our customer data based on what HomePage uses
 export type CustomerUser = {
@@ -285,7 +285,6 @@ export function CustomerSettingsModal({
             
             <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
               {[
-                { id: 'bookings', label: 'My Bookings', icon: CalendarDays },
                 { id: 'profile', label: 'Profile', icon: User },
                 { id: 'security', label: 'Security', icon: Lock },
               ].map(tab => (

@@ -5,21 +5,23 @@ import {
   Star, Tag, Shield, Palette,
   Menu, X, Bell, ChevronRight,
   Circle, LogOut, Settings,
-  Monitor, ShieldCheck
+  Monitor, ShieldCheck, History // 👈 Import History icon
 } from 'lucide-react';
 import { useAppContext } from './context/AppContext';
 import { toast } from 'sonner';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 
+// 🚨 ADDED "History" to the Navigation Array
 const navItems = [
-  { to: '/staff',                     icon: CheckCircle, label: 'Overview',            exact: true },
-  { to: '/staff/tables',              icon: Clock,       label: 'Table Monitor' },
-  { to: '/staff/reservations',        icon: Calendar,    label: 'Reservations' },
-  { to: '/staff/queue',               icon: UserPlus,    label: 'Queue' },
-  { to: '/staff/tattoo-reservations', icon: Palette,     label: 'Tattoo Reservations' },
-  { to: '/staff/promo-codes',         icon: Tag,         label: 'Promo Codes' },
-  { to: '/staff/feedback',            icon: Star,        label: 'Feedback' },
-  { to: '/staff/settings',            icon: Settings,    label: 'Settings' },
+  { to: '/staff',                   icon: CheckCircle, label: 'Overview',            exact: true },
+  { to: '/staff/tables',            icon: Clock,       label: 'Table Monitor' },
+  { to: '/staff/reservations',      icon: Calendar,    label: 'Reservations' },
+  { to: '/staff/queue',             icon: UserPlus,    label: 'Queue' },
+  { to: '/staff/tattoo-reservations', icon: Palette,   label: 'Tattoo Reservations' },
+  { to: '/staff/history',           icon: History,     label: 'History' }, // 👈 Added
+  { to: '/staff/promo-codes',       icon: Tag,         label: 'Promo Codes' },
+  { to: '/staff/feedback',          icon: Star,        label: 'Feedback' },
+  { to: '/staff/settings',          icon: Settings,    label: 'Settings' },
 ];
 
 const pageTitles: Record<string, string> = {
@@ -28,6 +30,7 @@ const pageTitles: Record<string, string> = {
   '/staff/reservations': 'Reservations',
   '/staff/queue': 'Queue Management',
   '/staff/tattoo-reservations': 'Tattoo Reservations',
+  '/staff/history': 'History Log', // 👈 Added
   '/staff/promo-codes': 'Promo Codes',
   '/staff/feedback': 'Customer Feedback',
   '/staff/settings': 'Settings',
@@ -37,20 +40,17 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [now, setNow] = useState(new Date()); // <-- Added for the clock
+  const [now, setNow] = useState(new Date()); 
   const { queue, tables, activities, staffLoggedIn, adminLoggedIn, staffLogout, staffProfile } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Auth guard — redirect to login if not authenticated
-  // Auth guard — redirect to login if not authenticated
   useEffect(() => {
     if (!staffLoggedIn) {
-      navigate('/', { replace: true }); // Redirect to homepage
+      navigate('/', { replace: true }); 
     }
   }, [staffLoggedIn, navigate]);
 
-  // Live Clock effect
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
