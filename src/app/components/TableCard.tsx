@@ -16,22 +16,21 @@ const formatPHP = (amount: number) => `₱${amount.toFixed(2)}`;
 
 export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }: TableCardProps) {
   const [now, setNow] = useState(new Date());
-  const { rates } = useAppContext(); // 🚨 STEP 21: Fetch live dynamic rates!
+  const { rates } = useAppContext(); 
 
   useEffect(() => {
     const interval = setInterval(() => {
       const newNow = new Date();
       setNow(newNow);
       
-      // 🚨 STEP 7: TTS Notification Logic (15 min and 1 min)
       if (table.session && table.session.durationMinutes > 0) {
         const endTime = addMinutes(new Date(table.session.startTime), table.session.durationMinutes);
         const secsLeft = differenceInSeconds(endTime, newNow);
         
-        if (secsLeft === 900) { // Exactly 15 mins
+        if (secsLeft === 900) { 
           const u = new SpeechSynthesisUtterance(`Table ${table.name.replace('Table ', '')}, 15 minutes remaining.`);
           window.speechSynthesis.speak(u);
-        } else if (secsLeft === 60) { // Exactly 1 min
+        } else if (secsLeft === 60) { 
           const u = new SpeechSynthesisUtterance(`Table ${table.name.replace('Table ', '')}, 1 minute remaining.`);
           window.speechSynthesis.speak(u);
         }
@@ -43,9 +42,8 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
   const getTimerInfo = () => {
     if (!table.session) return null;
     const { startTime, durationMinutes } = table.session;
-    const activeRate = rates.hourlyRate; // Use live rate
+    const activeRate = rates.hourlyRate; 
 
-    // 🚨 STEP 3: "Open Time" Feature Integration
     if (durationMinutes === 0) {
       const totalSecsElapsed = Math.max(0, differenceInSeconds(now, new Date(startTime)));
       const mins = Math.floor(totalSecsElapsed / 60);
@@ -54,7 +52,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
       return {
         formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
         isAlert: false, isOvertime: false, overtimeCharge: 0,
-        elapsed: mins, endTime: new Date(), currentCharge, isOpenTime: true
+        elapsed: mins, endTime: new Date(), currentCharge, isOpenTime: true, secsLeft: 0
       };
     }
 
@@ -67,19 +65,18 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     const isAlert = !isOvertime && totalSecsLeft <= 900;
 
     const overMins = isOvertime ? Math.ceil(absSecs / 60) : 0;
-    const overtimeCharge = (overMins / 60) * activeRate; // 🚨 STEP 21: Used activeRate instead of HOURLY_RATE
+    const overtimeCharge = (overMins / 60) * activeRate; 
 
     return {
       formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
       isAlert, isOvertime, overtimeCharge,
       elapsed: Math.floor(differenceInSeconds(now, new Date(startTime)) / 60),
-      endTime, isOpenTime: false, currentCharge: table.session.amountPaid
+      endTime, isOpenTime: false, currentCharge: table.session.amountPaid, secsLeft: totalSecsLeft
     };
   };
 
   const timer = getTimerInfo();
 
-  // Format next reservation display
   const getNextReservationLabel = () => {
     if (!nextReservation) return null;
     const resDate = new Date(nextReservation.date);
@@ -97,21 +94,33 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
   const getBorderColor = () => {
     if (timer?.isOvertime) return 'border-rose-500/60';
     if (timer?.isAlert) return 'border-amber-500/60';
-    if (table.status === 'occupied') return 'border-rose-800/40';
+    if (timer?.isOpenTime) return 'border-blue-800/40';
+    if (table.status === 'occupied') return 'border-neutral-700';
     if (table.status === 'reserved') return nextResLabel?.urgent ? 'border-rose-700/50' : 'border-amber-800/40';
     return 'border-neutral-800';
   };
 
+  // 🚨 Dynamic Acceleration Math (Max 2.5s -> Min 0.4s)
+  const pulseDuration = timer?.isAlert ? Math.max(0.4, (timer.secsLeft / 900) * 2.5) + 's' : undefined;
+
   return (
     <div className={clsx(
-      'relative rounded-xl border p-4 flex flex-col gap-3 h-52 transition-all shadow-md',
+      'relative rounded-xl border p-4 flex flex-col gap-3 h-52 transition-all shadow-md overflow-hidden',
       'bg-neutral-950',
       getBorderColor(),
       timer?.isOvertime && 'shadow-rose-900/20',
       timer?.isAlert && 'shadow-amber-900/20',
     )}>
+      {/* 🚨 DYNAMIC FLASHING OVERLAYS */}
+      {timer?.isOvertime && (
+        <div className="absolute inset-0 bg-rose-500/10 pointer-events-none" style={{ animation: 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+      )}
+      {timer?.isAlert && (
+        <div className="absolute inset-0 bg-amber-500/15 pointer-events-none" style={{ animation: `pulse ${pulseDuration} cubic-bezier(0.4, 0, 0.6, 1) infinite` }} />
+      )}
+
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="relative z-10 flex justify-between items-start">
         <div>
           <h3 className="text-sm font-bold text-neutral-200">{table.name}</h3>
           {table.session && (
@@ -130,33 +139,36 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
         <span className={clsx(
           'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
           table.status === 'available' && 'bg-emerald-500/15 text-emerald-400',
-          table.status === 'occupied' && !timer?.isOvertime && !timer?.isAlert && 'bg-rose-500/15 text-rose-400',
+          table.status === 'occupied' && !timer?.isOvertime && !timer?.isAlert && timer?.isOpenTime && 'bg-blue-500/15 text-blue-400',
+          table.status === 'occupied' && !timer?.isOvertime && !timer?.isAlert && !timer?.isOpenTime && 'bg-neutral-800 text-neutral-300',
           timer?.isAlert && !timer?.isOvertime && 'bg-amber-500/15 text-amber-400',
           timer?.isOvertime && 'bg-rose-500/20 text-rose-300',
           table.status === 'reserved' && 'bg-amber-500/15 text-amber-400',
         )}>
-          {timer?.isOvertime ? 'Overtime' : timer?.isAlert ? 'Ending Soon' : table.status}
+          {timer?.isOvertime ? 'Overtime' : timer?.isOpenTime ? 'Open Time' : timer?.isAlert ? 'Ending Soon' : table.status}
         </span>
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col justify-end gap-2">
+      <div className="relative z-10 flex-1 flex flex-col justify-end gap-2">
         {table.status === 'occupied' && table.session && timer ? (
           <>
             {/* Timer */}
             <div className="text-center py-1">
               <p className="text-[10px] text-neutral-600 uppercase tracking-wider mb-0.5">
-                {timer.isOpenTime ? '⏱ Elapsed Time (Open)' : timer.isOvertime ? '⚠ Overtime' : timer.isAlert ? '⚡ Time Left' : 'Time Left'}
+                {timer.isOpenTime ? '⏱ Elapsed Time' : timer.isOvertime ? '⚠ Overtime' : timer.isAlert ? '⚡ Time Left' : 'Time Left'}
               </p>
               <p className={clsx(
                 'font-mono text-2xl font-black tabular-nums tracking-tight',
-                timer.isOvertime ? 'text-rose-400' : timer.isAlert ? 'text-amber-400' : 'text-emerald-400'
+                timer.isOvertime ? 'text-rose-400' : timer.isOpenTime ? 'text-blue-400' : timer.isAlert ? 'text-amber-400' : 'text-emerald-400'
               )}>
                 {timer.isOvertime && '+'}
                 {timer.formatted}
               </p>
               {timer.isOvertime ? (
                 <p className="text-[10px] text-rose-500 mt-0.5">+{formatPHP(timer.overtimeCharge)} overtime</p>
+              ) : timer.isOpenTime ? (
+                <p className="text-[10px] text-blue-500/80 mt-0.5">Running Total: {formatPHP(timer.currentCharge)}</p>
               ) : (
                 <p className="text-[10px] text-neutral-600 mt-0.5">
                   ends {format(timer.endTime, 'h:mm a')}
@@ -166,7 +178,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
             {/* Payment info */}
             <div className="flex justify-between text-[10px] text-neutral-600 border-t border-neutral-800/60 pt-2">
               <span>Paid: <span className="text-neutral-400">{formatPHP(table.session.amountPaid)}</span></span>
-              <span>Rate: <span className="text-neutral-400">₱{rates.hourlyRate}/hr</span></span> {/* 🚨 STEP 21: Dynamic rate */}
+              <span>Rate: <span className="text-neutral-400">₱{rates.hourlyRate}/hr</span></span> 
             </div>
             {/* Actions */}
             <div className="flex gap-1.5">

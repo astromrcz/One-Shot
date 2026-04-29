@@ -5,6 +5,7 @@ import {
   ShieldCheck, Palette, BadgeDollarSign, Archive, ArchiveRestore, ChevronDown, ChevronUp,
   Lock, AlertTriangle
 } from 'lucide-react';
+import emailjs from '@emailjs/browser';
 import { toast } from 'sonner';
 
 const ROLES: { value: StaffUser['role']; label: string; color: string; icon: React.ReactNode }[] = [
@@ -36,6 +37,7 @@ export function AdminUsers() {
   const [isResettingId, setIsResettingId] = useState<string | null>(null);
   const [restoringId, setRestoringId]     = useState<string | null>(null);
   const [archivingUser, setArchivingUser] = useState<StaffUser | null>(null);
+  const [restoringUser, setRestoringUser] = useState<StaffUser | null>(null); // 🚨 Added restoring state
   const [archivePassword, setArchivePassword] = useState('');
   const [isArchiving, setIsArchiving]     = useState(false);
 
@@ -62,7 +64,27 @@ export function AdminUsers() {
         toast.success("User Updated", { description: "Staff account changes saved." });
       } else {
         await addStaffUser({ ...payload, password: 'oneshotdefaultpw' });
-        toast.success("User Created", { description: "New staff account added." });
+        
+        // 🚨 EMAIL NOTIFICATION FOR NEW ACCOUNTS 🚨
+        try {
+          await emailjs.send(
+            'service_d5kmgtc',   
+            'template_48a5pgd', // Replace with your exact Staff Welcome Email template ID
+            {
+              to_email: form.email,
+              customer_name: form.fullName, // using customer_name var based on your other templates
+              role: form.role,
+              username: form.username,
+              password: 'oneshotdefaultpw',
+              login_link: `${window.location.origin}/staff/login`
+            },
+            'agtFkbRS7r_lgBWMV' 
+          );
+          toast.success("User Created & Email Sent", { description: "New staff account added. They have been emailed their login details." });
+        } catch (emailErr) {
+          console.error("Email failed to send", emailErr);
+          toast.success("User Created", { description: "New staff account added, but welcome email failed to send." });
+        }
       }
       setShowForm(false); setEditingId(null); setForm(blankForm);
     } catch (err) {
@@ -86,6 +108,7 @@ export function AdminUsers() {
     }
   };
 
+  // ── Archive & Restore Security ──────────────────────────────────────────────
   const handleArchiveClick = (u: StaffUser) => {
     if (u.isAdmin) {
       const activeAdmins = staffUsers.filter(su => su.isAdmin && su.isActive);
@@ -98,11 +121,19 @@ export function AdminUsers() {
     setArchivePassword('');
   };
 
-  const confirmArchive = async (e: React.FormEvent) => {
+  const handleRestoreClick = (u: StaffUser) => {
+    setRestoringUser(u);
+    setArchivePassword('');
+  };
+
+  const confirmArchiveOrRestore = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!archivingUser) return;
+    const targetUser = archivingUser || restoringUser;
+    if (!targetUser) return;
+    
     setIsArchiving(true);
     
+    // Verify the current admin's password before executing
     const isValid = await adminLogin(staffProfile.username, archivePassword);
     if (!isValid) {
       toast.error("Authentication Failed", { description: "Incorrect admin password." });
@@ -111,27 +142,21 @@ export function AdminUsers() {
     }
 
     try {
-      await toggleStaffUserActive(archivingUser.id);
-      toast.success("Account Archived", { description: `${archivingUser.fullName}'s access has been revoked.` });
+      await toggleStaffUserActive(targetUser.id);
+      if (archivingUser) {
+        toast.success("Account Archived", { description: `${targetUser.fullName}'s access has been revoked.` });
+      } else {
+        toast.success("Account Restored", { description: `${targetUser.fullName} is active again.` });
+      }
       setArchivingUser(null);
+      setRestoringUser(null);
     } catch (err) {
-      toast.error("Database Error", { description: "Failed to archive account." });
+      toast.error("Database Error", { description: "Failed to process account action." });
     } finally {
       setIsArchiving(false);
     }
   };
 
-  const handleRestore = async (u: StaffUser) => {
-    setRestoringId(u.id);
-    try {
-      await toggleStaffUserActive(u.id);
-      toast.success("Account Restored", { description: `${u.fullName} is active again.` });
-    } catch(err) {
-      toast.error("Database Error", { description: "Failed to restore account." });
-    } finally {
-      setRestoringId(null);
-    }
-  };
 
   const filtered = staffUsers.filter(u => filterRole === 'all' || u.role === filterRole);
   const activeUsers = filtered.filter(u => u.isActive);
@@ -173,16 +198,22 @@ export function AdminUsers() {
           </div>
           
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button onClick={() => openEdit(u)} title="Edit User" className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
-              <Pencil size={14} />
-            </button>
-            <button onClick={() => handleReset(u.id, u.fullName)} disabled={isResettingId === u.id} title="Reset Password" className="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 transition-colors disabled:opacity-50">
-              {isResettingId === u.id ? <RefreshCw size={14} className="animate-spin text-amber-500" /> : <RefreshCw size={14} />}
-            </button>
+            {/* 🚨 HIDE EDIT/RESET ON ARCHIVED ACCOUNTS 🚨 */}
+            {!isArchived && (
+              <>
+                <button onClick={() => openEdit(u)} title="Edit User" className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => handleReset(u.id, u.fullName)} disabled={isResettingId === u.id} title="Reset Password" className="p-2 rounded-lg text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 transition-colors disabled:opacity-50">
+                  {isResettingId === u.id ? <RefreshCw size={14} className="animate-spin text-amber-500" /> : <RefreshCw size={14} />}
+                </button>
+              </>
+            )}
             
+            {/* Archive / Restore Toggle */}
             {isArchived ? (
-              <button onClick={() => handleRestore(u)} disabled={restoringId === u.id} title="Restore Account" className="p-2 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-emerald-950/20 transition-colors disabled:opacity-50">
-                {restoringId === u.id ? <RefreshCw size={16} className="animate-spin text-emerald-500" /> : <ArchiveRestore size={16} />}
+              <button onClick={() => handleRestoreClick(u)} title="Restore Account" className="p-2 rounded-lg text-neutral-500 hover:text-emerald-400 hover:bg-emerald-950/20 transition-colors">
+                 <ArchiveRestore size={16} />
               </button>
             ) : (
               <button onClick={() => handleArchiveClick(u)} title="Archive Account" className="p-2 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 transition-colors">
@@ -261,19 +292,27 @@ export function AdminUsers() {
         </div>
       )}
 
-      {archivingUser && (
+      {/* Archive / Restore Confirmation Modal */}
+      {(archivingUser || restoringUser) && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-neutral-950 border border-rose-900/30 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className={`bg-neutral-950 border rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${archivingUser ? 'border-rose-900/30' : 'border-emerald-900/30'}`}>
             <div className="p-6 text-center">
-              <div className="w-14 h-14 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-500/20">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 border ${
+                archivingUser ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+              }`}>
                 <AlertTriangle size={24} />
               </div>
-              <h2 className="text-lg font-bold text-neutral-100 mb-2">Archive Account?</h2>
+              <h2 className="text-lg font-bold text-neutral-100 mb-2">
+                {archivingUser ? 'Archive Account?' : 'Restore Account?'}
+              </h2>
               <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
-                You are about to archive <strong className="text-neutral-200">{archivingUser.fullName}</strong>. They will immediately lose access to the system. Enter your admin password to confirm.
+                {archivingUser 
+                  ? <>You are about to archive <strong className="text-neutral-200">{archivingUser.fullName}</strong>. They will immediately lose access to the system. Enter your admin password to confirm.</>
+                  : <>You are about to restore <strong className="text-neutral-200">{restoringUser?.fullName}</strong>. They will regain access to the system. Enter your admin password to confirm.</>
+                }
               </p>
               
-              <form onSubmit={confirmArchive}>
+              <form onSubmit={confirmArchiveOrRestore}>
                 <div className="relative mb-6 text-left">
                   <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                     <Lock size={16} className="text-neutral-500" />
@@ -285,14 +324,16 @@ export function AdminUsers() {
                     required
                     autoFocus
                     placeholder="Your admin password"
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-10 pr-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-rose-500/50 transition-colors placeholder-neutral-600"
+                    className={`w-full bg-neutral-900 border border-neutral-800 rounded-xl pl-10 pr-4 py-3 text-sm text-neutral-200 focus:outline-none transition-colors placeholder-neutral-600 ${
+                      archivingUser ? 'focus:border-rose-500/50' : 'focus:border-emerald-500/50'
+                    }`}
                   />
                 </div>
                 
                 <div className="flex gap-3">
                   <button 
                     type="button" 
-                    onClick={() => setArchivingUser(null)}
+                    onClick={() => { setArchivingUser(null); setRestoringUser(null); }}
                     disabled={isArchiving}
                     className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors font-semibold disabled:opacity-50"
                   >
@@ -301,9 +342,11 @@ export function AdminUsers() {
                   <button 
                     type="submit"
                     disabled={isArchiving || !archivePassword}
-                    className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl transition-colors font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                    className={`flex-1 px-4 py-2.5 text-white text-sm rounded-xl transition-colors font-semibold flex items-center justify-center gap-2 disabled:opacity-50 ${
+                      archivingUser ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                    }`}
                   >
-                    {isArchiving ? <RefreshCw size={16} className="animate-spin" /> : "Archive User"}
+                    {isArchiving ? <RefreshCw size={16} className="animate-spin" /> : archivingUser ? "Archive User" : "Restore User"}
                   </button>
                 </div>
               </form>

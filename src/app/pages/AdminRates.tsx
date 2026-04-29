@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { PhilippinePeso, Save, CheckCircle, Info, RefreshCw } from 'lucide-react'; // STEP 1
+import { PhilippinePeso, Save, CheckCircle, Info, RefreshCw } from 'lucide-react'; 
 
 export function AdminRates() {
   const { rates, updateRates } = useAppContext();
   const [form, setForm] = useState({ ...rates });
   const [saved, setSaved] = useState(false);
-  const [confirmSave, setConfirmSave] = useState(false); // STEP 2
+  const [confirmSave, setConfirmSave] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -26,12 +26,14 @@ export function AdminRates() {
       <label className="block text-xs text-neutral-400 font-medium uppercase tracking-wider mb-3">{label}</label>
       <div className="flex items-center gap-3">
         {unit && <span className="text-neutral-500 text-sm font-semibold">{unit}</span>}
-        {/* STEP 13: Changed type to text, stripped non-numbers, removed increment spinners */}
         <input
-          type="text" value={form[field] as number}
+          type="number" 
+          min="1"
+          step="1"
+          value={form[field] === 0 ? '' : form[field] as number}
           onChange={e => {
-            const numericValue = e.target.value.replace(/[^0-9.]/g, '');
-            setForm(f => ({ ...f, [field]: numericValue === '' ? 0 : parseFloat(numericValue) }));
+            const numericValue = e.target.value === '' ? 1 : parseFloat(e.target.value);
+            setForm(f => ({ ...f, [field]: numericValue }));
           }}
           className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 focus:ring-1 focus:ring-amber-600/20 transition-colors"
         />
@@ -80,9 +82,9 @@ export function AdminRates() {
             <PhilippinePeso size={12} className="text-amber-500" /> Table Rental Rates
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <NumField label="Standard Hourly Rate" field="hourlyRate" unit="₱" min={50} max={2000} step={25} hint="Applied to all regular table sessions" />
-            <NumField label="Happy Hour Rate" field="happyHourRate" unit="₱" min={50} max={2000} step={25} hint="Applied during happy hour window (walk-in only)" />
-            <NumField label="Overtime Rate" field="overtimeRate" unit="₱" min={50} max={2000} step={25} hint="Charged per hour beyond booked duration" />
+            <NumField label="Standard Hourly Rate" field="hourlyRate" unit="₱" hint="Applied to all regular table sessions" />
+            <NumField label="Happy Hour Rate" field="happyHourRate" unit="₱" hint="Applied during happy hour window (walk-in only)" />
+            <NumField label="Overtime Rate" field="overtimeRate" unit="₱" hint="Charged per hour beyond booked duration" />
           </div>
         </div>
 
@@ -105,8 +107,8 @@ export function AdminRates() {
         <div>
           <h3 className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Bookings & Deposits</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <NumField label="Reservation Down Payment %" field="downPaymentPercent" min={10} max={100} step={5} hint="Percentage of total reservation amount required upfront" />
-            <NumField label="Tattoo Session Deposit" field="tattooDeposit" unit="₱" min={100} max={5000} step={100} hint="Fixed deposit required for all tattoo reservations" />
+            <NumField label="Reservation Down Payment %" field="downPaymentPercent" hint="Percentage of total reservation amount required upfront" />
+            <NumField label="Tattoo Session Deposit" field="tattooDeposit" unit="₱" hint="Fixed deposit required for all tattoo reservations" />
           </div>
         </div>
 
@@ -128,7 +130,6 @@ export function AdminRates() {
           </div>
         </div>
 
-        {/* STEP 2: Double Click Confirmation */}
         <div className="flex gap-3">
           {confirmSave && (
             <button type="button" onClick={() => setConfirmSave(false)} disabled={isSaving}

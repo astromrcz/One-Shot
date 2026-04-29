@@ -2,7 +2,7 @@ import { useAppContext } from '../context/AppContext';
 import { 
   Clock, Filter, Search, CheckCircle, XCircle, Bell, Users, 
   Calendar, DollarSign, TableProperties, TrendingUp, 
-  MessageSquare, Tag, Palette, ShieldAlert, Activity, Download // Added new icons
+  MessageSquare, Tag, Palette, ShieldAlert, Activity, Download, CalendarDays
 } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { useState } from 'react';
@@ -20,7 +20,6 @@ const activityIcons: Record<ActivityType, { icon: any; color: string; bgColor: s
   reservation_updated: { icon: TrendingUp, color: 'text-blue-400', bgColor: 'bg-blue-500/15' },
   payment_received: { icon: DollarSign, color: 'text-emerald-400', bgColor: 'bg-emerald-500/15' },
   reservation_cancelled: { icon: XCircle, color: 'text-rose-400', bgColor: 'bg-rose-500/15' },
-  // Added missing types:
   feedback_received: { icon: MessageSquare, color: 'text-sky-400', bgColor: 'bg-sky-500/15' },
   promo_created: { icon: Tag, color: 'text-fuchsia-400', bgColor: 'bg-fuchsia-500/15' },
   tattoo_reservation_created: { icon: Palette, color: 'text-violet-400', bgColor: 'bg-violet-500/15' },
@@ -37,12 +36,21 @@ export function ActivityLog() {
   const { activities } = useAppContext();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<ActivityType | 'all'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
 
   const filtered = activities.filter(a => {
     const matchSearch = !search || a.description.toLowerCase().includes(search.toLowerCase());
     const matchType = filterType === 'all' || a.type === filterType;
-    return matchSearch && matchType;
-  });
+    
+    // 🚨 NEW DATE FILTER LOGIC
+    let matchDate = true;
+    const d = new Date(a.timestamp);
+    if (dateFilter === 'today') matchDate = isToday(d);
+    else if (dateFilter === 'week') matchDate = d >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    else if (dateFilter === 'month') matchDate = d >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    return matchSearch && matchType && matchDate;
+  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const activityTypes: Array<ActivityType | 'all'> = [
     'all', 'table_assigned', 'table_freed', 'reservation_created', 'reservation_updated',
@@ -50,7 +58,7 @@ export function ActivityLog() {
   ];
 
   const typeLabels: Record<ActivityType | 'all', string> = {
-    all: 'All',
+    all: 'All Activities',
     table_assigned: 'Table Assigned',
     table_freed: 'Table Freed',
     table_reserved: 'Table Reserved',
@@ -62,21 +70,18 @@ export function ActivityLog() {
     reservation_updated: 'Reservation Updated',
     payment_received: 'Payment',
     reservation_cancelled: 'Cancelled',
-    // Added missing labels:
     feedback_received: 'Feedback',
     promo_created: 'Promo Created',
     tattoo_reservation_created: 'Tattoo Booked',
     admin_action: 'Admin Action',
   };
 
-  // Fulfills System Requirement REQ012
   const handleExportCSV = () => {
     if (!activities || activities.length === 0) return;
     
     const headers = "Date,Type,Description\n";
     const rows = activities.map(act => {
       const date = new Date(act.timestamp).toLocaleString().replace(/,/g, ''); 
-      // Replace quotes in description to prevent CSV breaking
       const safeDesc = act.description.replace(/"/g, '""'); 
       return `"${date}","${act.type}","${safeDesc}"`;
     }).join("\n");
@@ -118,17 +123,35 @@ export function ActivityLog() {
             className="w-full bg-neutral-950 border border-neutral-800 rounded-lg pl-9 pr-4 py-2 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-neutral-500 flex-none" />
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value as ActivityType | 'all')}
-            className="bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-          >
-            {activityTypes.map(type => (
-              <option key={type} value={type}>{typeLabels[type] || 'Unknown'}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 🚨 DATE FILTER DROPDOWN 🚨 */}
+          <div className="flex items-center bg-neutral-950 border border-neutral-800 rounded-lg pl-3 pr-1 py-1">
+            <CalendarDays size={14} className="text-neutral-500" />
+            <select
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value as any)}
+              className="bg-transparent border-none text-sm text-neutral-200 focus:outline-none cursor-pointer pl-2 pr-4 py-1 appearance-none"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">Past 7 Days</option>
+              <option value="month">Past 30 Days</option>
+            </select>
+          </div>
+
+          <div className="flex items-center bg-neutral-950 border border-neutral-800 rounded-lg pl-3 pr-1 py-1">
+            <Filter size={14} className="text-neutral-500" />
+            <select
+              value={filterType}
+              onChange={e => setFilterType(e.target.value as ActivityType | 'all')}
+              className="bg-transparent border-none text-sm text-neutral-200 focus:outline-none cursor-pointer pl-2 pr-4 py-1 appearance-none max-w-[150px] truncate"
+            >
+              {activityTypes.map(type => (
+                <option key={type} value={type}>{typeLabels[type] || 'Unknown'}</option>
+              ))}
+            </select>
+          </div>
+          
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 px-3 py-2 rounded-lg text-sm transition-colors flex-none ml-2">
             <Download size={14} /> <span className="hidden sm:inline">Export CSV</span>
           </button>
@@ -145,7 +168,6 @@ export function ActivityLog() {
         ) : (
           <div className="divide-y divide-neutral-800/50">
             {filtered.map((activity) => {
-              // 🚨 THE FIX: Fallback to a generic icon if the type is unknown
               const config = activityIcons[activity.type] || { icon: Activity, color: 'text-neutral-400', bgColor: 'bg-neutral-800' };
               const Icon = config.icon;
               const label = typeLabels[activity.type] || 'Unknown Activity';
@@ -171,7 +193,7 @@ export function ActivityLog() {
                       </div>
                     </div>
 
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-500 uppercase tracking-wider font-semibold flex-none">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-500 uppercase tracking-wider font-semibold flex-none hidden sm:block">
                       {label}
                     </span>
                   </div>

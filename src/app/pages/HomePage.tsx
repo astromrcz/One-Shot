@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, X, Star, Phone, MapPin,
   Clock, LogIn, UserPlus, Eye, EyeOff,
   Calendar, CheckCircle, ArrowRight,
-  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check
+  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check, LogOut
 } from 'lucide-react';
 import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
@@ -198,8 +198,17 @@ export function HomePage() {
   const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings, announcements, proposeReschedule, confirmReschedule } = useAppContext(); 
   
   const activeAnnouncements = announcements && announcements.filter(a => a.isActive).length > 0
-    ? announcements.filter(a => a.isActive).map(a => a.content)
-    : DEFAULT_ANNOUNCEMENTS;
+    ? announcements.filter(a => a.isActive).map(a => ({ content: a.content, type: a.type }))
+    : DEFAULT_ANNOUNCEMENTS.map(content => ({ content, type: 'info' }));
+    
+  const getAnnouncementIcon = (type: string) => {
+    switch(type) {
+      case 'promo': return <Tag size={10} className="text-emerald-400" />;
+      case 'warning': return <AlertTriangle size={10} className="text-emerald-400" />;
+      case 'event': return <Calendar size={10} className="text-emerald-400" />;
+      default: return <Megaphone size={10} className="text-emerald-400" />;
+    }
+  };
 
   const displayLogo = siteSettings?.logoUrl || logoImg;
   
@@ -226,6 +235,12 @@ export function HomePage() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showForgotPwModal, setShowForgotPwModal] = useState(false); 
   const [showUpdatePwModal, setShowUpdatePwModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  
+  // Guest Tracker States
+  const [trackerId, setTrackerId] = useState('');
+  const [trackedRes, setTrackedRes] = useState<any>(null);
+  const [trackerError, setTrackerError] = useState('');
 
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; phone: string; referralCode: string } | null>(null);
 
@@ -768,17 +783,19 @@ export function HomePage() {
 
         {/* Rotating Announcements */}
         <div className="flex-1 flex items-center justify-center overflow-hidden px-4">
-          <div className="flex items-center gap-2 max-w-lg w-full">
+          <div className="flex items-center gap-2 max-w-lg w-full group">
+            <button onClick={() => { setAnnouncementDir(-1); setAnnouncementIdx(prev => (prev - 1 + activeAnnouncements.length) % activeAnnouncements.length); }} className="text-neutral-500 hover:text-emerald-400 transition-colors p-1 opacity-0 group-hover:opacity-100"><ChevronLeft size={14}/></button>
             <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center">
-              <Megaphone size={10} className="text-emerald-400" />
+              {getAnnouncementIcon(activeAnnouncements[announcementIdx].type)}
             </div>
             <div className="flex-1 overflow-hidden text-center">
-              <AnimatePresence mode="wait">
-                <motion.p key={announcementIdx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35 }} className="text-xs text-neutral-300 truncate">
-                  {activeAnnouncements[announcementIdx]}
+              <AnimatePresence mode="wait" custom={announcementDir}>
+                <motion.p key={announcementIdx} custom={announcementDir} initial={{ opacity: 0, y: announcementDir === 1 ? 8 : -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: announcementDir === 1 ? -8 : 8 }} transition={{ duration: 0.35 }} className="text-xs text-neutral-300 truncate">
+                  {activeAnnouncements[announcementIdx].content}
                 </motion.p>
               </AnimatePresence>
             </div>
+            <button onClick={() => { setAnnouncementDir(1); setAnnouncementIdx(prev => (prev + 1) % activeAnnouncements.length); }} className="text-neutral-500 hover:text-emerald-400 transition-colors p-1 opacity-0 group-hover:opacity-100"><ChevronRight size={14}/></button>
           </div>
         </div>
 
@@ -790,7 +807,7 @@ export function HomePage() {
                 <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[9px] font-black text-white">{currentUser.name[0]}</div>
                 <span className="text-xs text-emerald-300 font-medium hidden sm:block">{currentUser.name}</span>
               </button>
-              <button onClick={handleCustomerLogout} className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors">
+              <button onClick={() => setShowLogoutConfirm(true)} className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors">
                 Logout
               </button>
             </div>
@@ -1298,8 +1315,60 @@ export function HomePage() {
                           </div>
                           
                           {!myEmail ? (
-                            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2">
-                              <p className="text-xs text-neutral-500 mb-3">Log in or register to view your cross-device booking history.</p>
+                            <div className="flex-1 flex flex-col items-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2 space-y-4">
+                              <div>
+                                <h3 className="text-sm font-bold text-white">Track Reservation</h3>
+                                <p className="text-xs text-neutral-500 mt-1">Enter your Reference ID to view or reschedule.</p>
+                              </div>
+                              <div className="w-full flex gap-2">
+                                <input 
+                                  type="text" 
+                                  value={trackerId} 
+                                  onChange={(e) => { setTrackerId(e.target.value); setTrackerError(''); }} 
+                                  placeholder="Reservation ID" 
+                                  className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                                <button 
+                                  onClick={() => {
+                                    const r = reservations.find(x => x.id.toLowerCase() === trackerId.toLowerCase().trim() || x.paymentReference === trackerId.trim());
+                                    if (r) { setTrackedRes(r); setTrackerError(''); }
+                                    else { setTrackedRes(null); setTrackerError('Not found'); }
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                                >
+                                  Track
+                                </button>
+                              </div>
+                              {trackerError && <p className="text-xs text-rose-400">{trackerError}</p>}
+
+                              {trackedRes && (
+                                <div className="w-full bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs text-left mt-2">
+                                  <div className="flex justify-between items-start mb-1.5">
+                                    <span className="font-semibold text-neutral-200">{format(new Date(trackedRes.date), 'MMM d, yyyy')}</span>
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400">{trackedRes.status}</span>
+                                  </div>
+                                  <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
+                                    <span>{formatTime(trackedRes.timeSlot || '00:00')} ({trackedRes.durationHours} hrs)</span>
+                                  </div>
+                                  
+                                  {trackedRes.status !== 'cancelled' && trackedRes.status !== 'completed' && new Date(trackedRes.date).getTime() > new Date().setHours(0,0,0,0) && !trackedRes.rescheduleRequested && (
+                                    <button 
+                                      onClick={() => {
+                                        setRescheduleTargetId(trackedRes.id);
+                                        setRescheduleDate(null);
+                                        setRescheduleTimeSlot('');
+                                        setTrackedRes(null);
+                                      }} 
+                                      className="w-full py-2 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                    >
+                                      <CalendarDays size={12}/> Request Reschedule
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="w-full h-px bg-neutral-800 my-2" />
+                              <p className="text-xs text-neutral-500">Or log in to see all your bookings.</p>
                               <div className="flex items-center gap-2">
                                 <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
                                   Login
@@ -1638,18 +1707,17 @@ export function HomePage() {
                       <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold mb-3">Follow Us</p>
                       <div className="grid grid-cols-2 gap-3">
                         {[
-                          { platform: 'Facebook', handle: '@OneShotBilliards', icon: '📘' },
-                          { platform: 'Instagram', handle: '@oneshot_billiards', icon: '📸' },
-                          { platform: 'TikTok', handle: '@oneshotbilliards', icon: '🎵' },
-                          { platform: 'YouTube', handle: 'One Shot Billiards', icon: '📺' },
-                        ].map(({ platform, handle, icon }) => (
-                          <div key={platform} className="flex items-center gap-2.5 bg-neutral-800/60 rounded-lg p-3">
-                            <span className="text-lg">{icon}</span>
+                          { platform: 'Facebook', handle: '@One Shot', icon: '📘', url: 'https://www.facebook.com/oneshotcainta' },
+                          { platform: 'Instagram', handle: '@oneshotbarandbilliardsph', icon: '📸', url: 'https://www.instagram.com/Oneshotbarandbilliardsph' },
+                          { platform: 'TikTok', handle: '@oneshotbarandbilliards', icon: '🎵', url: 'https://tiktok.com/@oneshotbilliards' },
+                        ].map(({ platform, handle, icon, url }) => (
+                          <a key={platform} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 bg-neutral-800/60 hover:bg-neutral-800 rounded-lg p-3 transition-colors group">
+                            <span className="text-lg group-hover:scale-110 transition-transform">{icon}</span>
                             <div>
                               <p className="text-[10px] text-neutral-500">{platform}</p>
-                              <p className="text-xs text-neutral-300">{handle}</p>
+                              <p className="text-xs text-neutral-300 group-hover:text-emerald-400 transition-colors">{handle}</p>
                             </div>
-                          </div>
+                          </a>
                         ))}
                       </div>
                     </div>
@@ -2089,8 +2157,8 @@ export function HomePage() {
           currentUser={currentUser}
           onUpdateUser={handleUpdateCustomerProfile}
           onLogout={() => {
-            handleCustomerLogout(); // Triggers the secure sign out and toast
-            setShowProfileModal(false); // Closes the modal
+            setShowProfileModal(false);
+            setShowLogoutConfirm(true);
           }}
         />
       )}
@@ -2265,6 +2333,30 @@ export function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-xs shadow-2xl text-center">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 mx-auto flex items-center justify-center mb-4 border border-rose-500/20">
+                <LogOut size={20} />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Sign Out</h3>
+              <p className="text-xs text-neutral-400 mb-6">Are you sure you want to log out of your account?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+                  Cancel
+                </button>
+                <button onClick={() => { setShowLogoutConfirm(false); handleCustomerLogout(); }} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+                  Sign Out
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

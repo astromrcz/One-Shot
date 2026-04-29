@@ -1,17 +1,16 @@
 // Staff view: Read-only promo codes. Creation/deletion is managed in the Admin portal.
 import { useAppContext, PromoCode } from '../context/AppContext';
-import { Tag, Copy, CheckCircle, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
+import { Tag, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 
 export function PromoCodesPage() {
   const { promoCodes } = useAppContext();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const handleCopy = (code: string, id: string) => {
-    navigator.clipboard.writeText(code).catch(() => {});
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  // 🚨 MASKS THE PROMO CODE FOR STAFF VIEW
+  const maskCode = (code: string) => {
+    if (!code) return '';
+    if (code.length <= 3) return code.substring(0, 1) + '**';
+    return code.substring(0, 4) + '****';
   };
 
   const getStatus = (p: PromoCode) => {
@@ -30,15 +29,15 @@ export function PromoCodesPage() {
       <div className="flex items-start gap-3 bg-amber-950/20 border border-amber-900/30 rounded-xl px-4 py-3">
         <ShieldCheck size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-amber-600/80 leading-relaxed">
-          Promo codes are managed in the <strong className="text-amber-500">Admin Portal</strong>. This page is read-only.
-          Contact your administrator to create, edit, or delete codes.
+          Promo codes are managed in the <strong className="text-amber-500">Admin Portal</strong>. This page is read-only, and exact codes are masked for security.
+          Contact your administrator to apply or share codes.
         </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Codes',   value: promoCodes.length,  color: 'text-white' },
+          { label: 'Total Codes',   value: promoCodes.length, color: 'text-white' },
           { label: 'Active',        value: activeCount,         color: 'text-emerald-400' },
           { label: 'Total Uses',    value: totalUsage,          color: 'text-violet-400' },
           { label: 'Avg. Discount', value: promoCodes.length ? `${Math.round(promoCodes.reduce((s,p)=>s+p.discountPercent,0)/promoCodes.length)}%` : '—', color: 'text-amber-400' },
@@ -72,7 +71,8 @@ export function PromoCodesPage() {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <div className="flex items-center gap-1.5 bg-neutral-800 rounded-lg px-3 py-1">
                       <Tag size={11} className="text-neutral-400" />
-                      <span className="text-sm font-black text-white tracking-wider">{pc.code}</span>
+                      {/* 🚨 CODE IS NOW MASKED HERE 🚨 */}
+                      <span className="text-sm font-black text-white tracking-wider">{maskCode(pc.code)}</span>
                     </div>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${status.color}`}>{status.label}</span>
                   </div>
@@ -86,10 +86,7 @@ export function PromoCodesPage() {
                     <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${Math.min((pc.usageCount/pc.maxUsage)*100,100)}%` }} />
                   </div>
                 </div>
-                <button onClick={() => handleCopy(pc.code, pc.id)} title="Copy code"
-                  className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors flex-shrink-0">
-                  {copiedId === pc.id ? <CheckCircle size={15} className="text-emerald-400" /> : <Copy size={15} />}
-                </button>
+                {/* 🚨 REMOVED COPY BUTTON ENTIRELY FROM THIS DIV 🚨 */}
               </div>
             </div>
           );

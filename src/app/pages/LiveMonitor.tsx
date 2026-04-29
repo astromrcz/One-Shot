@@ -5,17 +5,16 @@ import { Clock, Users, X, Maximize2 } from 'lucide-react';
 
 // ── Helpers ────────────────────────────────────────────────────
 function getSessionTimer(table: Table): {
-  mm: string; ss: string; isOvertime: boolean; percentLeft: number; label: string; isOpenTime: boolean;
+  mm: string; ss: string; isOvertime: boolean; percentLeft: number; label: string; isOpenTime: boolean; secsLeft: number;
 } {
-  if (!table.session) return { mm: '--', ss: '--', isOvertime: false, percentLeft: 0, label: '', isOpenTime: false };
+  if (!table.session) return { mm: '--', ss: '--', isOvertime: false, percentLeft: 0, label: '', isOpenTime: false, secsLeft: 0 };
   const start = new Date(table.session.startTime).getTime();
   
-  // 🚨 FIXED: Open Time Math Logic
   if (table.session.durationMinutes === 0) {
     const elapsed = Math.max(0, Date.now() - start);
     const mm = String(Math.floor(elapsed / 60000)).padStart(2, '0');
     const ss = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
-    return { mm, ss, isOvertime: false, percentLeft: 100, label: `${mm}:${ss} elapsed`, isOpenTime: true };
+    return { mm, ss, isOvertime: false, percentLeft: 100, label: `${mm}:${ss} elapsed`, isOpenTime: true, secsLeft: 0 };
   }
 
   const totalMs = table.session.durationMinutes * 60000;
@@ -27,7 +26,8 @@ function getSessionTimer(table: Table): {
   const ss = String(Math.floor((abs % 60000) / 1000)).padStart(2, '0');
   const percentLeft = Math.max(0, Math.min(100, (remaining / totalMs) * 100));
   const label = isOvertime ? `+${mm}:${ss} Overtime` : `${mm}:${ss} remaining`;
-  return { mm, ss, isOvertime, percentLeft, label, isOpenTime: false };
+  const secsLeft = Math.floor(remaining / 1000);
+  return { mm, ss, isOvertime, percentLeft, label, isOpenTime: false, secsLeft };
 }
 
 function formatWaitTime(arrivalTime: Date, position: number): string {
@@ -42,6 +42,8 @@ function formatWaitTime(arrivalTime: Date, position: number): string {
 // ── Single Table Card ──────────────────────────────────────────
 function TableCard({ table, tick }: { table: Table; tick: number }) {
   const timer = getSessionTimer(table);
+  const isAlert = !timer.isOvertime && !timer.isOpenTime && timer.secsLeft <= 900 && timer.secsLeft > 0;
+  const alertPulseDuration = Math.max(0.4, (timer.secsLeft / 900) * 2.5) + 's';
 
   if (table.status === 'available') {
     return (
@@ -87,12 +89,16 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         ? 'bg-rose-950/40 border-rose-600/60'
         : timer.isOpenTime ? 'bg-blue-950/20 border-blue-800/40' : 'bg-neutral-900/80 border-neutral-700/50'
     }`}>
+      {/* 🚨 DYNAMIC FLASHING OVERLAYS */}
       {timer.isOvertime && (
-        <div className="absolute inset-0 bg-rose-500/5 animate-pulse pointer-events-none" />
+        <div className="absolute inset-0 bg-rose-500/15 pointer-events-none" style={{ animation: 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+      )}
+      {isAlert && (
+        <div className="absolute inset-0 bg-amber-500/15 pointer-events-none" style={{ animation: `pulse ${alertPulseDuration} cubic-bezier(0.4, 0, 0.6, 1) infinite` }} />
       )}
 
       {/* Table number + customer */}
-      <div className="flex items-start justify-between">
+      <div className="relative z-10 flex items-start justify-between">
         <div className="w-9 h-9 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center flex-shrink-0">
           <span className="text-white font-black">{table.name.replace('Table ', '')}</span>
         </div>
@@ -101,25 +107,27 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
             ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
             : timer.isOpenTime 
               ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
-              : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+              : isAlert 
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
         }`}>
           {timer.isOvertime ? '⚠ OVERTIME' : timer.isOpenTime ? 'OPEN TIME' : 'IN USE'}
         </div>
       </div>
 
       {/* Customer name */}
-      <div>
+      <div className="relative z-10">
         <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Customer</p>
         <p className="text-white font-bold text-sm mt-0.5 truncate">{table.session?.customerName || '—'}</p>
       </div>
 
       {/* Countdown */}
-      <div className="text-center">
+      <div className="relative z-10 text-center">
         <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">
           {timer.isOvertime ? 'Overtime' : timer.isOpenTime ? 'Elapsed Time' : 'Time Left'}
         </p>
         <div className={`font-black text-4xl tabular-nums tracking-tight ${
-          timer.isOvertime ? 'text-rose-400' : timer.isOpenTime ? 'text-blue-400' : timer.percentLeft < 15 ? 'text-amber-400' : 'text-white'
+          timer.isOvertime ? 'text-rose-400' : timer.isOpenTime ? 'text-blue-400' : isAlert ? 'text-amber-400' : 'text-white'
         }`}>
           {timer.mm}:{timer.ss}
         </div>
@@ -130,7 +138,7 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
             {!timer.isOvertime && (
               <div
                 className={`h-full rounded-full transition-all duration-1000 ${
-                  timer.percentLeft < 15 ? 'bg-rose-500' : timer.percentLeft < 30 ? 'bg-amber-500' : 'bg-emerald-500'
+                  timer.percentLeft < 15 ? 'bg-amber-500' : 'bg-emerald-500'
                 }`}
                 style={{ width: `${timer.percentLeft}%` }}
               />

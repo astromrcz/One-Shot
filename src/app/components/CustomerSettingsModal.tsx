@@ -8,7 +8,7 @@ import { supabase } from '../../utils/supabase/client';
 import { useAppContext } from '../context/AppContext';
 import { format, isToday, differenceInMinutes } from 'date-fns';
 
-type Section = 'profile' | 'security' | 'account' | 'bookings';
+type Section = 'profile' | 'security' | 'bookings';
 
 // Define the shape of our customer data based on what HomePage uses
 export type CustomerUser = {
@@ -288,7 +288,6 @@ export function CustomerSettingsModal({
                 { id: 'bookings', label: 'My Bookings', icon: CalendarDays },
                 { id: 'profile', label: 'Profile', icon: User },
                 { id: 'security', label: 'Security', icon: Lock },
-                { id: 'account', label: 'Account', icon: Shield },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -305,7 +304,7 @@ export function CustomerSettingsModal({
               ))}
             </div>
 
-            <div className="mt-auto hidden md:block pt-6 border-t border-neutral-800">
+            <div className="mt-auto pt-6 border-t border-neutral-800">
               <button onClick={onLogout} className="flex items-center gap-3 text-sm text-neutral-500 hover:text-rose-400 transition-colors w-full px-4 py-2">
                 <LogOut size={16} /> Sign Out
               </button>
@@ -616,34 +615,7 @@ export function CustomerSettingsModal({
               </div>
             )}
 
-            {/* ════ ACCOUNT TAB ════ */}
-            {activeSection === 'account' && (
-              <div className="space-y-6">
-                <div>
-                  <h4 className="text-sm font-bold text-white mb-2 uppercase tracking-wider flex items-center gap-2">
-                    <Award size={16} className="text-violet-500" /> Referral Program
-                  </h4>
-                  <div className="bg-gradient-to-br from-violet-900/20 to-neutral-900 border border-violet-800/30 rounded-xl p-5">
-                    <p className="text-xs text-neutral-400 mb-3">Share this code with friends! When they book using your code, you both earn rewards.</p>
-                    <div className="flex items-center gap-3">
-                      <code className="bg-neutral-950 px-4 py-2 rounded-lg text-violet-300 font-black tracking-widest text-lg flex-1 text-center border border-violet-900/50">
-                        {currentUser.referralCode}
-                      </code>
-                      <button onClick={() => { navigator.clipboard.writeText(currentUser.referralCode); alert('Copied to clipboard!'); }} className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors">
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-neutral-800 md:hidden">
-                  <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 bg-neutral-900 hover:bg-rose-950/40 text-rose-500 border border-neutral-800 hover:border-rose-900/50 py-3 rounded-xl text-sm font-semibold transition-colors">
-                    <LogOut size={16} /> Sign Out
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>

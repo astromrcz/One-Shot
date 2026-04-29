@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { FileText, Save, CheckCircle, Info } from 'lucide-react';
-
-import { RefreshCw } from 'lucide-react'; // Need this for the spinner
+import { FileText, Save, CheckCircle, Info, RefreshCw } from 'lucide-react';
 
 export function AdminReservationTerms() {
   const { reservationTerms, updateReservationTerms } = useAppContext();
   const [form, setForm] = useState({ ...reservationTerms });
   const [saved, setSaved] = useState(false);
-  const [confirmSave, setConfirmSave] = useState(false); // STEP 2
+  const [confirmSave, setConfirmSave] = useState(false); 
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'rules' | 'policy' | 'tnc'>('rules');
 
@@ -20,6 +18,16 @@ export function AdminReservationTerms() {
     setConfirmSave(false);
     setIsSaving(false);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  // 🚨 Simple formatting helper for the preview
+  const formatTextWithBullets = (text: string) => {
+    return text.split('\n').map((line, i) => (
+      <span key={i}>
+        {line.trim().startsWith('-') ? <span className="ml-4 flex gap-2"><span className="text-amber-500 font-bold">•</span>{line.substring(1)}</span> : line}
+        <br />
+      </span>
+    ));
   };
 
   return (
@@ -44,7 +52,7 @@ export function AdminReservationTerms() {
           { id: 'policy', label: 'Cancellation Policy' },
           { id: 'tnc',    label: 'Terms & Conditions' },
         ] as const).map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+          <button type="button" key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' : 'text-neutral-500 hover:text-neutral-300'}`}>
             {tab.label}
           </button>
@@ -56,7 +64,6 @@ export function AdminReservationTerms() {
         {activeTab === 'rules' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              {/* STEP 13: Changed to text box with regex validation, no incrementers */}
               {[
                 { label: 'Minimum Hours', field: 'minHours' as const },
                 { label: 'Maximum Hours', field: 'maxHours' as const },
@@ -111,41 +118,59 @@ export function AdminReservationTerms() {
 
         {/* Cancellation Policy */}
         {activeTab === 'policy' && (
-          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5">
-            <label className="text-xs text-neutral-400 uppercase tracking-wider font-medium block mb-3">
-              Cancellation Policy Text
-            </label>
-            <textarea
-              value={form.cancellationPolicy}
-              onChange={e => setForm(prev => ({ ...prev, cancellationPolicy: e.target.value }))}
-              rows={6}
-              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 focus:ring-1 focus:ring-amber-600/20 transition-colors resize-none"
-              placeholder="Describe the cancellation policy..."
-            />
-            <p className="text-[10px] text-neutral-600 mt-2">This text is shown in the reservation summary and confirmation emails.</p>
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 space-y-4">
+            <div>
+              <label className="text-xs text-neutral-400 uppercase tracking-wider font-medium flex justify-between items-center mb-3">
+                Cancellation Policy Text
+                <span className="text-[10px] text-neutral-600 lowercase bg-neutral-900 px-2 py-0.5 rounded">Use '-' for bullet points</span>
+              </label>
+              <textarea
+                value={form.cancellationPolicy}
+                onChange={e => setForm(prev => ({ ...prev, cancellationPolicy: e.target.value }))}
+                rows={6}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 focus:ring-1 focus:ring-amber-600/20 transition-colors resize-none leading-relaxed"
+                placeholder="Describe the cancellation policy..."
+              />
+            </div>
+            
+            <div className="bg-neutral-900/50 rounded-lg p-4 border border-neutral-800/50">
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-2">Live Preview</p>
+              <div className="text-xs text-neutral-300 leading-loose">
+                 {formatTextWithBullets(form.cancellationPolicy)}
+              </div>
+            </div>
           </div>
         )}
 
         {/* Terms & Conditions */}
         {activeTab === 'tnc' && (
-          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5">
-            <label className="text-xs text-neutral-400 uppercase tracking-wider font-medium block mb-3">
-              Terms & Conditions
-            </label>
-            <textarea
-              value={form.termsAndConditions}
-              onChange={e => setForm(prev => ({ ...prev, termsAndConditions: e.target.value }))}
-              rows={12}
-              className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 focus:ring-1 focus:ring-amber-600/20 transition-colors resize-none font-mono text-xs leading-relaxed"
-              placeholder="Enter full terms and conditions..."
-            />
-            <p className="text-[10px] text-neutral-600 mt-2">Customers must agree to these terms during the reservation process. Use numbered lines for clarity.</p>
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 space-y-4">
+            <div>
+              <label className="text-xs text-neutral-400 uppercase tracking-wider font-medium flex justify-between items-center mb-3">
+                Terms & Conditions
+                <span className="text-[10px] text-neutral-600 lowercase bg-neutral-900 px-2 py-0.5 rounded">Use '-' for bullet points</span>
+              </label>
+              <textarea
+                value={form.termsAndConditions}
+                onChange={e => setForm(prev => ({ ...prev, termsAndConditions: e.target.value }))}
+                rows={10}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-amber-600/50 focus:ring-1 focus:ring-amber-600/20 transition-colors resize-none leading-relaxed"
+                placeholder="Enter full terms and conditions..."
+              />
+            </div>
+
+            <div className="bg-neutral-900/50 rounded-lg p-4 border border-neutral-800/50 max-h-48 overflow-y-auto custom-scrollbar">
+              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-2">Live Preview</p>
+              <div className="text-xs text-neutral-300 leading-loose">
+                 {formatTextWithBullets(form.termsAndConditions)}
+              </div>
+            </div>
           </div>
         )}
 
         <button type="submit"
-          className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-amber-900/30">
-          <Save size={15} /> Save Terms
+          className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-amber-900/30 mt-4">
+          <Save size={15} /> Save Settings
         </button>
       </form>
     </div>

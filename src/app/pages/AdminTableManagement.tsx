@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import {
   Plus, X, Pencil, Table2, CheckCircle, AlertTriangle,
-  ToggleLeft, ToggleRight, Lock, Eye, EyeOff, PowerOff, Power,
+  ToggleLeft, ToggleRight, Lock, Eye, EyeOff, PowerOff, Power, RefreshCw
 } from 'lucide-react';
 
 type PasswordModal = {
@@ -12,7 +12,6 @@ type PasswordModal = {
 };
 
 export function AdminTableManagement() {
-  // ✅ ADDED staffProfile here to check the real password
   const { tables, addTable, updateTable, toggleTableActive, staffProfile } = useAppContext();
 
   const [newName, setNewName]         = useState('');
@@ -25,6 +24,10 @@ export function AdminTableManagement() {
   const [showPw, setShowPw]           = useState(false);
   const [pwError, setPwError]         = useState('');
   const [pwConfirming, setPwConfirming] = useState(false);
+  
+  // 🚨 New States for Deactivation Reason and Adding Confirm
+  const [deactivationReason, setDeactivationReason] = useState('Maintenance');
+  const [confirmAdd, setConfirmAdd] = useState(false);
 
   const [filter, setFilter]           = useState<'all' | 'active' | 'inactive'>('all');
 
@@ -36,13 +39,36 @@ export function AdminTableManagement() {
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
+
+    // 🚨 Check if table name already exists
+    const exists = tables.some(t => t.name.toLowerCase() === newName.trim().toLowerCase());
+    if (exists) {
+      flash(`A table named "${newName.trim()}" already exists.`, 'error');
+      setConfirmAdd(false);
+      return;
+    }
+
+    if (!confirmAdd) {
+      setConfirmAdd(true);
+      return;
+    }
+
     addTable(newName.trim());
     setNewName('');
+    setConfirmAdd(false);
     flash(`Table "${newName.trim()}" added!`);
   };
 
   const handleUpdate = (id: string) => {
     if (!editName.trim()) return;
+    
+    // 🚨 Check if table name already exists (excluding the current one)
+    const exists = tables.some(t => t.name.toLowerCase() === editName.trim().toLowerCase() && t.id !== id);
+    if (exists) {
+      flash(`A table named "${editName.trim()}" already exists.`, 'error');
+      return;
+    }
+
     updateTable(id, editName.trim());
     setEditingId(null);
     flash('Table renamed successfully.');
@@ -50,30 +76,40 @@ export function AdminTableManagement() {
 
   const openPasswordModal = (table: typeof tables[0]) => {
     if (table.status === 'occupied' && table.isActive) {
-      flash('Cannot deactivate an occupied table.', 'error');
+      flash('Cannot deactivate an occupied table. Please end the session first.', 'error');
       return;
     }
     setPwModal({ tableId: table.id, tableName: table.name, targetActive: !table.isActive });
     setPwInput('');
     setPwError('');
     setShowPw(false);
+    setDeactivationReason('Maintenance'); // Reset reason
   };
 
   const handlePasswordConfirm = () => {
     if (!pwModal) return;
+    
+    if (!pwModal.targetActive && !deactivationReason) {
+      setPwError('Please select a reason for deactivation.');
+      return;
+    }
+
     setPwConfirming(true);
     setTimeout(() => {
-      // ✅ CHANGED: Now checks against the secure logged-in admin password
       if (pwInput !== staffProfile.password) {
         setPwError('Incorrect password. Please try again.');
         setPwConfirming(false);
         return;
       }
+      
       toggleTableActive(pwModal.tableId);
+      
+      const reasonText = !pwModal.targetActive ? ` Reason: ${deactivationReason}.` : '';
       flash(
-        `"${pwModal.tableName}" has been ${pwModal.targetActive ? 'activated' : 'deactivated'}.`,
+        `"${pwModal.tableName}" has been ${pwModal.targetActive ? 'activated' : 'deactivated'}.${reasonText}`,
         'success'
       );
+      
       setPwModal(null);
       setPwInput('');
       setPwError('');
@@ -131,14 +167,19 @@ export function AdminTableManagement() {
         <form onSubmit={handleAdd} className="flex gap-3">
           <input
             type="text" value={newName}
-            onChange={e => setNewName(e.target.value)}
+            onChange={e => { setNewName(e.target.value); setConfirmAdd(false); }}
             placeholder="e.g. Table 11 or VIP Table A"
             className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-amber-600/50 focus:ring-1 focus:ring-amber-600/20 transition-colors"
           />
-          <button type="submit" disabled={!newName.trim()}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:bg-neutral-800 disabled:text-neutral-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all">
-            <Plus size={14} /> Add
-          </button>
+          {confirmAdd ? (
+             <button type="submit" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all animate-pulse">
+               <CheckCircle size={14} /> Confirm Addition?
+             </button>
+          ) : (
+            <button type="submit" disabled={!newName.trim()} className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:bg-neutral-800 disabled:text-neutral-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all">
+              <Plus size={14} /> Add Table
+            </button>
+          )}
         </form>
       </div>
 
@@ -290,6 +331,22 @@ export function AdminTableManagement() {
                   : `"${pwModal.tableName}" will be deactivated and hidden from staff. No new sessions can be started.`
                 }
               </div>
+
+              {/* 🚨 Deactivation Reason Dropdown */}
+              {!pwModal.targetActive && (
+                <div>
+                  <label className="text-xs text-neutral-400 mb-1.5 block font-medium">Reason for Deactivation</label>
+                  <select 
+                    value={deactivationReason}
+                    onChange={(e) => setDeactivationReason(e.target.value)}
+                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-rose-500/50 appearance-none"
+                  >
+                    <option value="Maintenance">Maintenance / Broken</option>
+                    <option value="Inactive">Inactive / Reserved for Staff</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs text-neutral-400 mb-1.5 flex items-center gap-1.5 font-medium">
