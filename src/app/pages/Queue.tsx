@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { UserPlus, X, Bell, CheckCircle, Clock, Users, ChevronDown, ChevronUp, Calendar as CalendarIcon, AlertCircle } from 'lucide-react';
+import { UserPlus, X, Bell, CheckCircle, Clock, Users, ChevronDown, ChevronUp, Calendar as CalendarIcon, AlertCircle, ArrowRight } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isTomorrow, differenceInMinutes } from 'date-fns';
 import { useNavigate } from 'react-router';
 
@@ -243,9 +243,19 @@ export function Queue() {
                 <div key={item.id} className="bg-neutral-950 border border-blue-900/30 rounded-xl p-3 flex items-center gap-3 opacity-80">
                   <Bell size={14} className="text-blue-400 flex-none" />
                   <div className="flex-1">
-                    <p className="text-sm text-neutral-300">{item.customerName}</p>
+                    <p className="text-sm font-bold text-neutral-300">{item.customerName}</p>
                     <p className="text-xs text-neutral-600">{item.partySize} pax · {item.contactNumber}</p>
                   </div>
+                  {/* 🚨 Added Table Assignment Button for Called Customers */}
+                  <button
+                    onClick={() => {
+                      const firstAvail = availableTables.length > 0 ? availableTables[0].id : '';
+                      navigate(`/staff/tables?assignTable=${firstAvail}&queueId=${item.id}`);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-700/30 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                  >
+                    Assign Table <ArrowRight size={12} />
+                  </button>
                   <button
                     onClick={() => removeFromQueue(item.id)}
                     className="p-1.5 text-neutral-600 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors"
@@ -280,7 +290,6 @@ export function Queue() {
                   </div>
                   {waiting.length > 0 && (
                     <button
-                      /* 🚨 STEP 10: Passes context so the Table page knows exactly what to do */
                       onClick={() => navigate(`/staff/tables?assignTable=${table.id}&queueId=${waiting[0].id}`)}
                       className="w-full text-xs bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-700/30 py-2 rounded-lg transition-colors font-medium"
                     >

@@ -5,10 +5,19 @@ import { Clock, Users, X, Maximize2 } from 'lucide-react';
 
 // ── Helpers ────────────────────────────────────────────────────
 function getSessionTimer(table: Table): {
-  mm: string; ss: string; isOvertime: boolean; percentLeft: number; label: string;
+  mm: string; ss: string; isOvertime: boolean; percentLeft: number; label: string; isOpenTime: boolean;
 } {
-  if (!table.session) return { mm: '--', ss: '--', isOvertime: false, percentLeft: 0, label: '' };
+  if (!table.session) return { mm: '--', ss: '--', isOvertime: false, percentLeft: 0, label: '', isOpenTime: false };
   const start = new Date(table.session.startTime).getTime();
+  
+  // 🚨 FIXED: Open Time Math Logic
+  if (table.session.durationMinutes === 0) {
+    const elapsed = Math.max(0, Date.now() - start);
+    const mm = String(Math.floor(elapsed / 60000)).padStart(2, '0');
+    const ss = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
+    return { mm, ss, isOvertime: false, percentLeft: 100, label: `${mm}:${ss} elapsed`, isOpenTime: true };
+  }
+
   const totalMs = table.session.durationMinutes * 60000;
   const elapsed = Date.now() - start;
   const remaining = totalMs - elapsed;
@@ -18,7 +27,7 @@ function getSessionTimer(table: Table): {
   const ss = String(Math.floor((abs % 60000) / 1000)).padStart(2, '0');
   const percentLeft = Math.max(0, Math.min(100, (remaining / totalMs) * 100));
   const label = isOvertime ? `+${mm}:${ss} Overtime` : `${mm}:${ss} remaining`;
-  return { mm, ss, isOvertime, percentLeft, label };
+  return { mm, ss, isOvertime, percentLeft, label, isOpenTime: false };
 }
 
 function formatWaitTime(arrivalTime: Date, position: number): string {
@@ -76,7 +85,7 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
     <div className={`relative border-2 rounded-2xl p-5 flex flex-col gap-3 overflow-hidden ${
       timer.isOvertime
         ? 'bg-rose-950/40 border-rose-600/60'
-        : 'bg-neutral-900/80 border-neutral-700/50'
+        : timer.isOpenTime ? 'bg-blue-950/20 border-blue-800/40' : 'bg-neutral-900/80 border-neutral-700/50'
     }`}>
       {timer.isOvertime && (
         <div className="absolute inset-0 bg-rose-500/5 animate-pulse pointer-events-none" />
@@ -90,9 +99,11 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         <div className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
           timer.isOvertime
             ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-            : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+            : timer.isOpenTime 
+              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
+              : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
         }`}>
-          {timer.isOvertime ? '⚠ OVERTIME' : 'IN USE'}
+          {timer.isOvertime ? '⚠ OVERTIME' : timer.isOpenTime ? 'OPEN TIME' : 'IN USE'}
         </div>
       </div>
 
@@ -105,28 +116,30 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
       {/* Countdown */}
       <div className="text-center">
         <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">
-          {timer.isOvertime ? 'Overtime' : 'Time Left'}
+          {timer.isOvertime ? 'Overtime' : timer.isOpenTime ? 'Elapsed Time' : 'Time Left'}
         </p>
         <div className={`font-black text-4xl tabular-nums tracking-tight ${
-          timer.isOvertime ? 'text-rose-400' : timer.percentLeft < 15 ? 'text-amber-400' : 'text-white'
+          timer.isOvertime ? 'text-rose-400' : timer.isOpenTime ? 'text-blue-400' : timer.percentLeft < 15 ? 'text-amber-400' : 'text-white'
         }`}>
           {timer.mm}:{timer.ss}
         </div>
 
         {/* Progress bar */}
-        <div className="mt-2 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-          {!timer.isOvertime && (
-            <div
-              className={`h-full rounded-full transition-all duration-1000 ${
-                timer.percentLeft < 15 ? 'bg-rose-500' : timer.percentLeft < 30 ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
-              style={{ width: `${timer.percentLeft}%` }}
-            />
-          )}
-          {timer.isOvertime && (
-            <div className="h-full w-full bg-rose-500/40 animate-pulse" />
-          )}
-        </div>
+        {!timer.isOpenTime && (
+          <div className="mt-2 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+            {!timer.isOvertime && (
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${
+                  timer.percentLeft < 15 ? 'bg-rose-500' : timer.percentLeft < 30 ? 'bg-amber-500' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${timer.percentLeft}%` }}
+              />
+            )}
+            {timer.isOvertime && (
+              <div className="h-full w-full bg-rose-500/40 animate-pulse" />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -157,12 +170,7 @@ function QueueRow({ item, position, onSeat }: { item: QueueItem; position: numbe
         </p>
         <p className="text-[11px] text-neutral-500">{item.partySize} person{item.partySize > 1 ? 's' : ''}</p>
       </div>
-      {item.status === 'called' ? (
-        <div className="flex items-center gap-1.5 bg-emerald-600/20 border border-emerald-600/30 px-2.5 py-1 rounded-full flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs text-emerald-400 font-semibold">Proceed to Table</span>
-        </div>
-      ) : (
+      {item.status !== 'called' && (
         <div className="text-right flex-shrink-0">
           <p className="text-xs font-semibold text-neutral-400">
             {formatWaitTime(item.arrivalTime, position)}
@@ -205,6 +213,7 @@ export function LiveMonitor() {
 
   const overtimeCount = tables.filter(t => {
     if (t.status !== 'occupied' || !t.session) return false;
+    if (t.session.durationMinutes === 0) return false; // 🚨 FIXED: OPEN TIME IS NEVER OVERTIME
     const end = new Date(t.session.startTime).getTime() + t.session.durationMinutes * 60000;
     return Date.now() > end;
   }).length;
@@ -250,7 +259,6 @@ export function LiveMonitor() {
           <span className="text-sm font-semibold text-blue-300">{reservedCount} Reserved</span>
         </div>
 
-        {/* ADD THIS OVERTIME BLOCK HERE */}
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] animate-pulse" />
           <span className="text-sm font-semibold text-rose-300">{overtimeCount} Overtime</span>
@@ -320,21 +328,7 @@ export function LiveMonitor() {
 
           {/* Queue footer info */}
           <div className="p-4 border-t border-neutral-800/40">
-            <div className="bg-neutral-900/80 border border-neutral-800/60 rounded-xl p-3 space-y-1.5 text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Parties waiting</span>
-                <span className="text-neutral-300 font-semibold">{waitingQueue.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Rate per hour</span>
-                <span className="text-neutral-300 font-semibold">₱250 / hr</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Happy Hour (6–8PM)</span>
-                <span className="text-amber-400 font-semibold">₱200 / hr</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-neutral-700 text-center mt-3 leading-relaxed">
+            <p className="text-[10px] text-neutral-700 text-center leading-relaxed">
               Please see staff at the counter to<br />join the queue or for assistance.
             </p>
           </div>
