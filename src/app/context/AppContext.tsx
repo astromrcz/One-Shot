@@ -56,12 +56,17 @@ export type Reservation = {
   downPaymentAmount: number;
   downPaymentPaid: boolean;
   balancePaid: boolean;
- createdAt: Date;
+  createdAt: Date;
   cancellationReason?: string;
   promoCode?: string;
   discountAmount?: number;
   paymentReference?: string;
   receiptUrl?: string;
+  // 🚨 NEW: Added Reschedule fields to standard Table Reservations
+  rescheduleRequested?: boolean;
+  proposedDate?: Date;
+  proposedTimeSlot?: string;
+  customerRescheduleConfirmed?: boolean | null;
 };
 
 export type Feedback = {
@@ -114,7 +119,6 @@ export function generateReferralCode(name: string): string {
   return `${prefix}-${suffix}`;
 }
 
-// 🚨 STEP 15: Added 'denied' status
 export type TattooReservationStatus = 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'denied';
 
 export type TattooArtist = {
@@ -162,7 +166,7 @@ export const TATTOO_DEPOSIT = 500;
 
 export type StaffProfile = {
   username: string;
-  password?: string; // <-- Add the ? to make it optional
+  password?: string;
   fullName: string;
   email: string;
   role: string;
@@ -306,8 +310,8 @@ type AppContextType = {
   addTattooReservation: (item: Omit<TattooReservation, 'id' | 'createdAt'>) => Promise<void>;
   updateTattooReservationStatus: (id: string, status: TattooReservationStatus) => Promise<void>;
   updateTattooDepositPaid: (id: string, paid: boolean) => Promise<void>;
-  rescheduleTattooReservation: (id: string, proposedDate: Date, proposedTimeSlot: string) => Promise<void>;
-  confirmReschedule: (id: string, confirmed: boolean) => Promise<void>;
+  proposeReschedule: (id: string, proposedDate: Date, proposedTimeSlot: string) => Promise<void>; // 🚨 FIXED
+  confirmReschedule: (id: string, confirmed: boolean) => Promise<void>; // 🚨 FIXED
   addTattooArtist: (artist: Omit<TattooArtist, 'id'>) => Promise<void>;
   updateTattooArtist: (id: string, updates: Partial<TattooArtist>) => Promise<void>;
   deleteTattooArtist: (id: string) => Promise<void>;
@@ -383,7 +387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       durationMinutes: row.session_duration_minutes || 60,
       isPaid: row.session_is_paid || false,
       hourlyRate: row.session_hourly_rate || 250,
-      amountPaid: row.session_amount_paid || 0, // 🚨 FIXED: Prevents null crashes!
+      amountPaid: row.session_amount_paid || 0,
       orders: row.session_orders || [],
     } : undefined,
   });
@@ -424,10 +428,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ] = await Promise.all([
         supabase.from('tables').select('*').order('name'),
         supabase.from('queue_items').select('*').order('arrival_time'),
-        // Added .limit(500) to cap memory usage
         supabase.from('reservations').select('*').order('date', { ascending: false }).limit(500), 
         supabase.from('feedback').select('*').order('created_at', { ascending: false }),
-        // 🚨 FIX: Changed 'created_at' to 'timestamp' to match your Supabase schema!
         supabase.from('activities').select('*').order('timestamp', { ascending: false }).limit(200),
         supabase.from('promo_codes').select('*').order('created_at', { ascending: false }),
         supabase.from('tattoo_artists').select('*').order('name'),
@@ -476,6 +478,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         discountAmount: row.discount_amount || undefined,
         paymentReference: row.payment_reference || undefined,
         receiptUrl: row.receipt_url || undefined,
+        // 🚨 ADDED: Map reschedule fields for Table Reservations
+        rescheduleRequested: row.reschedule_requested || undefined,
+        proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined,
+        proposedTimeSlot: row.proposed_time_slot || undefined,
+        customerRescheduleConfirmed: row.customer_reschedule_confirmed,
       })));
 
       if (feedbackError) console.error('Error fetching feedback:', feedbackError);
@@ -644,7 +651,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
     } catch (err) {
-      // Properly typed error catching instead of 'any'
       const errorMessage = err instanceof Error ? err.message : 'Unknown network error';
       console.error('Critical sync error:', errorMessage);
     } finally {
@@ -664,14 +670,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const r = profile.role?.toLowerCase();
         if (r === 'admin' || profile.isAdmin) {
           setAdminLoggedIn(true);
-          setStaffLoggedIn(true); // 🚨 Restore dual-access on refresh
+          setStaffLoggedIn(true);
         }
         else if (r === 'artist' || r === 'tattoo-artist') {
           setArtistLoggedIn(true);
           setCurrentArtistId(profile.artistId || null);
-          setStaffLoggedIn(true); // 🚨 FIX: Ensure artists also get staff routing access on refresh
+          setStaffLoggedIn(true);
         }
-        else setStaffLoggedIn(true); // Managers and standard staff
+        else setStaffLoggedIn(true);
       } catch (e) {
         console.error('Failed to parse saved session');
       }
@@ -679,10 +685,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────
-  // ── Auth ──────────────────────────────────────────────────────
   
   const saveStaffSession = (profile: StaffProfile) => {
-    // SECURITY PATCH: Clone the profile and strip the password before saving to browser!
     const secureProfile = { ...profile };
     delete secureProfile.password;
     
@@ -697,12 +701,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAdminLoggedIn(false);
     setArtistLoggedIn(false);
     setCurrentArtistId(null);
-    await supabase.auth.signOut(); // Wipes any lingering Supabase cache!
-    
-    // 🚨 NEW: Instantly redirect to the homepage upon logging out!
+    await supabase.auth.signOut();
     window.location.href = '/'; 
   };
- // 🚨 RAW FETCH BYPASS: Prevents the Supabase "GET/HEAD body" bug
+
   const secureBackendLogin = async (username: string, password: string) => {
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/verify_staff_login`;
@@ -726,7 +728,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const user = await secureBackendLogin(username, password);
     if (user) { 
       setStaffLoggedIn(true); 
-      // 🚨 FIX: Automatically configure Admin and Artist permissions if they use the main login
       if (user.is_admin || user.role === 'admin') setAdminLoggedIn(true);
       if (user.role === 'tattoo-artist') {
         setArtistLoggedIn(true);
@@ -763,7 +764,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const artistLogin = async (username: string, password: string): Promise<boolean> => {
     const user = await secureBackendLogin(username, password);
-    // 🚨 FIX: Make artistLogin behave identically to staffLogin so they can use either page freely
     if (user && user.role === 'tattoo-artist') {
       setStaffLoggedIn(true);
       setArtistLoggedIn(true);
@@ -779,14 +779,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   
   const artistLogout = async () => await clearStaffSession();
- const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
-    // 1. Update the local screen memory immediately
+
+  const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
     setStaffProfile(prev => ({ ...prev, ...profile }));
-    
-    // 2. Find the actual user ID from the database array using their current username
     const user = staffUsers.find(u => u.username === staffProfile.username);
-    
-    // 3. Push the changes securely to Supabase!
     if (user) {
       await updateStaffUser(user.id, {
         ...(profile.username && { username: profile.username }),
@@ -798,12 +794,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
- const addActivity = async (type: ActivityType, description: string, metadata?: Record<string, any>) => {
+  const addActivity = async (type: ActivityType, description: string, metadata?: Record<string, any>) => {
     try {
       const id = `act_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const activity = { id, type, description, metadata };
       
-      // FIX: Await the insert and check for errors cleanly instead of chaining .catch()
       const { error } = await supabase.from('activities').insert([activity]);
       if (error) console.error('Error inserting activity:', error);
       
@@ -822,10 +817,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     if (error) {
       console.error("Assign Table Error:", error);
-      throw new Error("Failed to assign table in database."); // Stops execution here!
+      throw new Error("Failed to assign table in database.");
     }
-
-    // 2. Only update the UI if the database succeeded
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
     await addActivity('table_assigned', `${table.name} assigned to ${session.customerName}`, { tableId, customerName: session.customerName });
   };
@@ -835,13 +828,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!table) return;
 
     const updated = { ...table, status: 'available' as TableStatus, session: undefined };
-    
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     if (error) {
       console.error("Free Table Error:", error);
       throw new Error("Failed to free table in database.");
     }
-
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
     await addActivity('table_freed', `Table ${table.name} freed`);
   };
@@ -851,13 +842,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!table) return;
 
     const updated = { ...table, status: 'reserved' as TableStatus };
-    
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     if (error) {
       console.error("Reserve Table Error:", error);
       throw new Error("Failed to reserve table in database.");
     }
-
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
     await addActivity('table_reserved', `Table ${table.name} reserved`);
   };
@@ -871,16 +860,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const todayStr = new Date().toISOString().split('T')[0];
     const conflict = reservations.find(r => {
-      // PROTECT: Ignore if cancelled/completed, or missing crucial data from old records
       if (r.tableId !== tableId || r.status === 'cancelled' || r.status === 'completed' || !r.timeSlot || !r.date) return false;
-      
       const rDateStr = new Date(r.date).toISOString().split('T')[0];
       if (rDateStr !== todayStr) return false;
-      
       const resStart = new Date(r.date);
       const [hours, minutes] = r.timeSlot.split(':').map(Number);
       resStart.setHours(hours, minutes, 0, 0);
-      
       return newEndTime > resStart; 
     });
 
@@ -902,7 +887,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await addActivity('session_extended', `Table ${table.name} extended by ${extraMinutes} mins`);
   };
 
-  // 🚨 NEW: The actual POS order function!
   const addOrderToTable = async (tableId: string, order: OrderItem) => {
     const table = tables.find(t => t.id === tableId);
     if (!table || !table.session) return;
@@ -914,7 +898,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         orders: [...(table.session.orders || []), order] 
       }
     };
-    
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
     await addActivity('payment_received', `Added ${order.name} to ${table.name}`);
@@ -934,7 +917,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         orders: newOrders 
       }
     };
-    
     await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
     if (orderToRemove) {
@@ -959,7 +941,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleTableActive = async (id: string) => {
     const table = tables.find(t => t.id === id);
     if (!table) return;
-
     await supabase.from('tables').update({ is_active: !table.isActive }).eq('id', id);
     setTables(prev => prev.map(t => t.id === id ? { ...t, isActive: !t.isActive } : t));
     await addActivity('admin_action', `Table "${table.name}" ${table.isActive ? 'deactivated' : 'activated'}`, { tableId: id });
@@ -967,11 +948,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteTable = async (id: string) => {
     const table = tables.find(t => t.id === id);
-    const tableName = table ? table.name : id; // Fallback just in case
-    
+    const tableName = table ? table.name : id;
     await supabase.from('tables').delete().eq('id', id);
     setTables(prev => prev.filter(t => t.id !== id));
-    // FIXED: Use tableName instead of id
     await addActivity('admin_action', `Table "${tableName}" deleted`, { tableId: id });
   };
 
@@ -981,13 +960,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const queueItem = { ...item, id, arrivalTime, status: 'waiting' as const };
 
     await supabase.from('queue_items').insert([{
-      id,
-      customer_name: item.customerName,
-      contact_number: item.contactNumber,
-      party_size: item.partySize,
-      arrival_time: arrivalTime.toISOString(),
-      notes: item.notes,
-      status: 'waiting'
+      id, customer_name: item.customerName, contact_number: item.contactNumber,
+      party_size: item.partySize, arrival_time: arrivalTime.toISOString(), notes: item.notes, status: 'waiting'
     }]);
     setQueue(prev => [...prev, queueItem]);
     await addActivity('queue_added', `${item.customerName} added to queue`);
@@ -1010,24 +984,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const reservation: Reservation = { ...item, id, createdAt: new Date() };
 
     const { error } = await supabase.from('reservations').insert([{
-      id,
-      customer_name: item.customerName,
-      contact_number: item.contactNumber,
-      email: item.email,
-      date: item.date.toISOString(),
-      time_slot: item.timeSlot,
-      duration_hours: item.durationHours,
-      party_size: item.partySize,
-      table_id: item.tableId,
-      status: item.status,
-      total_amount: item.totalAmount,
-      down_payment_amount: item.downPaymentAmount,
-      down_payment_paid: item.downPaymentPaid,
-      balance_paid: item.balancePaid,
-      cancellation_reason: item.cancellationReason,
-      promo_code: item.promoCode,
-      discount_amount: item.discountAmount,
-      payment_reference: item.paymentReference,
+      id, customer_name: item.customerName, contact_number: item.contactNumber,
+      email: item.email, date: item.date.toISOString(), time_slot: item.timeSlot,
+      duration_hours: item.durationHours, party_size: item.partySize, table_id: item.tableId,
+      status: item.status, total_amount: item.totalAmount, down_payment_amount: item.downPaymentAmount,
+      down_payment_paid: item.downPaymentPaid, balance_paid: item.balancePaid, cancellation_reason: item.cancellationReason,
+      promo_code: item.promoCode, discount_amount: item.discountAmount, payment_reference: item.paymentReference,
       receipt_url: item.receiptUrl,
     }]);
 
@@ -1038,21 +1000,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setReservations(prev => [...prev, reservation]);
     await addActivity('reservation_created', `New reservation for ${item.customerName}`);
-    
-    // 🚨 FIRE THE PUSH TO ADMINS!
     await sendAdminPush("New Reservation! 📅", `${item.customerName} just booked a table for ${item.partySize} people at ${item.timeSlot}.`);
   };
+
   const updateReservationStatus = async (id: string, status: ReservationStatus) => {
     await supabase.from('reservations').update({ status }).eq('id', id);
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status } : r));
     await addActivity('reservation_updated', `Reservation updated to ${status}`);
   };
 
+  // 🚨 UNIFIED CANCEL: Supports Tables AND Tattoos 🚨
   const cancelReservation = async (id: string, reason: string) => {
-    const { error } = await supabase.from('reservations').update({ status: 'cancelled', cancellation_reason: reason }).eq('id', id);
-    if (error) throw new Error(error.message);
-    setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as ReservationStatus, cancellationReason: reason } : r));
-    await addActivity('reservation_cancelled', 'Reservation cancelled');
+    if (reservations.some(r => r.id === id)) {
+      const { error } = await supabase.from('reservations').update({ status: 'cancelled', cancellation_reason: reason }).eq('id', id);
+      if (error) throw new Error(error.message);
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as ReservationStatus, cancellationReason: reason } : r));
+      await addActivity('reservation_cancelled', 'Table reservation cancelled');
+    } else if (tattooReservations.some(r => r.id === id)) {
+      const { error } = await supabase.from('tattoo_reservations').update({ status: 'cancelled' }).eq('id', id);
+      if (error) throw new Error(error.message);
+      setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as TattooReservationStatus } : r));
+      await addActivity('reservation_cancelled', 'Tattoo reservation cancelled');
+    }
   };
 
   const updateDownPayment = async (id: string, paid: boolean) => {
@@ -1072,14 +1041,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const feedback = { ...item, id, date: new Date() };
 
     await supabase.from('feedback').insert([{
-      id,
-      customer_name: item.customerName,
-      contact_info: item.contactInfo,
-      rating: item.rating,
-      feedback_type: item.feedbackType,
-      comment: item.comment,
-      reservation_id: item.reservationId,
-      tags: item.tags,
+      id, customer_name: item.customerName, contact_info: item.contactInfo,
+      rating: item.rating, feedback_type: item.feedbackType, comment: item.comment,
+      reservation_id: item.reservationId, tags: item.tags,
     }]);
     setFeedback(prev => [feedback, ...prev]);
     await addActivity('feedback_received', `Feedback received from ${item.customerName}`);
@@ -1090,14 +1054,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const promoCode = { ...item, id, usageCount: 0, createdAt: new Date() };
 
     await supabase.from('promo_codes').insert([{
-      id,
-      code: item.code,
-      discount_percent: item.discountPercent,
-      description: item.description,
-      is_active: item.isActive,
-      max_usage: item.maxUsage,
-      usage_count: 0,
-      expires_at: item.expiresAt?.toISOString(),
+      id, code: item.code, discount_percent: item.discountPercent, description: item.description,
+      is_active: item.isActive, max_usage: item.maxUsage, usage_count: 0, expires_at: item.expiresAt?.toISOString(),
     }]);
     setPromoCodes(prev => [promoCode, ...prev]);
     await addActivity('promo_created', `Promo code ${item.code} created`);
@@ -1106,7 +1064,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const togglePromoCode = async (id: string) => {
     const promo = promoCodes.find(p => p.id === id);
     if (!promo) return;
-
     await supabase.from('promo_codes').update({ is_active: !promo.isActive }).eq('id', id);
     setPromoCodes(prev => prev.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
   };
@@ -1131,31 +1088,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const reservation = { ...item, id, createdAt: new Date() };
 
     await supabase.from('tattoo_reservations').insert([{
-      id,
-      customer_name: item.customerName,
-      contact_number: item.contactNumber,
-      email: item.email,
-      date: item.date.toISOString(),
-      time_slot: item.timeSlot,
-      artist_id: item.artistId,
-      artist_name: item.artistName,
-      artist_contact: item.artistContact,
-      placement: item.placement,
-      estimated_size: item.estimatedSize,
-      design_description: item.designDescription,
-      color_style: item.colorStyle,
-      agreement_signed: item.agreementSigned,
-      consent_signed: item.consentSigned,
-      status: item.status,
-      deposit_amount: item.depositAmount,
-      deposit_paid: item.depositPaid,
-      inspiration_images: item.inspirationImages,
-      reschedule_requested: item.rescheduleRequested,
-      proposed_date: item.proposedDate?.toISOString(),
-      proposed_time_slot: item.proposedTimeSlot,
-      customer_reschedule_confirmed: item.customerRescheduleConfirmed,
-      payment_reference: item.paymentReference,
-      receipt_url: item.receiptUrl,
+      id, customer_name: item.customerName, contact_number: item.contactNumber, email: item.email,
+      date: item.date.toISOString(), time_slot: item.timeSlot, artist_id: item.artistId,
+      artist_name: item.artistName, artist_contact: item.artistContact, placement: item.placement,
+      estimated_size: item.estimatedSize, design_description: item.designDescription, color_style: item.colorStyle,
+      agreement_signed: item.agreementSigned, consent_signed: item.consentSigned, status: item.status,
+      deposit_amount: item.depositAmount, deposit_paid: item.depositPaid, inspiration_images: item.inspirationImages,
+      reschedule_requested: item.rescheduleRequested, proposed_date: item.proposedDate?.toISOString(),
+      proposed_time_slot: item.proposedTimeSlot, customer_reschedule_confirmed: item.customerRescheduleConfirmed,
+      payment_reference: item.paymentReference, receipt_url: item.receiptUrl,
     }]);
     setTattooReservations(prev => [reservation, ...prev]);
     await addActivity('tattoo_reservation_created', `Tattoo reservation for ${item.customerName}`);
@@ -1171,61 +1112,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, depositPaid: paid } : r));
   };
 
-  const rescheduleTattooReservation = async (id: string, proposedDate: Date, proposedTimeSlot: string) => {
-    await supabase.from('tattoo_reservations').update({
-      reschedule_requested: true,
-      proposed_date: proposedDate.toISOString(),
-      proposed_time_slot: proposedTimeSlot,
-      customer_reschedule_confirmed: null
-    }).eq('id', id);
-    setTattooReservations(prev => prev.map(r => r.id === id ? {
-      ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null
-    } : r));
+  // 🚨 UNIFIED RESCHEDULE: Supports Tables AND Tattoos 🚨
+  const proposeReschedule = async (id: string, proposedDate: Date, proposedTimeSlot: string) => {
+    if (reservations.some(r => r.id === id)) {
+      await supabase.from('reservations').update({
+        reschedule_requested: true,
+        proposed_date: proposedDate.toISOString(),
+        proposed_time_slot: proposedTimeSlot,
+        customer_reschedule_confirmed: null
+      }).eq('id', id);
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null } : r));
+    } else if (tattooReservations.some(r => r.id === id)) {
+      await supabase.from('tattoo_reservations').update({
+        reschedule_requested: true,
+        proposed_date: proposedDate.toISOString(),
+        proposed_time_slot: proposedTimeSlot,
+        customer_reschedule_confirmed: null
+      }).eq('id', id);
+      setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null } : r));
+    }
   };
 
+  // 🚨 UNIFIED RESCHEDULE CONFIRM: Supports Tables AND Tattoos 🚨
   const confirmReschedule = async (id: string, confirmed: boolean) => {
-    const reservation = tattooReservations.find(r => r.id === id);
-    if (!reservation) return;
+    const isTable = reservations.some(r => r.id === id);
+    const tableName = isTable ? 'reservations' : 'tattoo_reservations';
+    const arr = isTable ? reservations : tattooReservations;
 
-    if (confirmed && reservation.proposedDate && reservation.proposedTimeSlot) {
-      await supabase.from('tattoo_reservations').update({
-        date: reservation.proposedDate.toISOString(),
-        time_slot: reservation.proposedTimeSlot,
+    const r = arr.find(x => x.id === id);
+    if (!r) return;
+
+    if (confirmed && r.proposedDate && r.proposedTimeSlot) {
+      await supabase.from(tableName).update({
+        date: r.proposedDate.toISOString(),
+        time_slot: r.proposedTimeSlot,
         reschedule_requested: false,
         proposed_date: null,
         proposed_time_slot: null,
         customer_reschedule_confirmed: true
       }).eq('id', id);
-      setTattooReservations(prev => prev.map(r => r.id === id ? {
-        ...r, date: reservation.proposedDate!, timeSlot: reservation.proposedTimeSlot!, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: true
-      } : r));
+
+      if (isTable) {
+        setReservations(prev => prev.map(item => item.id === id ? { ...item, date: item.proposedDate!, timeSlot: item.proposedTimeSlot!, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: true } : item));
+      } else {
+        setTattooReservations(prev => prev.map(item => item.id === id ? { ...item, date: item.proposedDate!, timeSlot: item.proposedTimeSlot!, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: true } : item));
+      }
     } else {
-      await supabase.from('tattoo_reservations').update({
+      await supabase.from(tableName).update({
         reschedule_requested: false,
         proposed_date: null,
         proposed_time_slot: null,
         customer_reschedule_confirmed: false
       }).eq('id', id);
-      setTattooReservations(prev => prev.map(r => r.id === id ? {
-        ...r, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: false
-      } : r));
+      
+      if (isTable) {
+        setReservations(prev => prev.map(item => item.id === id ? { ...item, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: false } : item));
+      } else {
+        setTattooReservations(prev => prev.map(item => item.id === id ? { ...item, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: false } : item));
+      }
     }
   };
 
   const addTattooArtist = async (artist: Omit<TattooArtist, 'id'>) => {
     const id = `ta${Date.now()}`;
     const newArtist = { ...artist, id };
-
     await supabase.from('tattoo_artists').insert([{
-      id,
-      name: artist.name,
-      specialty: artist.specialty,
-      contact_number: artist.contactNumber,
-      email: artist.email,
-      bio: artist.bio,
-      is_available_today: artist.isAvailableToday,
-      is_active: artist.isActive,
-      unavailable_dates: artist.unavailableDates,
+      id, name: artist.name, specialty: artist.specialty, contact_number: artist.contactNumber,
+      email: artist.email, bio: artist.bio, is_available_today: artist.isAvailableToday,
+      is_active: artist.isActive, unavailable_dates: artist.unavailableDates,
     }]);
     setTattooArtists(prev => [...prev, newArtist]);
   };
@@ -1260,16 +1214,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newUser = { ...user, id, createdAt: new Date() };
 
     await supabase.from('staff_users').insert([{
-      id,
-      username: user.username,
-      password: user.password,
-      full_name: user.fullName,
-      email: user.email,
-      role: user.role,
-      is_admin: user.isAdmin,
-      artist_id: user.artistId,
-      phone: user.phone,
-      is_active: user.isActive,
+      id, username: user.username, password: user.password, full_name: user.fullName,
+      email: user.email, role: user.role, is_admin: user.isAdmin, artist_id: user.artistId,
+      phone: user.phone, is_active: user.isActive,
     }]);
     setStaffUsers(prev => [...prev, newUser]);
   };
@@ -1298,13 +1245,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleStaffUserActive = async (id: string) => {
     const user = staffUsers.find(u => u.id === id);
     if (!user) return;
-
     await supabase.from('staff_users').update({ is_active: !user.isActive }).eq('id', id);
     setStaffUsers(prev => prev.map(u => u.id === id ? { ...u, isActive: !u.isActive } : u));
   };
 
   const updateRates = async (r: Partial<RatesConfig>) => {
-    // Add id: '1' so the database knows exactly which row to create/update
     const updates: any = { id: '1' }; 
     if (r.hourlyRate !== undefined) updates.hourly_rate = r.hourlyRate;
     if (r.happyHourRate !== undefined) updates.happy_hour_rate = r.happyHourRate;
@@ -1314,9 +1259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (r.tattooDeposit !== undefined) updates.tattoo_deposit = r.tattooDeposit;
     if (r.downPaymentPercent !== undefined) updates.down_payment_percent = r.downPaymentPercent;
 
-    // CHANGED from .update() to .upsert() so it creates the row if it's missing!
     const { error } = await supabase.from('rates_config').upsert(updates);
-    
     if (error) {
       console.error("Database Error saving rates:", error.message);
       alert("Failed to save to database. Check console for details.");
@@ -1344,12 +1287,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const announcement = { ...item, id, createdAt: new Date() };
 
     await supabase.from('announcements').insert([{
-      id,
-      title: item.title,
-      content: item.content,
-      type: item.type,
-      is_active: item.isActive,
-      expires_at: item.expiresAt?.toISOString(),
+      id, title: item.title, content: item.content, type: item.type,
+      is_active: item.isActive, expires_at: item.expiresAt?.toISOString(),
     }]);
     setAnnouncements(prev => [announcement, ...prev]);
   };
@@ -1384,12 +1323,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const closedDate = { ...item, id };
 
     await supabase.from('closed_dates').insert([{
-      id,
-      date: item.date,
-      reason: item.reason,
-      is_full_day: item.isFullDay,
-      open_time: item.openTime,
-      close_time: item.closeTime,
+      id, date: item.date, reason: item.reason, is_full_day: item.isFullDay,
+      open_time: item.openTime, close_time: item.closeTime,
     }]);
     setClosedDates(prev => [...prev, closedDate]);
   };
@@ -1433,7 +1368,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSiteSettings(prev => ({ ...prev, ...s } as SiteSettings));
   };
 
-  // 🚨 NEW: The Anonymous Push Sender
   const sendCustomerPush = async (customerName: string, title: string, message: string) => {
     try {
       await fetch('/api/onesignal', {
@@ -1444,7 +1378,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
-          // Hunt down the phone tagged with this name!
           filters: [
             { "field": "tag", "key": "customer_name", "relation": "=", "value": customerName.toLowerCase() }
           ],
@@ -1456,7 +1389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error("Push failed to send:", err);
     }
   };
-// 🚨 THE NEW ADMIN SENDER
+
   const sendAdminPush = async (title: string, message: string) => {
     try {
       await fetch('/api/onesignal', {
@@ -1468,7 +1401,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
-          // Hunt down ANY browser/phone tagged as an Admin!
           filters: [
             { "field": "tag", "key": "role", "relation": "=", "value": "admin" }
           ],
@@ -1496,13 +1428,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addFeedback, addActivity,
       addPromoCode, togglePromoCode, deletePromoCode, applyPromoCode,
       addTattooReservation, updateTattooReservationStatus, updateTattooDepositPaid,
-      rescheduleTattooReservation, confirmReschedule,
+      proposeReschedule, confirmReschedule,
       addTattooArtist, updateTattooArtist, deleteTattooArtist, updateTattooArtistUnavailableDates,
       addStaffUser, updateStaffUser, resetStaffUserPassword, toggleStaffUserActive,
       updateRates, updateReservationTerms,
       addAnnouncement, updateAnnouncement, deleteAnnouncement, toggleAnnouncement,
       addClosedDate, removeClosedDate, updateClosedDate, updateSiteSettings,
       refreshData,
+      sendCustomerPush, sendAdminPush
     }}>
       {children}
     </AppContext.Provider>

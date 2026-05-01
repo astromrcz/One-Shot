@@ -1,13 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppContext, HOURLY_RATE, DOWN_PAYMENT_RATE, ReservationStatus } from '../context/AppContext';
 import emailjs from '@emailjs/browser';
 import {
-  Plus, X, Calendar, Clock, Users, Phone, Mail, ChevronDown, CheckCircle,
-  XCircle, Search, Filter, PhilippinePeso, AlertTriangle, Receipt, RefreshCw, CalendarDays
+  Plus, X, Calendar, Clock, Users, Phone, ChevronDown, CheckCircle,
+  XCircle, Search, AlertTriangle, Receipt, CalendarDays
 } from 'lucide-react';
-import { format, isToday, isTomorrow, isPast, isThisMonth, isThisYear } from 'date-fns';
-
-type DateFilter = 'all' | 'today' | 'month' | 'year'; // 🚨 STEP 5
+import { format, isToday, isTomorrow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const formatPHP = (amount: number) => `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -20,10 +18,21 @@ const statusConfig: Record<ReservationStatus, { label: string; color: string; do
   cancelled: { label: 'Cancelled', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20', dot: 'bg-rose-400' },
 };
 
-const formatDate = (d: Date) => {
-  if (isToday(d)) return `Today, ${format(d, 'h:mm a')}`;
-  if (isTomorrow(d)) return `Tomorrow, ${format(d, 'h:mm a')}`;
-  return format(d, 'MMM d, h:mm a');
+// 🚨 TIMEZONE SHIFT FIX: Explicitly parse the timeSlot string to avoid browser offset bugs
+const formatTimeSlot = (time24: string) => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 || 12;
+  return `${formattedHour}:${m} ${ampm}`;
+};
+
+const formatReservationDate = (r: any) => {
+  const timeStr = r.timeSlot ? formatTimeSlot(r.timeSlot) : format(r.date, 'h:mm a');
+  if (isToday(r.date)) return `Today, ${timeStr}`;
+  if (isTomorrow(r.date)) return `Tomorrow, ${timeStr}`;
+  return `${format(r.date, 'MMM d, yyyy')} at ${timeStr}`;
 };
 
 export function Reservations() {
@@ -36,11 +45,11 @@ export function Reservations() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
   
-  // 🚨 Reschedule State
+  // Reschedule State
   const [showRescheduleForm, setShowRescheduleForm] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
@@ -54,18 +63,18 @@ export function Reservations() {
         
         await emailjs.send(
           'service_d5kmgtc',   
-          'template_48a5pgd',  // ⚠️ Replace with your EmailJS Template ID
+          'template_48a5pgd',  
           {
             to_email: r.email,
             customer_name: r.customerName,
             date: r.date ? format(new Date(r.date), 'MMM d, yyyy') : '',
-            time: r.timeSlot || '',
+            time: r.timeSlot ? formatTimeSlot(r.timeSlot) : '',
             duration: r.durationHours,
             total_amount: r.totalAmount.toFixed(2),
             down_payment: r.downPaymentAmount.toFixed(2),
             balance: balance.toFixed(2)
           },
-          'agtFkbRS7r_lgBWMV'    // ⚠️ Replace with your EmailJS Public Key
+          'agtFkbRS7r_lgBWMV'    
         );
         console.log("Confirmation email sent!");
       } catch (error) {
@@ -73,10 +82,11 @@ export function Reservations() {
       }
     }
 
-    setToast(`${r.customerName} successfully verified! Confirmation email sent.`);
-    setTimeout(() => setToast(null), 3500); 
+    setToastMessage(`${r.customerName} successfully verified! Confirmation email sent.`);
+    setTimeout(() => setToastMessage(null), 3500); 
     if (selectedId === r.id) setSelectedId(null);
   };
+
   // Form state
   const [form, setForm] = useState({
     customerName: '', contactNumber: '', email: '', date: '',
@@ -118,8 +128,8 @@ export function Reservations() {
     const proposedDateObj = new Date(year, month - 1, day, hour, minute);
     
     await proposeReschedule(selectedId, proposedDateObj, rescheduleTime);
-    setToast(`Reschedule proposed for ${format(proposedDateObj, 'MMM d')} at ${rescheduleTime}`);
-    setTimeout(() => setToast(null), 3500);
+    setToastMessage(`Reschedule proposed for ${format(proposedDateObj, 'MMM d')} at ${formatTimeSlot(rescheduleTime)}`);
+    setTimeout(() => setToastMessage(null), 3500);
     setShowRescheduleForm(false);
   };
 
@@ -132,7 +142,6 @@ export function Reservations() {
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   const selected = reservations.find(r => r.id === selectedId);
-
   const statusOptions: Array<'all' | ReservationStatus> = ['all', 'pending', 'confirmed', 'checked-in', 'completed', 'cancelled'];
 
   const todayCount = reservations.filter(r => isToday(r.date)).length;
@@ -149,7 +158,7 @@ export function Reservations() {
       
       {/* Success Notification Toast */}
       <AnimatePresence>
-        {toast && (
+        {toastMessage && (
           <motion.div
             initial={{ opacity: 0, y: -20, x: 20 }}
             animate={{ opacity: 1, y: 0, x: 0 }}
@@ -157,10 +166,11 @@ export function Reservations() {
             className="fixed top-6 right-6 z-[200] bg-emerald-950/95 border border-emerald-800/50 text-emerald-400 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md"
           >
             <CheckCircle size={18} />
-            <span className="text-sm font-semibold">{toast}</span>
+            <span className="text-sm font-semibold">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -243,7 +253,7 @@ export function Reservations() {
                       <p className="text-xs text-neutral-500">{r.contactNumber}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm text-neutral-300">{formatDate(r.date)}</p>
+                      <p className="text-sm text-neutral-300">{formatReservationDate(r)}</p>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-neutral-400">{r.durationHours}h</span>
@@ -260,7 +270,6 @@ export function Reservations() {
                         {cfg.label}
                       </span>
                     </td>
-                    {/* STEP 4: Moved Payment/Collect buttons directly to the dashboard table! */}
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="space-y-1.5 flex flex-col items-start">
                         <button onClick={() => updateDownPayment(r.id, !r.downPaymentPaid)}
@@ -278,7 +287,6 @@ export function Reservations() {
                           {r.balancePaid ? <CheckCircle size={11} /> : <AlertTriangle size={11} />}
                           Bal: {formatPHP(r.totalAmount - r.downPaymentAmount)}
                         </button>
-                        {/* Reference Number displayed inline */}
                         {r.paymentReference && (
                           <p className="text-[9px] text-neutral-500 pt-1">
                             Ref: <span className="font-mono text-neutral-300">{r.paymentReference}</span>
@@ -361,7 +369,7 @@ export function Reservations() {
                 <div className="space-y-0.5">
                   <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Date & Time</p>
                   <p className="text-neutral-300">{format(selected.date, 'MMM d, yyyy')}</p>
-                  <p className="text-neutral-500 text-xs">{selected.timeSlot}</p>
+                  <p className="text-neutral-500 text-xs">{selected.timeSlot ? formatTimeSlot(selected.timeSlot) : format(selected.date, 'h:mm a')}</p>
                 </div>
                 <div className="space-y-0.5">
                   <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Duration</p>
@@ -438,7 +446,7 @@ export function Reservations() {
                 </div>
               </div>
 
-              {/* 🚨 Rescheduling UI */}
+              {/* Rescheduling UI */}
               <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs text-amber-500 uppercase tracking-wider font-semibold flex items-center gap-1.5"><CalendarDays size={12}/> Reschedule</p>
@@ -512,7 +520,6 @@ export function Reservations() {
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 placeholder-neutral-600"
                     placeholder="Full name" />
                 </div>
-                {/* STEP 16: Limit Phone Field to exactly 11 numbers */}
                 <div className="space-y-1.5">
                   <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Contact Number *</label>
                   <input required value={form.contactNumber} 
@@ -620,13 +627,10 @@ export function Reservations() {
                   type="button"
                   onClick={async () => {
                     if (cancelTarget) {
-                      // 1. Find the reservation details so we know who to email
                       const r = reservations.find(res => res.id === cancelTarget);
                       
-                      // 2. Cancel it in the database
                       await cancelReservation(cancelTarget, cancelReason);
                       
-                      // 3. Send the Cancellation Email!
                       if (r && r.email) {
                         try {
                           await emailjs.send(
@@ -638,7 +642,7 @@ export function Reservations() {
                               date: r.date ? format(new Date(r.date), 'MMM d, yyyy') : '',
                               reason: cancelReason || 'Cancelled by Management',
                             },
-                            'agtFkbRS7r_lgBWMV'        // ⚠️ Replace with your Public Key
+                            'agtFkbRS7r_lgBWMV'        
                           );
                           console.log("Cancellation email sent!");
                         } catch (error) {

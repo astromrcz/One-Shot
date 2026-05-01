@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, X, Star, Phone, MapPin,
   Clock, LogIn, UserPlus, Eye, EyeOff,
   Calendar, CheckCircle, ArrowRight,
-  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check, LogOut, Package, Table2, Palette
+  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check, LogOut, Package, Table2, Palette, Copy
 } from 'lucide-react';
 import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
@@ -37,6 +37,7 @@ const TIME_SLOTS = [
 ];
 
 const formatTime = (time24: string) => {
+  if (!time24) return '';
   const [h, m] = time24.split(':');
   const hour = parseInt(h, 10);
   const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -157,8 +158,8 @@ function MiniCalendar({
 }
 
 export function HomePage() {
- const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, siteSettings, announcements, cancelReservation, proposeReschedule, confirmReschedule } = useAppContext(); 
+  const navigate = useNavigate();
+  const { tables, queue, reservations, tattooReservations, addReservation, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, siteSettings, announcements, cancelReservation, proposeReschedule, confirmReschedule } = useAppContext(); 
   
   const activeAnnouncements = announcements && announcements.filter(a => a.isActive).length > 0
     ? announcements.filter(a => a.isActive).map(a => ({ content: a.content, type: a.type }))
@@ -185,7 +186,6 @@ export function HomePage() {
         { src: heroImg5, alt: 'Precision Billiards' },
       ];
 
-  const [guestEmail, setGuestEmail] = useState(() => localStorage.getItem('oneshot_guest_email') || '');
   const [announcementIdx, setAnnouncementIdx] = useState(0);
   const [announcementDir, setAnnouncementDir] = useState<1 | -1>(1);
   const [heroSlideIdx, setHeroSlideIdx] = useState(0);
@@ -193,7 +193,6 @@ export function HomePage() {
   const [now, setNow] = useState(new Date());
   
   const [activeSection, setActiveSection] = useState<Section>('home');
-  // 🚨 NEW RESERVATION SERVICE TYPE 🚨
   const [reservationType, setReservationType] = useState<'selection' | 'billiards' | 'tattoo' | 'package'>('selection');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -203,6 +202,10 @@ export function HomePage() {
   const [showUpdatePwModal, setShowUpdatePwModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
+  const [trackerId, setTrackerId] = useState('');
+  const [trackedRes, setTrackedRes] = useState<any>(null);
+  const [trackerError, setTrackerError] = useState('');
+
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; phone: string; referralCode: string } | null>(null);
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '', showPw: false, error: '' });
@@ -222,13 +225,13 @@ export function HomePage() {
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [resError, setResError] = useState(''); 
 
-  // 🚨 RESTORED: Cancellation & Reschedule States 🚨
   const [cancelModal, setCancelModal] = useState({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false });
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<Date | null>(null);
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
+  const [createdReservationId, setCreatedReservationId] = useState('');
+  const [copiedId, setCopiedId] = useState(false);
 
-  // 🚨 RESTORED: Table Timer Helpers 🚨
   const getTableTimerInfo = (tableId: string) => {
     const t = tables.find(tb => tb.id === tableId);
     if (!t || t.status !== 'occupied' || !t.session) return null;
@@ -277,6 +280,11 @@ export function HomePage() {
       await cancelReservation(cancelModal.id, finalReason);
       toast.success("Reservation cancelled.");
       setCancelModal({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false });
+      
+      if (trackedRes && trackedRes.id === cancelModal.id) {
+        setTrackedRes(null);
+        setTrackerId('');
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to cancel reservation.");
       setCancelModal(prev => ({ ...prev, loading: false }));
@@ -306,17 +314,20 @@ export function HomePage() {
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
   const [promoError, setPromoError] = useState('');
 
+  const [simpleFeedbackForm, setSimpleFeedbackForm] = useState({ name: '', type: '', contact: '', message: '' });
+  const [simpleFeedbackSent, setSimpleFeedbackSent] = useState(false);
+
   const selectedDateStr = selectedDate 
     ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}` 
     : null;
   const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
 
   const slotCounts = reservations.reduce((acc, r) => {
-    if (r.status === 'cancelled' || !r.timeSlot || !r.date) return acc; 
+    if (r.status === 'cancelled' || !r.timeSlot || !r.date || r.id === rescheduleTargetId) return acc; 
     
     try {
       const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
-      const activeCheckStr = selectedDateStr;
+      const activeCheckStr = rescheduleDate ? format(rescheduleDate, 'yyyy-MM-dd') : selectedDateStr;
 
       if (rDateStr === activeCheckStr) {
         const startHour = parseInt(r.timeSlot.split(':')[0]);
@@ -334,6 +345,11 @@ export function HomePage() {
   const discountAmount = appliedPromo ? Math.floor(baseAmount * appliedPromo.discountPercent / 100) : 0;
   const totalAmount = baseAmount - discountAmount;
   const downPayment = Math.ceil(totalAmount * ((rates?.downPaymentPercent || 25) / 100));
+
+  const allMyBookings = [
+    ...(reservations || []).map(r => ({ ...r, bookingType: 'billiards' })),
+    ...(tattooReservations || []).map(r => ({ ...r, bookingType: 'tattoo' }))
+  ];
 
   useEffect(() => {
     const interval = setInterval(() => { setAnnouncementDir(1); setAnnouncementIdx(prev => (prev + 1) % activeAnnouncements.length); }, 4500);
@@ -367,9 +383,6 @@ export function HomePage() {
     };
     restoreSession();
 
-    
-
-    // 🚨 ADD THIS BLOCK: Catches the #login hash and opens the modal!
     if (window.location.hash === '#login') {
       setShowLoginModal(true);
       window.history.replaceState(null, '', window.location.pathname);
@@ -658,8 +671,12 @@ export function HomePage() {
       const reservationDate = new Date(selectedDate!);
       const [hours, minutes] = resForm.timeSlot.split(':').map(Number);
       reservationDate.setHours(hours, minutes, 0, 0);
+      
+      // We manually build the ID here so we can grab it to display to the user in Step 3!
+      const newId = crypto.randomUUID();
 
       await addReservation({
+        id: newId,
         customerName: resForm.name, contactNumber: resForm.phone, email: resForm.email,
         date: reservationDate, timeSlot: resForm.timeSlot, durationHours: resForm.duration,
         partySize: resForm.pax, status: 'pending', totalAmount, downPaymentAmount: downPayment,
@@ -668,12 +685,8 @@ export function HomePage() {
         paymentReference: referenceNumber,
         receiptUrl: receiptUrl,
       });
-
-      if (!currentUser && resForm.email) {
-        localStorage.setItem('oneshot_guest_email', resForm.email);
-        setGuestEmail(resForm.email);
-      }
-
+      
+      setCreatedReservationId(newId);
       setConfirmingPayment(false); 
       setReservationStep(3);
     } catch (err: any) {
@@ -688,6 +701,23 @@ export function HomePage() {
     setPromoCodeInput(''); setAppliedPromo(null); setPromoError('');
     setReferenceNumber(''); setReceiptFile(null); setUploadError('');
     setResError('');
+    setCreatedReservationId('');
+    setCopiedId(false);
+  };
+
+  const handleSimpleFeedbackSubmit = async () => {
+    if (!simpleFeedbackForm.name || !simpleFeedbackForm.type || !simpleFeedbackForm.contact) return;
+    
+    try {
+      toast.success("Message Sent! Our team will review it shortly.");
+      setSimpleFeedbackSent(true);
+      setTimeout(() => { 
+        setSimpleFeedbackSent(false); 
+        setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); 
+      }, 3000);
+    } catch (error) {
+      toast.error("Failed to send message. Please try again.");
+    }
   };
 
   const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + dynamicHeroSlides.length) % dynamicHeroSlides.length); };
@@ -1194,6 +1224,293 @@ export function HomePage() {
                         </div>
                       </div>
                     </div>
+                    
+                    {/* --- RIGHT SIDEBAR (MY BOOKINGS) --- */}
+                    <div className="w-full lg:w-[320px] flex-none">
+                      <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex flex-col sticky top-24">
+                        
+                        {(() => {
+                          const myReservations = currentUser ? allMyBookings.filter(r => r.email === currentUser.email).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
+                          
+                          // 🚨 RESCHEDULE FORM INJECTION 🚨
+                          if (rescheduleTargetId) {
+                            return (
+                              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                                <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
+                                  <button onClick={() => setRescheduleTargetId(null)} className="p-1.5 bg-neutral-950 rounded-lg text-neutral-400 hover:text-white transition-colors">
+                                    <ChevronLeft size={14}/>
+                                  </button>
+                                  <div>
+                                    <h3 className="text-sm font-bold text-white">Reschedule Booking</h3>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">1. Choose New Date</p>
+                                  <MiniCalendar selectedDate={rescheduleDate} onSelect={setRescheduleDate} reservedDates={reservedDates} closedDates={closedDates} />
+                                </div>
+
+                                <div className="space-y-3">
+                                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">2. Choose New Time</p>
+                                  {!rescheduleDate ? (
+                                    <div className="bg-neutral-950 border border-dashed border-neutral-800 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
+                                      <Calendar size={20} className="text-neutral-600" />
+                                      <p className="text-neutral-500 text-xs">Select a date first.</p>
+                                    </div>
+                                  ) : selectedClosedDate ? (
+                                     <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
+                                      <AlertTriangle size={20} className="text-rose-500" />
+                                      <p className="text-rose-400 text-xs font-bold">Store Closed</p>
+                                    </div>
+                                  ) : (
+                                    <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
+                                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                        {TIME_SLOTS.map(t => {
+                                          const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                          const isPastTime = isToday(rescheduleDate) && parseInt(t.split(':')[0]) <= new Date().getHours() + 1;
+                                          if (isHappyHour || isPastTime) return null; 
+                                          
+                                          const count = slotCounts[t] || 0;
+                                          const isFull = count >= 5;
+
+                                          return (
+                                            <button 
+                                              key={t} 
+                                              disabled={isFull} 
+                                              onClick={() => setRescheduleTimeSlot(t)} 
+                                              className={`relative py-1.5 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                                isFull
+                                                  ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                                  : rescheduleTimeSlot === t 
+                                                  ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40' 
+                                                  : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+                                              }`}
+                                            >
+                                              {formatTime(t)}
+                                              {isFull && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <button 
+                                  onClick={handleSubmitReschedule}
+                                  disabled={!rescheduleDate || !rescheduleTimeSlot || !!selectedClosedDate}
+                                  className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2"
+                                >
+                                  Submit Request <ArrowRight size={12}/>
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          // 🚨 NORMAL BOOKINGS VIEW 🚨
+                          return (
+                            <>
+                              <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-3">
+                                <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
+                              </div>
+                              
+                              {!currentUser ? (
+                                <div className="flex-1 flex flex-col items-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2 space-y-4">
+                                  <div>
+                                    <h3 className="text-sm font-bold text-white">Track Reservation</h3>
+                                    <p className="text-xs text-neutral-500 mt-1">Enter your Reference ID to view or reschedule.</p>
+                                  </div>
+                                  <div className="w-full flex gap-2">
+                                    <input 
+                                      type="text" 
+                                      value={trackerId} 
+                                      onChange={(e) => { setTrackerId(e.target.value); setTrackerError(''); }} 
+                                      placeholder="Reservation ID" 
+                                      className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        const r = allMyBookings.find(x => x.id.toLowerCase() === trackerId.toLowerCase().trim() || x.paymentReference === trackerId.trim());
+                                        if (r) { setTrackedRes(r); setTrackerError(''); }
+                                        else { setTrackedRes(null); setTrackerError('Not found'); }
+                                      }}
+                                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                                    >
+                                      Track
+                                    </button>
+                                  </div>
+                                  {trackerError && <p className="text-xs text-rose-400">{trackerError}</p>}
+
+                                  {trackedRes && (
+                                    <div className="w-full bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs text-left mt-2">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${trackedRes.bookingType === 'tattoo' ? 'bg-violet-900/30 text-violet-400 border border-violet-800/50' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50'}`}>
+                                          {trackedRes.bookingType === 'tattoo' ? 'Tattoo Studio' : 'Billiards'}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between items-start mb-1.5">
+                                        <div className="flex flex-col gap-1">
+                                          <span className="font-semibold text-neutral-200">{format(new Date(trackedRes.date), 'MMM d, yyyy')}</span>
+                                          <span className="font-mono text-[9px] text-neutral-500">ID: {trackedRes.id}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-1">
+                                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                            trackedRes.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                            trackedRes.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                            trackedRes.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                            'bg-rose-500/10 text-rose-400'
+                                          }`}>{trackedRes.status}</span>
+                                          <button 
+                                            onClick={() => { navigator.clipboard.writeText(trackedRes.id); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
+                                            className="flex items-center gap-1 text-[9px] text-neutral-400 hover:text-white transition-colors bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-700"
+                                          >
+                                            {copiedId ? <Check size={10} className="text-emerald-400"/> : <Copy size={10}/>} Copy ID
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
+                                        <span>
+                                          {formatTime(trackedRes.timeSlot || '00:00')} 
+                                          {trackedRes.bookingType === 'tattoo' ? ` (${trackedRes.placement})` : ` (${trackedRes.durationHours} hrs)`}
+                                        </span>
+                                      </div>
+                                      
+                                      {trackedRes.status !== 'cancelled' && trackedRes.status !== 'completed' && new Date(trackedRes.date).getTime() > new Date().setHours(0,0,0,0) && !trackedRes.rescheduleRequested && (
+                                        <div className="flex gap-2">
+                                          <button 
+                                            onClick={() => {
+                                              setRescheduleTargetId(trackedRes.id);
+                                              setRescheduleDate(null);
+                                              setRescheduleTimeSlot('');
+                                              setTrackedRes(null);
+                                            }} 
+                                            className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                          >
+                                            <CalendarDays size={12}/> Reschedule
+                                          </button>
+                                          <button
+                                            onClick={() => setCancelModal({ isOpen: true, id: trackedRes.id, category: 'Standard Cancellation', reason: '', loading: false })}
+                                            className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="w-full h-px bg-neutral-800 my-2" />
+                                  <p className="text-xs text-neutral-500">Or log in to see all your bookings.</p>
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
+                                      Login
+                                    </button>
+                                    <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
+                                      Register
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : myReservations.length === 0 ? (
+                                <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>
+                              ) : (
+                                <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
+                                  {myReservations.map(r => {
+                                    const rDate = new Date(r.date);
+                                    rDate.setHours(0,0,0,0);
+                                    const today = new Date();
+                                    today.setHours(0,0,0,0);
+                                    
+                                    const isPastDate = rDate.getTime() < today.getTime();
+                                    const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
+                                    const isActiveStatus = displayStatus === 'pending' || displayStatus === 'confirmed';
+                                    const isTattoo = r.bookingType === 'tattoo';
+
+                                    return (
+                                      <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${isTattoo ? 'bg-violet-900/30 text-violet-400 border border-violet-800/50' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50'}`}>
+                                            {isTattoo ? 'Tattoo Studio' : 'Billiards'}
+                                          </span>
+                                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                            displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                            displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                            displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                            'bg-rose-500/10 text-rose-400'
+                                          }`}>{displayStatus}</span>
+                                        </div>
+
+                                        <div className="flex justify-between items-start mb-1.5">
+                                          <div className="flex flex-col gap-1">
+                                            <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
+                                            <span className="font-mono text-[9px] text-neutral-500">ID: {r.id}</span>
+                                          </div>
+                                          <div className="flex flex-col items-end gap-1">
+                                            <button 
+                                              onClick={() => { navigator.clipboard.writeText(r.id); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
+                                              className="flex items-center gap-1 text-[9px] text-neutral-400 hover:text-white transition-colors bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-700"
+                                            >
+                                              {copiedId ? <Check size={10} className="text-emerald-400"/> : <Copy size={10}/>} Copy ID
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
+                                          <span>{formatTime(r.timeSlot || '00:00')} {isTattoo ? `(${r.placement})` : `(${r.durationHours} hrs)`}</span>
+                                          <span>₱{isTattoo ? r.depositAmount : r.totalAmount}</span>
+                                        </div>
+                                        
+                                        {/* Action Required: Staff Proposed Reschedule */}
+                                        {r.rescheduleRequested && r.proposedDate && (
+                                          <div className="mt-3 bg-amber-950/30 border border-amber-800/50 rounded-xl p-3 animate-pulse-slow">
+                                            <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1.5 mb-1.5"><AlertTriangle size={12}/> Reschedule Proposed</p>
+                                            <p className="text-[10px] text-neutral-300 mb-3 leading-relaxed">Management proposed moving to <strong className="text-amber-300 font-black">{format(new Date(r.proposedDate), 'MMM d')} at {r.proposedTimeSlot}</strong>.</p>
+                                            <div className="flex gap-2">
+                                              <button onClick={() => confirmReschedule(r.id, true)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
+                                                <Check size={12}/> Accept
+                                              </button>
+                                              <button onClick={() => confirmReschedule(r.id, false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
+                                                <X size={12}/> Decline
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Action Buttons Container */}
+                                        <div className="flex gap-2 mt-2.5">
+                                          {/* Reschedule Button */}
+                                          {!isPastDate && isActiveStatus && !r.rescheduleRequested && (
+                                            <button 
+                                              onClick={() => {
+                                                setRescheduleTargetId(r.id);
+                                                setRescheduleDate(null);
+                                                setRescheduleTimeSlot('');
+                                              }} 
+                                              className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                            >
+                                              <CalendarDays size={12}/> Reschedule
+                                            </button>
+                                          )}
+                                          
+                                          {/* Cancel Button */}
+                                          {!isPastDate && isActiveStatus && (
+                                            <button
+                                              onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
+                                              className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
+                                            >
+                                              Cancel
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               )}
@@ -1324,7 +1641,7 @@ export function HomePage() {
                   {[
                     { label: 'Minimum booking time', value: '1 hour' },
                     { label: 'Down payment required', value: `${rates?.downPaymentPercent || 25}% of total` },
-                    { label: 'Remaining balance', value: 'Paid on-site After your session' },
+                    { label: 'Remaining balance', value: 'Paid on-site before play begins' },
                     { label: 'Cancellation policy', value: '24 hours before reservation' },
                     { label: 'Payment methods', value: 'GCash, Cash' },
                     { label: 'Walk-in queue', value: 'First Come, First Served — when tables are available' },
@@ -2001,12 +2318,36 @@ export function HomePage() {
               <p className="text-sm text-neutral-400 mb-6 leading-relaxed">
                 Your reservation for <strong className="text-neutral-200">{selectedDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{formatTime(resForm.timeSlot)}</strong> has been submitted. Our staff will verify your payment and confirm shortly.
               </p>
+              
               <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
                 <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Email</span><span className="text-neutral-200">{resForm.email}</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold">₱{downPayment}.00 ✓</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Verification</span></div>
+                <div className="w-full h-px bg-neutral-800 my-2" />
+                <div className="flex flex-col items-center pt-2">
+                  <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mb-1">Reservation ID</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-lg font-bold text-white">{createdReservationId.split('-')[0].toUpperCase()}</span>
+                    <button 
+                      onClick={() => { navigator.clipboard.writeText(createdReservationId); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
+                      className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded transition-colors"
+                    >
+                      {copiedId ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
               </div>
+              
+              {!currentUser && (
+                <div className="bg-rose-950/20 border border-rose-900/30 rounded-xl p-3 mb-5 flex items-start gap-2 text-left">
+                  <AlertTriangle size={14} className="text-rose-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-rose-400 leading-tight">
+                    <strong className="text-rose-500">Please save your Reservation ID!</strong> You are not logged in. You will need this ID to track, cancel, or reschedule your booking later.
+                  </p>
+                </div>
+              )}
+
               <button
                 onClick={closeReservation}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-semibold transition-all"
