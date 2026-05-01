@@ -2,7 +2,7 @@ import { useAppContext } from '../context/AppContext';
 import { 
   Clock, Filter, Search, CheckCircle, XCircle, Bell, Users, 
   Calendar, DollarSign, TableProperties, TrendingUp, 
-  MessageSquare, Tag, Palette, ShieldAlert, Activity, Download, CalendarDays
+  MessageSquare, Tag, Palette, ShieldAlert, Activity, Download, CalendarDays, ArrowUpDown
 } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { useState } from 'react';
@@ -37,12 +37,12 @@ export function ActivityLog() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<ActivityType | 'all'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 🚨 NEW SORT STATE
 
   const filtered = activities.filter(a => {
     const matchSearch = !search || a.description.toLowerCase().includes(search.toLowerCase());
     const matchType = filterType === 'all' || a.type === filterType;
     
-    // 🚨 NEW DATE FILTER LOGIC
     let matchDate = true;
     const d = new Date(a.timestamp);
     if (dateFilter === 'today') matchDate = isToday(d);
@@ -50,7 +50,12 @@ export function ActivityLog() {
     else if (dateFilter === 'month') matchDate = d >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     return matchSearch && matchType && matchDate;
-  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }).sort((a, b) => {
+    // 🚨 IMPLEMENTED ASC/DESC SORTING
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+  });
 
   const activityTypes: Array<ActivityType | 'all'> = [
     'all', 'table_assigned', 'table_freed', 'reservation_created', 'reservation_updated',
@@ -124,7 +129,7 @@ export function ActivityLog() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* 🚨 DATE FILTER DROPDOWN 🚨 */}
+          
           <div className="flex items-center bg-neutral-950 border border-neutral-800 rounded-lg pl-3 pr-1 py-1">
             <CalendarDays size={14} className="text-neutral-500" />
             <select
@@ -151,6 +156,15 @@ export function ActivityLog() {
               ))}
             </select>
           </div>
+
+          {/* 🚨 NEW SORT BUTTON 🚨 */}
+          <button 
+            onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')} 
+            className="flex items-center gap-2 bg-neutral-950 border border-neutral-800 hover:bg-neutral-900 text-neutral-200 px-3 py-2 rounded-lg text-sm transition-colors flex-none"
+          >
+            <ArrowUpDown size={14} className="text-neutral-500" /> 
+            <span className="hidden sm:inline">{sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}</span>
+          </button>
           
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 px-3 py-2 rounded-lg text-sm transition-colors flex-none ml-2">
             <Download size={14} /> <span className="hidden sm:inline">Export CSV</span>

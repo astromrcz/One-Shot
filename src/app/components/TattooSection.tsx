@@ -16,7 +16,7 @@ import tattooImg4 from '@/app/assets/fd6942fee056e3b615efe7cd116d0c2bba0f1f84.pn
 import tattooImg5 from '@/app/assets/830c44fd25fb8f30ae66601d56b2e9f05cebeec7.png';
 import gcashQrImg from '@/app/assets/GcashOneShot.jpg';
 
-const TATTOO_SLIDES = [
+export const TATTOO_SLIDES = [
   { src: tattooImg1, caption: 'Black & Grey Masterwork' },
   { src: tattooImg2, caption: 'Precision Line Work' },
   { src: tattooImg3, caption: 'Fine Detail Artistry' },
@@ -24,10 +24,10 @@ const TATTOO_SLIDES = [
   { src: tattooImg5, caption: 'Neck & Collar Piece' },
 ];
 
-const TATTOO_TIME_SLOTS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
-const PLACEMENTS = ['Wrist', 'Forearm', 'Upper Arm', 'Shoulder', 'Chest', 'Upper Back', 'Lower Back', 'Neck', 'Thigh', 'Leg', 'Ankle', 'Other'];
-const SIZES = ['Micro (under 1 in)', 'Small (1–2 in)', 'Medium (3–5 in)', 'Large (6+ in)', 'Full piece (custom quote)'];
-const COLOR_STYLES = ['Black & Grey', 'Traditional Color', 'Neo-Traditional', 'Watercolor', 'Fine Line / Blackwork', 'Geometric', 'Other'];
+export const TATTOO_TIME_SLOTS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
+export const PLACEMENTS = ['Wrist', 'Forearm', 'Upper Arm', 'Shoulder', 'Chest', 'Upper Back', 'Lower Back', 'Neck', 'Thigh', 'Leg', 'Ankle', 'Other'];
+export const SIZES = ['Micro (under 1 in)', 'Small (1–2 in)', 'Medium (3–5 in)', 'Large (6+ in)', 'Full piece (custom quote)'];
+export const COLOR_STYLES = ['Black & Grey', 'Traditional Color', 'Neo-Traditional', 'Watercolor', 'Fine Line / Blackwork', 'Geometric', 'Other'];
 
 const AI_PROMPTS = [
   "Neo-traditional Tiger",
@@ -41,7 +41,7 @@ const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // ── Mini Calendar ──────────────────────────────────────────────
-function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | null; onSelect: (d: Date) => void }) {
+export function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | null; onSelect: (d: Date) => void }) {
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
 
@@ -63,11 +63,11 @@ function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | null; o
   return (
     <div className="bg-neutral-900 rounded-xl border border-neutral-700 p-3 select-none">
       <div className="flex items-center justify-between mb-3">
-        <button onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth() - 1); setViewDate(d); }} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800">
+        <button type="button" onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth() - 1); setViewDate(d); }} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800">
           <ChevronLeft size={14} />
         </button>
         <span className="text-xs font-semibold text-white">{MONTHS[month]} {year}</span>
-        <button onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth() + 1); setViewDate(d); }} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800">
+        <button type="button" onClick={() => { const d = new Date(viewDate); d.setMonth(d.getMonth() + 1); setViewDate(d); }} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800">
           <ChevronRight size={14} />
         </button>
       </div>
@@ -79,7 +79,7 @@ function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | null; o
           const past = isPast(date), sel = isSelected(date), tod = isToday(date);
           const clickable = current && !past;
           return (
-            <button key={idx} disabled={!clickable} onClick={() => clickable && onSelect(date)}
+            <button key={idx} type="button" disabled={!clickable} onClick={() => clickable && onSelect(date)}
               className={`aspect-square flex items-center justify-center rounded-md text-[11px] transition-all
                 ${!current ? 'opacity-20 cursor-default' : ''}
                 ${past && current ? 'opacity-30 cursor-default text-neutral-600' : ''}
@@ -96,53 +96,20 @@ function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | null; o
   );
 }
 
-// ── QR Patterns (reused for payment) ───────────────────────────
-const QR_GCASH = [[1,1,1,0,1,0,1,0,0,1,1,1,1,0,1,1,1],[1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,1,0,1,0,1,1,0,1,0,1],[1,0,1,0,1,1,0,0,1,1,1,0,1,0,1,0,1],[1,1,1,0,0,1,1,0,1,0,0,1,1,1,1,1,1],[0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,0,0],[1,1,0,1,0,0,1,1,1,0,1,0,1,0,1,1,0],[0,1,0,0,1,0,0,0,1,0,0,1,0,1,1,0,1],[1,0,1,1,0,1,1,0,1,0,1,0,1,1,0,1,0],[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,1,0],[1,1,1,0,1,0,1,1,0,1,1,0,1,1,1,0,1],[1,0,1,0,0,1,0,1,0,0,0,1,0,1,0,1,0],[1,0,1,0,1,0,1,0,1,1,0,0,1,0,1,0,1],[1,0,1,0,0,1,0,1,0,0,1,0,0,0,1,1,0],[1,1,1,0,1,1,1,0,1,1,0,1,1,0,1,1,1],[0,0,0,0,1,0,0,1,0,0,1,0,0,1,0,1,0],[1,0,1,1,0,1,1,0,1,0,0,1,0,0,1,0,1]];
-
-function QRDisplay({ pattern, color }: { pattern: number[][], color: string }) {
-  return (
-    <div className="bg-white p-2.5 rounded-xl inline-block">
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${pattern[0].length}, 1fr)`, gap: '1px', width: 120, height: 120 }}>
-        {pattern.flatMap((row, ri) => row.map((cell, ci) => (
-          <div key={`${ri}-${ci}`} style={{ backgroundColor: cell ? color : 'white', borderRadius: 1 }} />
-        )))}
-      </div>
-    </div>
-  );
-}
-
 // ── Agreement text ─────────────────────────────────────────────
 const AGREEMENT_TEXT = `SERVICE AGREEMENT — One Shot Bar & Billiards Tattoo Studio\n\n1. All tattoo services are final. No refunds once the service has begun.\n2. The ₱500 deposit is non-refundable but may be transferred to a rescheduled appointment within 7 days with prior notice.\n3. Clients must be at least 18 years of age. Valid ID may be required on the day of the appointment.\n4. One Shot Bar & Billiards reserves the right to decline service at management's discretion.\n5. Final pricing may vary based on design complexity, size, and session duration.\n6. Free touch-ups are included within 30 days for minor corrections at the artist's discretion.\n7. Please arrive 15 minutes before your scheduled appointment. A grace period of 15 minutes applies; late arrivals may result in rescheduling.\n8. One Shot Bar & Billiards is not liable for allergic reactions or complications arising from improper aftercare.`;
-
 const CONSENT_TEXT = `INFORMED CONSENT — Tattoo Services\n\nBy checking this box, I confirm the following:\n\n1. I am at least 18 years of age and of sound mind.\n2. I am NOT currently pregnant or breastfeeding.\n3. I do not have any known blood-borne diseases, keloid-prone skin, or conditions that impair healing.\n4. I am NOT currently on blood-thinning medications (e.g., aspirin, warfarin) unless cleared by a physician.\n5. I am NOT intoxicated or under the influence of any substances.\n6. I understand that tattooing involves needles and permanent body modification, and carries inherent risks including (but not limited to) infection, scarring, and allergic reactions.\n7. I acknowledge that healing results vary per individual and proper aftercare is my responsibility.\n8. I release One Shot Bar & Billiards, its staff, and its tattoo artists from liability for complications resulting from failure to follow aftercare instructions.`;
 
-// ── Main TattooSection Component ───────────────────────────────
-export function TattooSection({ currentUserName, currentUserEmail }: { currentUserName?: string; currentUserEmail?: string }) {
+// ── 🚨 NEW: Extracting the Booking Flow so HomePage can use it inline ─────────────────
+export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel }: { currentUserName?: string, currentUserEmail?: string, onCancel: () => void }) {
   const { addTattooReservation, tattooArtists } = useAppContext();
-
-  // Carousel
-  const [slideIdx, setSlideIdx] = useState(0);
-  const [slideDir, setSlideDir] = useState<1|-1>(1);
-
-  // Modal
-  const [modalStep, setModalStep] = useState(0); // 0=closed, 1=step1, 2=step2, 3=agreement, 4=payment, 5=confirmed
-  const [tattooDate, setTattooDate] = useState<Date | null>(null);
   
+  const [modalStep, setModalStep] = useState(1); // Start directly at step 1
+  const [tattooDate, setTattooDate] = useState<Date | null>(null);
   const [referenceNumber, setReferenceNumber] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [confirmingPayment, setConfirmingPayment] = useState(false);
-
-  // AI Generator State
-  const [aiMode, setAiMode] = useState<'concept' | 'placement'>('concept');
-  const [aiReferenceImage, setAiReferenceImage] = useState<string | null>(null);
-  const [aiGeneratedImage, setAiGeneratedImage] = useState<string | null>(null);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiBodyPart, setAiBodyPart] = useState('');
-  const [aiConsentChecked, setAiConsentChecked] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  // Inspiration images (data URLs)
   const [inspirationImages, setInspirationImages] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -162,42 +129,12 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
 
-  // Auto-advance carousel
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSlideDir(1);
-      setSlideIdx(p => (p + 1) % TATTOO_SLIDES.length);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const nextSlide = () => { setSlideDir(1); setSlideIdx(p => (p + 1) % TATTOO_SLIDES.length); };
-  const prevSlide = () => { setSlideDir(-1); setSlideIdx(p => (p - 1 + TATTOO_SLIDES.length) % TATTOO_SLIDES.length); };
-
   const selectedArtist = tattooArtists.find(a => a.id === form.artistId);
 
   const canProceedStep1 = !!tattooDate && !!form.artistId && !!form.name && !!form.phone && !!form.email;
   const canProceedStep2 = !!form.placement && !!form.estimatedSize && !!form.colorStyle && !!form.designDescription;
   const canProceedStep3 = agreementChecked && consentChecked;
 
-  const openModal = () => {
-    setForm(f => ({ ...f, name: currentUserName || f.name, email: currentUserEmail || f.email }));
-    setModalStep(1);
-  };
-
-  const closeModal = () => {
-    setModalStep(0);
-    setTattooDate(null);
-    setAgreementChecked(false);
-    setConsentChecked(false);
-    setInspirationImages([]);
-    setReferenceNumber('');
-    setReceiptFile(null);
-    setUploadError('');
-    setForm({ name: currentUserName || '', email: currentUserEmail || '', phone: '', artistId: '', timeSlot: '14:00', placement: '', estimatedSize: '', colorStyle: '', designDescription: '' });
-  };
-
-  // ── Image dropbox handlers ─────────────────────────────────
   const processFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
@@ -296,6 +233,359 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
     }
   };
 
+  if (modalStep === 5) {
+    return (
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 shadow-2xl text-center max-w-sm mx-auto">
+        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
+          className="w-16 h-16 rounded-full bg-violet-600/15 border border-violet-600/30 flex items-center justify-center mx-auto mb-4">
+          <CheckCircle size={32} className="text-violet-400" />
+        </motion.div>
+        <h3 className="text-xl font-black text-white mb-2">Tattoo Session Booked!</h3>
+        <p className="text-neutral-500 text-sm mb-5 leading-relaxed">
+          Your appointment with <strong className="text-neutral-200">{selectedArtist?.name}</strong> on <strong className="text-neutral-200">{tattooDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{form.timeSlot}</strong> is pending confirmation.
+        </p>
+        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
+          <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{form.name}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Placement</span><span className="text-neutral-200">{form.placement}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Deposit</span><span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00 ✓</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Confirmation</span></div>
+        </div>
+        <button onClick={onCancel} className="w-full bg-violet-600 hover:bg-violet-500 text-white py-3 rounded-xl text-sm font-semibold transition-all">
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-2xl mx-auto shadow-2xl flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="bg-neutral-900 border-b border-neutral-800 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div>
+          <h3 className="text-base font-bold text-white">Tattoo Reservation</h3>
+          <p className="text-xs text-neutral-500">
+            Step {modalStep} of 4 · {['', 'Schedule & Artist', 'Tattoo Details', 'Agreement & Consent', 'Deposit Payment'][modalStep]}
+          </p>
+        </div>
+        <button onClick={onCancel} className="text-neutral-600 hover:text-neutral-300 transition-colors"><X size={18} /></button>
+      </div>
+
+      <div className="h-1 bg-neutral-800 flex-shrink-0">
+        <div className="h-full bg-violet-600 transition-all duration-500" style={{ width: `${(modalStep / 4) * 100}%` }} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 max-h-[70vh]">
+        {modalStep === 1 && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+                <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Juan dela Cruz"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
+                <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="09XX-XXX-XXXX"
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
+              <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="juan@email.com"
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500" />
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-2">Preferred Date <span className="text-rose-500">*</span></label>
+              <MiniCalendar selectedDate={tattooDate} onSelect={setTattooDate} />
+              {tattooDate && (
+                <div className="mt-2 flex items-center gap-2 bg-violet-600/10 border border-violet-600/25 rounded-lg px-3 py-2">
+                  <CheckCircle size={13} className="text-violet-400" />
+                  <span className="text-xs text-violet-300">{tattooDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {TATTOO_TIME_SLOTS.map(t => (
+                  <button type="button" key={t} onClick={() => setForm(f => ({ ...f, timeSlot: t }))}
+                    className={`py-2 rounded-lg text-xs font-semibold transition-all ${form.timeSlot === t ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">Select Tattoo Artist <span className="text-rose-500">*</span></label>
+              <div className="space-y-2">
+                {tattooArtists.map(artist => (
+                  <button type="button" key={artist.id} disabled={!artist.isAvailableToday}
+                    onClick={() => artist.isAvailableToday && setForm(f => ({ ...f, artistId: artist.id }))}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                      !artist.isAvailableToday ? 'opacity-40 cursor-not-allowed border-neutral-800 bg-neutral-900/40' :
+                      form.artistId === artist.id ? 'border-violet-500 bg-violet-600/10' :
+                      'border-neutral-800 bg-neutral-900/60 hover:border-neutral-600'
+                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${form.artistId === artist.id ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}>
+                      {artist.name[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-neutral-200">{artist.name}
+                        {!artist.isAvailableToday && <span className="ml-2 text-[10px] text-neutral-600 font-normal">(Not available today)</span>}
+                      </p>
+                      <p className="text-[10px] text-neutral-500">{artist.specialty}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-neutral-500 flex items-center gap-1"><Phone size={9} />{artist.contactNumber}</p>
+                      {form.artistId === artist.id && <CheckCircle size={14} className="text-violet-400 ml-auto mt-1" />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {modalStep === 2 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Placement Area <span className="text-rose-500">*</span></label>
+                <select value={form.placement} onChange={e => setForm(f => ({ ...f, placement: e.target.value }))}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-violet-500 appearance-none">
+                  <option value="" disabled>Select placement...</option>
+                  {PLACEMENTS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Estimated Size <span className="text-rose-500">*</span></label>
+                <select value={form.estimatedSize} onChange={e => setForm(f => ({ ...f, estimatedSize: e.target.value }))}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-violet-500 appearance-none">
+                  <option value="" disabled>Select size...</option>
+                  {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">Color Style <span className="text-rose-500">*</span></label>
+              <div className="grid grid-cols-2 gap-2">
+                {COLOR_STYLES.map(cs => (
+                  <button type="button" key={cs} onClick={() => setForm(f => ({ ...f, colorStyle: cs }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-medium text-left transition-all border ${form.colorStyle === cs ? 'bg-violet-600/20 border-violet-500 text-violet-300' : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-600'}`}>
+                    {cs}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5">Design Description <span className="text-rose-500">*</span></label>
+              <textarea value={form.designDescription} onChange={e => setForm(f => ({ ...f, designDescription: e.target.value }))}
+                placeholder="Describe your tattoo idea in detail — subject, style, elements you want included..."
+                rows={4}
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500 resize-none" />
+            </div>
+
+            <div>
+              <label className="block text-xs text-neutral-400 mb-1.5 flex items-center gap-1.5">
+                <ImagePlus size={12} className="text-violet-400" />
+                Inspiration Images <span className="text-neutral-600">(optional · max 5)</span>
+              </label>
+              <div
+                onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={() => setIsDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                  isDragOver ? 'border-violet-500 bg-violet-500/10' : 'border-neutral-700 hover:border-violet-600/60 hover:bg-violet-600/5'
+                } ${inspirationImages.length >= 5 ? 'opacity-40 pointer-events-none' : ''}`}
+              >
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => processFiles(e.target.files)} />
+                <ImagePlus size={22} className={`mx-auto mb-2 ${isDragOver ? 'text-violet-400' : 'text-neutral-600'}`} />
+                <p className="text-xs text-neutral-500">{isDragOver ? 'Drop images here' : 'Drag & drop or click to upload inspiration images'}</p>
+                <p className="text-[10px] text-neutral-700 mt-1">JPG, PNG, WEBP · {inspirationImages.length}/5 uploaded</p>
+              </div>
+
+              {inspirationImages.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 mt-3">
+                  {inspirationImages.map((src, idx) => (
+                    <div key={`insp-${idx}`} className="relative group aspect-square rounded-lg overflow-hidden border border-neutral-700">
+                      <img src={src} alt={`Inspiration ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button type="button" onClick={e => { e.stopPropagation(); removeImage(idx); }}
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 size={14} className="text-rose-400" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs space-y-1.5">
+              <p className="text-neutral-500 uppercase tracking-wider font-semibold mb-2">Session Summary</p>
+              <div className="flex justify-between"><span className="text-neutral-500">Artist</span><span className="text-neutral-200">{selectedArtist?.name}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Date & Time</span><span className="text-neutral-200">{tattooDate?.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} · {form.timeSlot}</span></div>
+            </div>
+          </div>
+        )}
+
+        {modalStep === 3 && (
+          <div className="space-y-5">
+            <div className="bg-amber-950/20 border border-amber-800/30 rounded-xl p-3 flex gap-2.5">
+              <AlertCircle size={15} className="text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-300 leading-relaxed">Please read both forms carefully and check both boxes to proceed. These are required before your tattoo session.</p>
+            </div>
+
+            <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-900">
+                <FileText size={14} className="text-violet-400" />
+                <p className="text-xs font-semibold text-neutral-200">Service Agreement</p>
+              </div>
+              <div className="p-4 max-h-40 overflow-y-auto">
+                <pre className="text-[10px] text-neutral-500 leading-relaxed whitespace-pre-wrap font-sans">{AGREEMENT_TEXT}</pre>
+              </div>
+              <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900/60">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border flex-shrink-0 transition-all ${agreementChecked ? 'bg-violet-600 border-violet-600' : 'border-neutral-600 bg-neutral-800 group-hover:border-violet-500'}`}
+                    onClick={() => setAgreementChecked(p => !p)}>
+                    {agreementChecked && <CheckCircle size={12} className="text-white" />}
+                  </div>
+                  <span className="text-xs text-neutral-300 leading-relaxed" onClick={() => setAgreementChecked(p => !p)}>
+                    I have read and agree to the <strong className="text-violet-400">Service Agreement</strong> for tattoo services at One Shot Bar & Billiards.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-900">
+                <Shield size={14} className="text-emerald-400" />
+                <p className="text-xs font-semibold text-neutral-200">Informed Consent</p>
+              </div>
+              <div className="p-4 max-h-40 overflow-y-auto">
+                <pre className="text-[10px] text-neutral-500 leading-relaxed whitespace-pre-wrap font-sans">{CONSENT_TEXT}</pre>
+              </div>
+              <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900/60">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border flex-shrink-0 transition-all ${consentChecked ? 'bg-emerald-600 border-emerald-600' : 'border-neutral-600 bg-neutral-800 group-hover:border-emerald-500'}`}
+                    onClick={() => setConsentChecked(p => !p)}>
+                    {consentChecked && <CheckCircle size={12} className="text-white" />}
+                  </div>
+                  <span className="text-xs text-neutral-300 leading-relaxed" onClick={() => setConsentChecked(p => !p)}>
+                    I provide my <strong className="text-emerald-400">informed consent</strong> to receive tattoo services. I confirm all statements above are true.
+                  </span>
+                </label>
+              </div>
+            </div>
+            {!canProceedStep3 && <p className="text-[10px] text-neutral-600 text-center">Both checkboxes must be checked to proceed.</p>}
+          </div>
+        )}
+
+        {modalStep === 4 && (
+          <div className="space-y-5">
+            <div className="bg-violet-950/30 border border-violet-800/30 rounded-xl p-4 text-center">
+              <p className="text-xs text-violet-400 mb-1">Reservation Deposit</p>
+              <p className="text-4xl font-black text-violet-300">₱{TATTOO_DEPOSIT}.00</p>
+              <p className="text-xs text-neutral-600 mt-1">Transferable within 7 days · Non-refundable if cancelled within 24h</p>
+            </div>
+
+            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs space-y-1.5">
+              <div className="flex justify-between"><span className="text-neutral-500">Customer</span><span className="text-neutral-200">{form.name}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Artist</span><span className="text-neutral-200">{selectedArtist?.name}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Date</span><span className="text-neutral-200">{tattooDate?.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+              <div className="flex justify-between"><span className="text-neutral-500">Placement</span><span className="text-neutral-200">{form.placement}</span></div>
+            </div>
+
+            <div className="flex flex-col items-center gap-3 bg-blue-900/10 border border-blue-900/30 p-6 rounded-2xl">
+              <div className="bg-white p-2 rounded-xl inline-block w-32 h-32 flex items-center justify-center shadow-lg">
+                <img src={gcashQrImg} alt="GCash QR Code" className="w-full h-full object-contain rounded-lg" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-blue-400">ONE SHOT BAR & BILLIARDS</p>
+                <p className="text-xs text-neutral-500">+63 917-123-4567</p>
+              </div>
+              <p className="text-xs text-neutral-500 text-center">Scan with your GCash app · Send exactly <span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00</span></p>
+            </div>
+
+            <div className="w-full space-y-3 pt-2 text-left border-t border-neutral-800">
+              {uploadError && <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg">{uploadError}</div>}
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference Number <span className="text-rose-500">*</span></label>
+                <input type="text" value={referenceNumber}
+                  onChange={e => { 
+                    const val = e.target.value;
+                    if (val.replace(/\s/g, '').length <= 13) { setReferenceNumber(val); setUploadError(''); }
+                  }}
+                  placeholder="e.g. 10023948293"
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-rose-500">*</span></label>
+                <input type="file" accept="image/*" onChange={e => { setReceiptFile(e.target.files?.[0] || null); setUploadError(''); }}
+                  className="w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 transition-all cursor-pointer" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="px-6 py-4 border-t border-neutral-800 flex gap-3 flex-shrink-0 bg-neutral-950">
+        {modalStep > 1 && (
+          <button type="button" onClick={() => setModalStep(s => (s - 1) as any)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">
+            Back
+          </button>
+        )}
+        {modalStep < 4 && (
+          <button type="button" onClick={() => setModalStep(s => (s + 1) as any)}
+            disabled={(modalStep === 1 && !canProceedStep1) || (modalStep === 2 && !canProceedStep2) || (modalStep === 3 && !canProceedStep3)}
+            className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2">
+            Continue <ArrowRight size={14} />
+          </button>
+        )}
+        {modalStep === 4 && (
+          <button type="button" onClick={handleFinalSubmit} disabled={confirmingPayment || !referenceNumber}
+            className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2">
+            {confirmingPayment ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Verifying...</> : <><CheckCircle size={15} /> I've Sent the Deposit</>}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 🚨 Original Tattoo Section Component (Now just the Landing Page) ─────────
+export function TattooSection({ currentUserName, currentUserEmail, onBookNow }: { currentUserName?: string; currentUserEmail?: string; onBookNow: () => void }) {
+  const { tattooArtists } = useAppContext();
+
+  // Carousel
+  const [slideIdx, setSlideIdx] = useState(0);
+  const [slideDir, setSlideDir] = useState<1|-1>(1);
+
+  // AI Generator State
+  const [aiMode, setAiMode] = useState<'concept' | 'placement'>('concept');
+  const [aiReferenceImage, setAiReferenceImage] = useState<string | null>(null);
+  const [aiGeneratedImage, setAiGeneratedImage] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiBodyPart, setAiBodyPart] = useState('');
+  const [aiConsentChecked, setAiConsentChecked] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSlideDir(1);
+      setSlideIdx(p => (p + 1) % TATTOO_SLIDES.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const nextSlide = () => { setSlideDir(1); setSlideIdx(p => (p + 1) % TATTOO_SLIDES.length); };
+  const prevSlide = () => { setSlideDir(-1); setSlideIdx(p => (p - 1 + TATTOO_SLIDES.length) % TATTOO_SLIDES.length); };
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
       {/* Header */}
@@ -331,7 +621,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           </motion.div>
         </AnimatePresence>
 
-        {/* Nav arrows */}
         <button onClick={prevSlide} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/60">
           <ChevronLeft size={16} />
         </button>
@@ -339,7 +628,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           <ChevronRight size={16} />
         </button>
 
-        {/* Dots */}
         <div className="absolute bottom-4 right-4 flex gap-1.5">
           {TATTOO_SLIDES.map((_, i) => (
             <button key={i} onClick={() => { setSlideDir(i > slideIdx ? 1 : -1); setSlideIdx(i); }}
@@ -350,7 +638,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
 
       {/* Info + Artists + CTA */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-        {/* Info */}
         <div className="space-y-5">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
             <p className="text-violet-400 text-xs uppercase tracking-widest font-semibold mb-3">About the Studio</p>
@@ -373,7 +660,7 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           </div>
 
           <button
-            onClick={openModal}
+            onClick={onBookNow}
             className="w-full bg-violet-600 hover:bg-violet-500 text-white py-3.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-900/40"
           >
             <Calendar size={15} />
@@ -381,7 +668,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           </button>
         </div>
 
-        {/* Artists */}
         <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
           <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-4">Our Artists</p>
           <div className="space-y-3">
@@ -408,13 +694,12 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
         </div>
       </div>
 
-      {/* 🚨 NEW: Browsable Past Work & AI Inspiration 🚨 */}
+      {/* Browsable Past Work & AI Inspiration */}
       <div className="mt-6 mb-10 pt-10 border-t border-neutral-800/60">
         <div className="mb-8">
           <h3 className="text-xl font-bold text-white mb-1">Past Work Gallery</h3>
           <p className="text-sm text-neutral-400 mb-4">Browse our artists' recent sessions.</p>
           
-          {/* Horizontal scrollable slider */}
           <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
             {TATTOO_SLIDES.map((s, i) => (
               <div key={i} className="relative rounded-xl overflow-hidden flex-shrink-0 w-40 h-40 sm:w-48 sm:h-48 snap-center border border-neutral-800 group">
@@ -427,7 +712,7 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           </div>
         </div>
 
-        {/* Improved 2-Column AI Generator */}
+        {/* AI Generator */}
         <div className="bg-neutral-900/50 border border-violet-500/20 rounded-2xl p-6 shadow-xl shadow-violet-900/5">
           <div className="text-center mb-8">
             <h4 className="text-lg font-bold text-violet-300 flex items-center justify-center gap-2 mb-1"><Wand2 size={18}/> AI Concept Generator</h4>
@@ -435,7 +720,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Left Column: Image Upload */}
             <div className="space-y-3">
               <p className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5"><ImagePlus size={14} className="text-violet-400"/> 1. Reference Photo <span className="text-neutral-500 font-normal">(Optional for Concepts)</span></p>
               
@@ -466,11 +750,9 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
               </label>
             </div>
 
-            {/* Right Column: Generation Settings & Result */}
             <div className="space-y-3 flex flex-col">
               <p className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5"><Sparkles size={14} className="text-violet-400"/> 2. Generation Settings</p>
               
-              {/* Generation Mode Toggle */}
               <div className="flex p-1 bg-neutral-950 rounded-lg border border-neutral-800 shrink-0">
                 <button onClick={() => setAiMode('concept')} className={`flex-1 text-[10px] font-semibold py-1.5 rounded-md transition-all ${aiMode === 'concept' ? 'bg-violet-600 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}>New Concept Design</button>
                 <button onClick={() => setAiMode('placement')} className={`flex-1 text-[10px] font-semibold py-1.5 rounded-md transition-all ${aiMode === 'placement' ? 'bg-violet-600 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}>Visualize Placement</button>
@@ -528,7 +810,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
             </div>
           </div>
 
-          {/* Submission / Consent Section */}
           <div className="mt-8 pt-6 border-t border-neutral-800/60 space-y-5">
             <label className="flex items-start gap-3 cursor-pointer group bg-neutral-950/60 p-3.5 rounded-xl border border-neutral-800 hover:border-violet-500/30 transition-colors">
               <div className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center border flex-shrink-0 transition-all ${aiConsentChecked ? 'bg-violet-600 border-violet-600' : 'border-neutral-600 bg-neutral-800 group-hover:border-violet-500'}`}
@@ -544,7 +825,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
               disabled={!aiConsentChecked || isGenerating || (aiMode === 'concept' ? (!aiReferenceImage && !aiPrompt) : (!aiReferenceImage || !aiBodyPart))}
               onClick={() => {
                 setIsGenerating(true);
-                // Mocking the AI generation delay
                 setTimeout(() => { 
                   setIsGenerating(false); 
                   setAiGeneratedImage('https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?auto=format&fit=crop&w=500&q=80'); 
@@ -557,405 +837,6 @@ export function TattooSection({ currentUserName, currentUserEmail }: { currentUs
           </div>
         </div>
       </div>
-
-      {/* ── Tattoo Reservation Modal ── */}
-      <AnimatePresence>
-        {modalStep > 0 && modalStep < 5 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={e => e.target === e.currentTarget && closeModal()}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
-              className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-lg shadow-2xl max-h-[95vh] flex flex-col overflow-hidden"
-            >
-              {/* Modal Header */}
-              <div className="bg-neutral-900 border-b border-neutral-800 px-6 py-4 flex items-center justify-between flex-shrink-0">
-                <div>
-                  <h3 className="text-base font-bold text-white">Tattoo Reservation</h3>
-                  <p className="text-xs text-neutral-500">
-                    Step {modalStep} of 4 · {['', 'Schedule & Artist', 'Tattoo Details', 'Agreement & Consent', 'Deposit Payment'][modalStep]}
-                  </p>
-                </div>
-                <button onClick={closeModal} className="text-neutral-600 hover:text-neutral-300 transition-colors">
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Progress bar */}
-              <div className="h-1 bg-neutral-800 flex-shrink-0">
-                <div className="h-full bg-violet-600 transition-all duration-500" style={{ width: `${(modalStep / 4) * 100}%` }} />
-              </div>
-
-              {/* Scrollable body */}
-              <div className="flex-1 overflow-y-auto p-6">
-
-                {/* ─── STEP 1: Schedule & Artist ─── */}
-                {modalStep === 1 && (
-                  <div className="space-y-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
-                        <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Juan dela Cruz"
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
-                        <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="09XX-XXX-XXXX"
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500" />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
-                      <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="juan@email.com"
-                        className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500" />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-2">Preferred Date <span className="text-rose-500">*</span></label>
-                      <MiniCalendar selectedDate={tattooDate} onSelect={setTattooDate} />
-                      {tattooDate && (
-                        <div className="mt-2 flex items-center gap-2 bg-violet-600/10 border border-violet-600/25 rounded-lg px-3 py-2">
-                          <CheckCircle size={13} className="text-violet-400" />
-                          <span className="text-xs text-violet-300">{tattooDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {TATTOO_TIME_SLOTS.map(t => (
-                          <button key={t} onClick={() => setForm(f => ({ ...f, timeSlot: t }))}
-                            className={`py-2 rounded-lg text-xs font-semibold transition-all ${form.timeSlot === t ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'}`}>
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-1.5">Select Tattoo Artist <span className="text-rose-500">*</span></label>
-                      <div className="space-y-2">
-                        {tattooArtists.map(artist => (
-                          <button key={artist.id} disabled={!artist.isAvailableToday}
-                            onClick={() => artist.isAvailableToday && setForm(f => ({ ...f, artistId: artist.id }))}
-                            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
-                              !artist.isAvailableToday ? 'opacity-40 cursor-not-allowed border-neutral-800 bg-neutral-900/40' :
-                              form.artistId === artist.id ? 'border-violet-500 bg-violet-600/10' :
-                              'border-neutral-800 bg-neutral-900/60 hover:border-neutral-600'
-                            }`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${form.artistId === artist.id ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}>
-                              {artist.name[0]}
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-neutral-200">{artist.name}
-                                {!artist.isAvailableToday && <span className="ml-2 text-[10px] text-neutral-600 font-normal">(Not available today)</span>}
-                              </p>
-                              <p className="text-[10px] text-neutral-500">{artist.specialty}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[10px] text-neutral-500 flex items-center gap-1"><Phone size={9} />{artist.contactNumber}</p>
-                              {form.artistId === artist.id && <CheckCircle size={14} className="text-violet-400 ml-auto mt-1" />}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ─── STEP 2: Tattoo Details ─── */}
-                {modalStep === 2 && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Placement Area <span className="text-rose-500">*</span></label>
-                        <select value={form.placement} onChange={e => setForm(f => ({ ...f, placement: e.target.value }))}
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-violet-500 appearance-none">
-                          <option value="" disabled>Select placement...</option>
-                          {PLACEMENTS.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Estimated Size <span className="text-rose-500">*</span></label>
-                        <select value={form.estimatedSize} onChange={e => setForm(f => ({ ...f, estimatedSize: e.target.value }))}
-                          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 focus:outline-none focus:border-violet-500 appearance-none">
-                          <option value="" disabled>Select size...</option>
-                          {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-1.5">Color Style <span className="text-rose-500">*</span></label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {COLOR_STYLES.map(cs => (
-                          <button key={cs} onClick={() => setForm(f => ({ ...f, colorStyle: cs }))}
-                            className={`py-2 px-3 rounded-lg text-xs font-medium text-left transition-all border ${form.colorStyle === cs ? 'bg-violet-600/20 border-violet-500 text-violet-300' : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:border-neutral-600'}`}>
-                            {cs}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-1.5">Design Description <span className="text-rose-500">*</span></label>
-                      <textarea value={form.designDescription} onChange={e => setForm(f => ({ ...f, designDescription: e.target.value }))}
-                        placeholder="Describe your tattoo idea in detail — subject, style, elements you want included..."
-                        rows={4}
-                        className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-violet-500 resize-none" />
-                    </div>
-
-                    {/* ── Inspiration Image Dropbox ── */}
-                    <div>
-                      <label className="block text-xs text-neutral-400 mb-1.5 flex items-center gap-1.5">
-                        <ImagePlus size={12} className="text-violet-400" />
-                        Inspiration Images <span className="text-neutral-600">(optional · max 5)</span>
-                      </label>
-
-                      {/* Dropzone */}
-                      <div
-                        onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
-                        onDragLeave={() => setIsDragOver(false)}
-                        onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`relative border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
-                          isDragOver
-                            ? 'border-violet-500 bg-violet-500/10'
-                            : 'border-neutral-700 hover:border-violet-600/60 hover:bg-violet-600/5'
-                        } ${inspirationImages.length >= 5 ? 'opacity-40 pointer-events-none' : ''}`}
-                      >
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          onChange={e => processFiles(e.target.files)}
-                        />
-                        <ImagePlus size={22} className={`mx-auto mb-2 ${isDragOver ? 'text-violet-400' : 'text-neutral-600'}`} />
-                        <p className="text-xs text-neutral-500">
-                          {isDragOver ? 'Drop images here' : 'Drag & drop or click to upload inspiration images'}
-                        </p>
-                        <p className="text-[10px] text-neutral-700 mt-1">JPG, PNG, WEBP · {inspirationImages.length}/5 uploaded</p>
-                      </div>
-
-                      {/* Image previews */}
-                      {inspirationImages.length > 0 && (
-                        <div className="grid grid-cols-4 gap-2 mt-3">
-                          {inspirationImages.map((src, idx) => (
-                            <div key={`insp-${idx}`} className="relative group aspect-square rounded-lg overflow-hidden border border-neutral-700">
-                              <img src={src} alt={`Inspiration ${idx + 1}`} className="w-full h-full object-cover" />
-                              <button
-                                onClick={e => { e.stopPropagation(); removeImage(idx); }}
-                                className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <Trash2 size={14} className="text-rose-400" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Summary */}
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs space-y-1.5">
-                      <p className="text-neutral-500 uppercase tracking-wider font-semibold mb-2">Session Summary</p>
-                      <div className="flex justify-between"><span className="text-neutral-500">Artist</span><span className="text-neutral-200">{selectedArtist?.name}</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">Date & Time</span><span className="text-neutral-200">{tattooDate?.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} · {form.timeSlot}</span></div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ─── STEP 3: Agreement & Consent ─── */}
-                {modalStep === 3 && (
-                  <div className="space-y-5">
-                    <div className="bg-amber-950/20 border border-amber-800/30 rounded-xl p-3 flex gap-2.5">
-                      <AlertCircle size={15} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-300 leading-relaxed">Please read both forms carefully and check both boxes to proceed. These are required before your tattoo session.</p>
-                    </div>
-
-                    {/* Agreement */}
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
-                      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-900">
-                        <FileText size={14} className="text-violet-400" />
-                        <p className="text-xs font-semibold text-neutral-200">Service Agreement</p>
-                      </div>
-                      <div className="p-4 max-h-40 overflow-y-auto">
-                        <pre className="text-[10px] text-neutral-500 leading-relaxed whitespace-pre-wrap font-sans">{AGREEMENT_TEXT}</pre>
-                      </div>
-                      <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900/60">
-                        <label className="flex items-start gap-3 cursor-pointer group">
-                          <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border flex-shrink-0 transition-all ${agreementChecked ? 'bg-violet-600 border-violet-600' : 'border-neutral-600 bg-neutral-800 group-hover:border-violet-500'}`}
-                            onClick={() => setAgreementChecked(p => !p)}>
-                            {agreementChecked && <CheckCircle size={12} className="text-white" />}
-                          </div>
-                          <span className="text-xs text-neutral-300 leading-relaxed" onClick={() => setAgreementChecked(p => !p)}>
-                            I have read and agree to the <strong className="text-violet-400">Service Agreement</strong> for tattoo services at One Shot Bar & Billiards.
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Consent */}
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
-                      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-900">
-                        <Shield size={14} className="text-emerald-400" />
-                        <p className="text-xs font-semibold text-neutral-200">Informed Consent</p>
-                      </div>
-                      <div className="p-4 max-h-40 overflow-y-auto">
-                        <pre className="text-[10px] text-neutral-500 leading-relaxed whitespace-pre-wrap font-sans">{CONSENT_TEXT}</pre>
-                      </div>
-                      <div className="px-4 py-3 border-t border-neutral-800 bg-neutral-900/60">
-                        <label className="flex items-start gap-3 cursor-pointer group">
-                          <div className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border flex-shrink-0 transition-all ${consentChecked ? 'bg-emerald-600 border-emerald-600' : 'border-neutral-600 bg-neutral-800 group-hover:border-emerald-500'}`}
-                            onClick={() => setConsentChecked(p => !p)}>
-                            {consentChecked && <CheckCircle size={12} className="text-white" />}
-                          </div>
-                          <span className="text-xs text-neutral-300 leading-relaxed" onClick={() => setConsentChecked(p => !p)}>
-                            I provide my <strong className="text-emerald-400">informed consent</strong> to receive tattoo services. I confirm all statements above are true.
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {!canProceedStep3 && (
-                      <p className="text-[10px] text-neutral-600 text-center">Both checkboxes must be checked to proceed.</p>
-                    )}
-                  </div>
-                )}
-
-                {/* ─── STEP 4: Payment (GCash Only) ─── */}
-                {modalStep === 4 && (
-                  <div className="space-y-5">
-                    <div className="bg-violet-950/30 border border-violet-800/30 rounded-xl p-4 text-center">
-                      <p className="text-xs text-violet-400 mb-1">Reservation Deposit</p>
-                      <p className="text-4xl font-black text-violet-300">₱{TATTOO_DEPOSIT}.00</p>
-                      <p className="text-xs text-neutral-600 mt-1">Transferable within 7 days · Non-refundable if cancelled within 24h</p>
-                    </div>
-
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs space-y-1.5">
-                      <div className="flex justify-between"><span className="text-neutral-500">Customer</span><span className="text-neutral-200">{form.name}</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">Artist</span><span className="text-neutral-200">{selectedArtist?.name}</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">Date</span><span className="text-neutral-200">{tattooDate?.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">Placement</span><span className="text-neutral-200">{form.placement}</span></div>
-                    </div>
-
-                   <div className="flex flex-col items-center gap-3 bg-blue-900/10 border border-blue-900/30 p-6 rounded-2xl">
-                      <div className="bg-white p-2 rounded-xl inline-block w-32 h-32 flex items-center justify-center shadow-lg">
-                        <img src={gcashQrImg} alt="GCash QR Code" className="w-full h-full object-contain rounded-lg" />
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-bold text-blue-400">ONE SHOT BAR & BILLIARDS</p>
-                        <p className="text-xs text-neutral-500">+63 917-123-4567</p>
-                      </div>
-                      <p className="text-xs text-neutral-500 text-center">Scan with your GCash app · Send exactly <span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00</span></p>
-                    </div>
-
-                    <div className="w-full space-y-3 pt-2 text-left border-t border-neutral-800">
-                      {uploadError && (
-                        <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg">
-                          {uploadError}
-                        </div>
-                      )}
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference Number <span className="text-rose-500">*</span></label>
-                        <input
-                          type="text"
-                          value={referenceNumber}
-                          onChange={e => { 
-                            const val = e.target.value;
-                            if (val.replace(/\s/g, '').length <= 13) {
-                              setReferenceNumber(val); 
-                              setUploadError(''); 
-                            }
-                          }}
-                          placeholder="e.g. 10023948293"
-                          className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-blue-500 transition-colors"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-neutral-400 mb-1.5">Upload Screenshot <span className="text-rose-500">*</span></label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={e => { setReceiptFile(e.target.files?.[0] || null); setUploadError(''); }}
-                          className="w-full text-xs text-neutral-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600/20 file:text-blue-400 hover:file:bg-blue-600/30 transition-all cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer / Actions */}
-              <div className="px-6 py-4 border-t border-neutral-800 flex gap-3 flex-shrink-0">
-                {modalStep > 1 && (
-                  <button onClick={() => setModalStep(s => (s - 1) as any)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">
-                    Back
-                  </button>
-                )}
-                {modalStep < 4 && (
-                  <button
-                    onClick={() => setModalStep(s => (s + 1) as any)}
-                    disabled={
-                      (modalStep === 1 && !canProceedStep1) ||
-                      (modalStep === 2 && !canProceedStep2) ||
-                      (modalStep === 3 && !canProceedStep3)
-                    }
-                    className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
-                  >
-                    Continue <ArrowRight size={14} />
-                  </button>
-                )}
-                {modalStep === 4 && (
-                  <button onClick={handleFinalSubmit} disabled={confirmingPayment || !referenceNumber}
-                    className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2">
-                    {confirmingPayment ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Verifying...</> : <><CheckCircle size={15} /> I've Sent the Deposit</>}
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── Confirmation Modal ─── */}
-      <AnimatePresence>
-        {modalStep === 5 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }}
-              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl text-center">
-              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
-                className="w-16 h-16 rounded-full bg-violet-600/15 border border-violet-600/30 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle size={32} className="text-violet-400" />
-              </motion.div>
-              <h3 className="text-xl font-black text-white mb-2">Tattoo Session Booked!</h3>
-              <p className="text-neutral-500 text-sm mb-5 leading-relaxed">
-                Your appointment with <strong className="text-neutral-200">{selectedArtist?.name}</strong> on <strong className="text-neutral-200">{tattooDate?.toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}</strong> at <strong className="text-neutral-200">{form.timeSlot}</strong> is pending confirmation.
-              </p>
-              <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
-                <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{form.name}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-500">Placement</span><span className="text-neutral-200">{form.placement}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-500">Deposit</span><span className="text-violet-400 font-semibold">₱{TATTOO_DEPOSIT}.00 ✓</span></div>
-                <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Confirmation</span></div>
-              </div>
-              <button onClick={closeModal}
-                className="w-full bg-violet-600 hover:bg-violet-500 text-white py-3 rounded-xl text-sm font-semibold transition-all">
-                Done
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

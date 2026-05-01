@@ -7,11 +7,11 @@ import {
   ChevronLeft, ChevronRight, X, Star, Phone, MapPin,
   Clock, LogIn, UserPlus, Eye, EyeOff,
   Calendar, CheckCircle, ArrowRight,
-  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check, LogOut
+  Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check, LogOut, Package, Table2, Palette
 } from 'lucide-react';
 import { useAppContext, generateReferralCode } from '../context/AppContext';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { TattooSection } from '../components/TattooSection';
+import { TattooSection, TattooBookingFlow } from '../components/TattooSection';
 
 import { CustomerSettingsModal } from '../components/CustomerSettingsModal';
 
@@ -48,43 +48,6 @@ const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 type Section = 'home' | 'reservations' | 'rates' | 'about' | 'contacts' | 'reviews' | 'feedback' | 'tattoo';
-
-const QR_GCASH = [
-  [1,1,1,0,1,0,1,0,0,1,1,1,1,0,1,1,1],
-  [1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1],
-  [1,0,1,0,0,0,1,1,0,1,0,1,1,0,1,0,1],
-  [1,0,1,0,1,1,0,0,1,1,1,0,1,0,1,0,1],
-  [1,1,1,0,0,1,1,0,1,0,0,1,1,1,1,1,1],
-  [0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,0,0],
-  [1,1,0,1,0,0,1,1,1,0,1,0,1,0,1,1,0],
-  [0,1,0,0,1,0,0,0,1,0,0,1,0,1,1,0,1],
-  [1,0,1,1,0,1,1,0,1,0,1,0,1,1,0,1,0],
-  [0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,1,0],
-  [1,1,1,0,1,0,1,1,0,1,1,0,1,1,1,0,1],
-  [1,0,1,0,0,1,0,1,0,0,0,1,0,1,0,1,0],
-  [1,0,1,0,1,0,1,0,1,1,0,0,1,0,1,0,1],
-  [1,0,1,0,0,1,0,1,0,0,1,0,0,0,1,1,0],
-  [1,1,1,0,1,1,1,0,1,1,0,1,1,0,1,1,1],
-  [0,0,0,0,1,0,0,1,0,0,1,0,0,1,0,1,0],
-  [1,0,1,1,0,1,1,0,1,0,0,1,0,0,1,0,1],
-];
-
-function QRDisplay({ pattern, color }: { pattern: number[][], color: string }) {
-  return (
-    <div className="bg-white p-3 rounded-xl inline-block">
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${pattern[0].length}, 1fr)`, gap: '1px', width: 136, height: 136 }}>
-        {pattern.flatMap((row, ri) =>
-          row.map((cell, ci) => (
-            <div
-              key={`${ri}-${ci}`}
-              style={{ backgroundColor: cell ? color : 'white', borderRadius: 1 }}
-            />
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
 
 function MiniCalendar({
   selectedDate, onSelect, reservedDates, closedDates
@@ -194,8 +157,8 @@ function MiniCalendar({
 }
 
 export function HomePage() {
-  const navigate = useNavigate();
-  const { tables, queue, reservations, addReservation, feedback, addFeedback, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, cancelReservation, siteSettings, announcements, proposeReschedule, confirmReschedule } = useAppContext(); 
+ const navigate = useNavigate();
+  const { tables, queue, reservations, addReservation, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, siteSettings, announcements, cancelReservation, proposeReschedule, confirmReschedule } = useAppContext(); 
   
   const activeAnnouncements = announcements && announcements.filter(a => a.isActive).length > 0
     ? announcements.filter(a => a.isActive).map(a => ({ content: a.content, type: a.type }))
@@ -228,7 +191,10 @@ export function HomePage() {
   const [heroSlideIdx, setHeroSlideIdx] = useState(0);
   const [heroSlideDir, setHeroSlideDir] = useState<1 | -1>(1);
   const [now, setNow] = useState(new Date());
+  
   const [activeSection, setActiveSection] = useState<Section>('home');
+  // 🚨 NEW RESERVATION SERVICE TYPE 🚨
+  const [reservationType, setReservationType] = useState<'selection' | 'billiards' | 'tattoo' | 'package'>('selection');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -237,11 +203,6 @@ export function HomePage() {
   const [showUpdatePwModal, setShowUpdatePwModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
-  // Guest Tracker States
-  const [trackerId, setTrackerId] = useState('');
-  const [trackedRes, setTrackedRes] = useState<any>(null);
-  const [trackerError, setTrackerError] = useState('');
-
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string; phone: string; referralCode: string } | null>(null);
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '', showPw: false, error: '' });
@@ -261,14 +222,13 @@ export function HomePage() {
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [resError, setResError] = useState(''); 
 
+  // 🚨 RESTORED: Cancellation & Reschedule States 🚨
   const [cancelModal, setCancelModal] = useState({ isOpen: false, id: '', category: 'Standard Cancellation', reason: '', loading: false });
-
-  // 🚨 State for Rescheduling inside My Bookings
   const [rescheduleTargetId, setRescheduleTargetId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<Date | null>(null);
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
 
-  // 🚨 Helper Functions for Timers
+  // 🚨 RESTORED: Table Timer Helpers 🚨
   const getTableTimerInfo = (tableId: string) => {
     const t = tables.find(tb => tb.id === tableId);
     if (!t || t.status !== 'occupied' || !t.session) return null;
@@ -346,22 +306,17 @@ export function HomePage() {
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number } | null>(null);
   const [promoError, setPromoError] = useState('');
 
-  const [fbForm, setFbForm] = useState({ name: '', rating: 5, comment: '' });
-  const [fbSent, setFbSent] = useState(false);
-  const [simpleFeedbackForm, setSimpleFeedbackForm] = useState({ name: '', type: '', contact: '', message: '' });
-  const [simpleFeedbackSent, setSimpleFeedbackSent] = useState(false);
-
   const selectedDateStr = selectedDate 
     ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}` 
     : null;
   const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
 
   const slotCounts = reservations.reduce((acc, r) => {
-    if (r.status === 'cancelled' || !r.timeSlot || !r.date || r.id === rescheduleTargetId) return acc; 
+    if (r.status === 'cancelled' || !r.timeSlot || !r.date) return acc; 
     
     try {
       const rDateStr = format(new Date(r.date), 'yyyy-MM-dd');
-      const activeCheckStr = rescheduleDate ? format(rescheduleDate, 'yyyy-MM-dd') : selectedDateStr;
+      const activeCheckStr = selectedDateStr;
 
       if (rDateStr === activeCheckStr) {
         const startHour = parseInt(r.timeSlot.split(':')[0]);
@@ -412,20 +367,16 @@ export function HomePage() {
     };
     restoreSession();
 
-    if (window.location.hash.includes('type=recovery')) {
-      setShowForgotPwModal(false);
-      setShowLoginModal(false);
-      setShowUpdatePwModal(true);
+    
+
+    // 🚨 ADD THIS BLOCK: Catches the #login hash and opens the modal!
+    if (window.location.hash === '#login') {
+      setShowLoginModal(true);
       window.history.replaceState(null, '', window.location.pathname);
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || window.location.hash.includes('type=recovery')) {
-        setShowForgotPwModal(false);
-        setShowLoginModal(false);
-        setShowUpdatePwModal(true);
-        if (window.location.hash) window.history.replaceState(null, '', window.location.pathname);
-      } else if (event === 'SIGNED_OUT') {
+       if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
       }
     });
@@ -563,7 +514,7 @@ export function HomePage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPwEmail, {
-        redirectTo: window.location.origin, 
+        redirectTo: `${window.location.origin}/reset-password`, 
       });
       if (error) throw error;
       setForgotPwMsg('Success! Check your email for the password reset link.');
@@ -739,28 +690,6 @@ export function HomePage() {
     setResError('');
   };
 
-  const handleSimpleFeedbackSubmit = async () => {
-    if (!simpleFeedbackForm.name || !simpleFeedbackForm.type || !simpleFeedbackForm.contact) return;
-    
-    try {
-      await addFeedback({
-        customerName: simpleFeedbackForm.name,
-        contactNumber: simpleFeedbackForm.contact,
-        rating: 5,
-        comment: `[${simpleFeedbackForm.type.toUpperCase()}] ${simpleFeedbackForm.message}`,
-        status: 'new'
-      });
-      
-      setSimpleFeedbackSent(true);
-      setTimeout(() => { 
-        setSimpleFeedbackSent(false); 
-        setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); 
-      }, 3000);
-    } catch (error) {
-      toast.error("Failed to send message. Please try again.");
-    }
-  };
-
   const prevHeroSlide = () => { setHeroSlideDir(-1); setHeroSlideIdx(p => (p - 1 + dynamicHeroSlides.length) % dynamicHeroSlides.length); };
   const nextHeroSlide = () => { setHeroSlideDir(1); setHeroSlideIdx(p => (p + 1) % dynamicHeroSlides.length); };
 
@@ -808,7 +737,7 @@ export function HomePage() {
                 <span className="text-xs text-emerald-300 font-medium hidden sm:block">{currentUser.name}</span>
               </button>
               <button onClick={() => setShowLogoutConfirm(true)} className="text-[10px] text-neutral-500 hover:text-neutral-300 px-2 py-1.5 transition-colors">
-                Logout
+                <LogOut size={14} />
               </button>
             </div>
           ) : (
@@ -862,7 +791,7 @@ export function HomePage() {
                     </p>
 
                     <div className="flex flex-wrap justify-center gap-3 mb-6">
-                      <button onClick={() => setActiveSection('reservations')} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-full text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40 hover:shadow-emerald-800/60"><Calendar size={15} /> Book a Table</button>
+                      <button onClick={() => { setActiveSection('reservations'); setReservationType('selection'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-full text-sm font-semibold transition-all shadow-lg shadow-emerald-900/40 hover:shadow-emerald-800/60"><Calendar size={15} /> Book a Table</button>
                       <button onClick={() => setActiveSection('about')} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 px-6 py-3 rounded-full text-sm font-semibold transition-all border border-neutral-700"><Info size={15} /> Learn More</button>
                     </div>
 
@@ -927,7 +856,7 @@ export function HomePage() {
                   <div className="text-center">
                     <p className="text-white text-2xl font-black mb-3">Ready for a Game?</p>
                     <button
-                      onClick={() => setActiveSection('reservations')}
+                      onClick={() => { setActiveSection('reservations'); setReservationType('selection'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                       className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-full text-sm font-semibold transition-all inline-flex items-center gap-2"
                     >
                       Reserve Now <ArrowRight size={14} />
@@ -940,528 +869,346 @@ export function HomePage() {
 
           {/* ════ RESERVATIONS SECTION ════ */}
           {activeSection === 'reservations' && (
-            <motion.div key="reservations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="max-w-6xl mx-auto px-6 py-10">
-              <div className="text-center mb-10">
-                <h2 className="text-3xl font-black text-white mb-2">Make a Reservation</h2>
-                <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {rates?.downPaymentPercent || 25}% down payment.</p>
-              </div>
-
-              {/* Layout wrapper for Main Content (Left) and Sidebar (Right) */}
-              <div className="flex flex-col lg:flex-row gap-8 items-start">
-                
-                {/* --- MAIN CONTENT AREA (LEFT) --- */}
-                <div className="flex-1 min-w-0 space-y-10">
+            <motion.div key="reservations" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="py-10">
+              
+              {/* 🚨 SERVICE SELECTION 🚨 */}
+              {reservationType === 'selection' && (
+                <div className="max-w-4xl mx-auto px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="text-center mb-10">
+                    <h2 className="text-3xl font-black text-white mb-2">Choose a Service</h2>
+                    <p className="text-neutral-400 text-sm">Select the type of reservation you'd like to make today.</p>
+                  </div>
                   
-                  {/* Live Status Overview */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Table Status Card */}
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <button onClick={() => setReservationType('billiards')} className="bg-neutral-900 border border-neutral-800 hover:border-emerald-500 hover:bg-neutral-800/80 rounded-2xl p-8 flex flex-col items-center gap-4 transition-all group shadow-lg">
+                      <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner shadow-emerald-500/20">
+                        <Table2 size={32} className="text-emerald-400" />
                       </div>
-                      <div className="space-y-1 max-h-56 overflow-y-auto">
-                        {tables.map(t => {
-                          if (!t.isActive) {
-                            return (
-                              <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
-                                <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
-                                <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
-                                <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
+                      <div className="text-center">
+                        <h3 className="text-lg font-bold text-white mb-1 group-hover:text-emerald-300 transition-colors">Billiards Table</h3>
+                        <p className="text-xs text-neutral-500">Reserve a tournament-grade table for you and your friends.</p>
+                      </div>
+                    </button>
+                    
+                    <button onClick={() => setReservationType('tattoo')} className="bg-neutral-900 border border-neutral-800 hover:border-violet-500 hover:bg-neutral-800/80 rounded-2xl p-8 flex flex-col items-center gap-4 transition-all group shadow-lg">
+                      <div className="w-16 h-16 rounded-full bg-violet-500/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner shadow-violet-500/20">
+                        <Palette size={32} className="text-violet-400" />
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-lg font-bold text-white mb-1 group-hover:text-violet-300 transition-colors">Tattoo Studio</h3>
+                        <p className="text-xs text-neutral-500">Book a consultation or full tattoo session with our artists.</p>
+                      </div>
+                    </button>
+                    
+                    <button disabled className="bg-neutral-950 border border-neutral-800/50 rounded-2xl p-8 flex flex-col items-center gap-4 opacity-50 cursor-not-allowed">
+                      <div className="w-16 h-16 rounded-full bg-amber-500/5 flex items-center justify-center">
+                        <Package size={32} className="text-amber-400/50" />
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-lg font-bold text-white mb-1">VIP Package</h3>
+                        <p className="text-xs text-neutral-500">Coming soon. Food, drinks, and table bundles.</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 🚨 BILLIARDS RESERVATION FLOW 🚨 */}
+              {reservationType === 'billiards' && (
+                <div className="max-w-6xl mx-auto px-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="mb-6 flex justify-between items-center">
+                    <button onClick={() => setReservationType('selection')} className="flex items-center gap-2 text-neutral-400 hover:text-white text-sm font-semibold transition-colors bg-neutral-900 px-4 py-2 rounded-lg border border-neutral-800 hover:border-neutral-700">
+                      <ChevronLeft size={16} /> Back to Services
+                    </button>
+                  </div>
+                  
+                  <div className="text-center mb-10">
+                    <h2 className="text-3xl font-black text-white mb-2">Reserve a Table</h2>
+                    <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {rates?.downPaymentPercent || 25}% down payment.</p>
+                  </div>
+
+                  <div className="flex flex-col lg:flex-row gap-8 items-start">
+                    {/* Main Content Area */}
+                    <div className="flex-1 min-w-0 space-y-10">
+                      
+                      {/* Live Status Overview */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
+                          </div>
+                          <div className="space-y-1 max-h-56 overflow-y-auto">
+                            {tables.map(t => {
+                              if (!t.isActive) {
+                                return (
+                                  <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
+                                    <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
+                                    <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
+                                    <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
+                                  </div>
+                                );
+                              }
+                              
+                              const timerInfo = getTableTimerInfo(t.id);
+                              const nextRes = getNextResForTable(t.id);
+                              
+                              let dotColor = 'bg-emerald-500';
+                              if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
+                              else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
+                              else if (t.status === 'occupied') dotColor = 'bg-amber-500';
+                              else if (t.status === 'reserved') dotColor = 'bg-blue-500';
+                              
+                              return (
+                                <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
+                                  <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
+                                  <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
+                                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                                    {timerInfo ? (
+                                      <>
+                                        <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
+                                          {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN TIME' : 'IN USE'}
+                                        </span>
+                                        <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
+                                          {timerInfo.formatted}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
+                                    )}
+                                  </div>
+                                  {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {formatTime(nextRes.timeSlot)}</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+                          <div className="flex items-center justify-between mb-1">
+                            <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
+                            <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
+                          </div>
+                          {queue.filter(q => q.status === 'waiting').length === 0 ? (
+                            <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
+                          ) : (
+                            <div className="space-y-2">
+                              {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
+                                <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
+                                  <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
+                                  <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
+                                  <span className="text-xs text-neutral-500">{q.partySize} pax</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Booking Steps */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                        {/* Step 1 */}
+                        <div>
+                          <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 1 — Pick a Date</p>
+                          <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} reservedDates={reservedDates} closedDates={closedDates} />
+                          {selectedDate && !selectedClosedDate && (
+                            <>
+                              <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
+                                <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                                <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
                               </div>
-                            );
-                          }
-                          
-                          const timerInfo = getTableTimerInfo(t.id);
-                          const nextRes = getNextResForTable(t.id);
-                          
-                          // Handle color formatting correctly
-                          let dotColor = 'bg-emerald-500';
-                          if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
-                          else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
-                          else if (t.status === 'occupied') dotColor = 'bg-amber-500';
-                          else if (t.status === 'reserved') dotColor = 'bg-blue-500';
-                          
-                          return (
-                            <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
-                              <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
-                              <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
-                              <div className="flex-1 min-w-0 flex items-center gap-2">
-                                {timerInfo ? (
-                                  <>
-                                    <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
-                                      {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN TIME' : 'IN USE'}
-                                    </span>
-                                    <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
-                                      {timerInfo.formatted}
-                                    </span>
-                                  </>
+                              
+                              <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                                    <Clock size={14} className="text-emerald-500" /> Slot Availability
+                                  </h3>
+                                  <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Max 5 / hour</span>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                                  {TIME_SLOTS.map(t => {
+                                    const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                    const bufferHours = 1; 
+                                    const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
+                                    if (isHappyHour || isPastTime) return null; 
+                                    
+                                    const count = slotCounts[t] || 0;
+                                    const isFull = count >= 5;
+                                    
+                                    return (
+                                      <div key={t} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                                        isFull ? 'bg-rose-950/20 border-rose-800/30' : 
+                                        count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
+                                        'bg-neutral-950 border-neutral-800/50'
+                                      }`}>
+                                        <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{formatTime(t)}</span>
+                                        <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
+                                          {count}/5
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        
+                        {/* Step 2 */}
+                        <div>
+                          <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 2 — Your Details</p>
+                          {!selectedDate ? (
+                            <div className="bg-neutral-900 border border-dashed border-neutral-700 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
+                              <Calendar size={32} className="text-neutral-600" />
+                              <p className="text-neutral-500 text-sm">Please select a date from the calendar to continue your reservation.</p>
+                            </div>
+                          ) : selectedClosedDate ? (
+                            <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-8 text-center flex flex-col items-center gap-4">
+                              <div className="w-16 h-16 bg-rose-900/30 rounded-full flex items-center justify-center">
+                                <AlertTriangle size={32} className="text-rose-500" />
+                              </div>
+                              <div>
+                                <h3 className="text-xl font-bold text-rose-400 mb-2">Store Closed</h3>
+                                <p className="text-sm text-neutral-300 leading-relaxed mb-4">
+                                  We are currently closed on {selectedDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.
+                                </p>
+                                <div className="bg-rose-950/40 border border-rose-800/50 rounded-xl p-4 text-left">
+                                  <p className="text-[10px] text-rose-500 uppercase tracking-widest font-semibold mb-1">Reason for closure</p>
+                                  <p className="text-sm text-neutral-200">{selectedClosedDate.reason}</p>
+                                </div>
+                              </div>
+                              <p className="text-xs text-neutral-500 mt-2">Please select a different date from the calendar to make your reservation.</p>
+                            </div>
+                          ) : (
+                            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4">
+                              <div>
+                                <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+                                <input type="text" value={resForm.name} onChange={e => setResForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
+                                <input type="email" value={resForm.email} onChange={e => setResForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
+                                <input 
+                                  type="tel" 
+                                  value={resForm.phone} 
+                                  onChange={e => {
+                                    const val = e.target.value.replace(/\D/g, '');
+                                    if (val.length <= 11) setResForm(f => ({ ...f, phone: val }));
+                                    setResError(''); 
+                                  }} 
+                                  placeholder="09XXXXXXXXX"
+                                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600" 
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-xs text-neutral-400 mb-1.5">No. of Persons</label>
+                                  <input type="number" min={1} max={20} value={resForm.pax} onChange={e => setResForm(f => ({ ...f, pax: parseInt(e.target.value) || 1 }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-neutral-400 mb-1.5">Duration (hours)</label>
+                                  <select value={resForm.duration} onChange={e => setResForm(f => ({ ...f, duration: parseInt(e.target.value) }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100">
+                                    {[1, 2, 3, 4, 5, 6].map(h => <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
+                                <div className="grid grid-cols-4 gap-1.5">
+                                  {TIME_SLOTS.map(t => {
+                                    const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                    const count = slotCounts[t] || 0;
+                                    const isFull = count >= 5;
+                                    const bufferHours = 1;
+                                    const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
+                                    const disabled = isHappyHour || isFull || isPastTime;
+
+                                    return (
+                                      <button 
+                                        key={t} 
+                                        disabled={disabled} 
+                                        onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} 
+                                        className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                          isHappyHour 
+                                            ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
+                                            : isPastTime
+                                            ? 'bg-neutral-900/30 text-neutral-600/50 border border-neutral-800/30 cursor-not-allowed'
+                                            : isFull
+                                            ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                            : resForm.timeSlot === t 
+                                            ? 'bg-emerald-600 text-white' 
+                                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
+                                        }`}
+                                      >
+                                        {formatTime(t)}
+                                        {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                                        {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Unavailable</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-neutral-400 mb-1.5">Promo Code <span className="text-neutral-600">(optional)</span></label>
+                                {appliedPromo ? (
+                                  <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/30 rounded-lg px-3 py-2">
+                                    <span className="text-xs text-emerald-300 font-semibold flex-1">{appliedPromo.code} — {appliedPromo.discountPercent}% off applied!</span>
+                                    <button onClick={handleRemovePromo} className="text-neutral-500 hover:text-rose-400 transition-colors"><X size={13} /></button>
+                                  </div>
                                 ) : (
-                                  <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
+                                  <div className="flex gap-2">
+                                    <input type="text" value={promoCodeInput} onChange={e => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoError(''); }} className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100" />
+                                    <button onClick={handleApplyPromo} className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-xs font-semibold">Apply</button>
+                                  </div>
                                 )}
                               </div>
-                              {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {formatTime(nextRes.timeSlot)}</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Walk-in Queue Card */}
-                    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-1">
-                        <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
-                        <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
-                      </div>
-                      {queue.filter(q => q.status === 'waiting').length === 0 ? (
-                        <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
-                      ) : (
-                        <div className="space-y-2">
-                          {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
-                            <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
-                              <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
-                              <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
-                              <span className="text-xs text-neutral-500">{q.partySize} pax</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Booking Steps */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                    
-                    {/* Step 1 */}
-                    <div>
-                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 1 — Pick a Date</p>
-                      <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} reservedDates={reservedDates} closedDates={closedDates} />
-                      {selectedDate && !selectedClosedDate && (
-                        <>
-                          <div className="mt-3 bg-emerald-600/10 border border-emerald-600/25 rounded-xl p-3 flex items-center gap-2">
-                            <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
-                            <span className="text-xs text-emerald-300">Selected: <strong>{selectedDate.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong></span>
-                          </div>
-                          
-                          <div className="mt-4 bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
-                                <Clock size={14} className="text-emerald-500" /> Slot Availability
-                              </h3>
-                              <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Max 5 / hour</span>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-                              {TIME_SLOTS.map(t => {
-                                const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                                const bufferHours = 1; 
-                                const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
-                                if (isHappyHour || isPastTime) return null; 
-                                
-                                const count = slotCounts[t] || 0;
-                                const isFull = count >= 5;
-                                
-                                return (
-                                  <div key={t} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
-                                    isFull ? 'bg-rose-950/20 border-rose-800/30' : 
-                                    count > 0 ? 'bg-emerald-950/20 border-emerald-800/30' : 
-                                    'bg-neutral-950 border-neutral-800/50'
-                                  }`}>
-                                    <span className={isFull ? 'text-rose-400 font-semibold' : 'text-neutral-300'}>{formatTime(t)}</span>
-                                    <span className={`font-mono font-bold ${isFull ? 'text-rose-500' : count > 0 ? 'text-emerald-400' : 'text-neutral-600'}`}>
-                                      {count}/5
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Step 2 */}
-                    <div>
-                      {/* Title is now OUTSIDE the box to align perfectly with Step 1 */}
-                      <p className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3">Step 2 — Your Details</p>
-                      
-                      {!selectedDate ? (
-                        <div className="bg-neutral-900 border border-dashed border-neutral-700 rounded-2xl p-10 text-center flex flex-col items-center gap-3">
-                          <Calendar size={32} className="text-neutral-600" />
-                          <p className="text-neutral-500 text-sm">Please select a date from the calendar to continue your reservation.</p>
-                        </div>
-                      ) : selectedClosedDate ? (
-                        <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-8 text-center flex flex-col items-center gap-4">
-                          <div className="w-16 h-16 bg-rose-900/30 rounded-full flex items-center justify-center">
-                            <AlertTriangle size={32} className="text-rose-500" />
-                          </div>
-                          <div>
-                            <h3 className="text-xl font-bold text-rose-400 mb-2">Store Closed</h3>
-                            <p className="text-sm text-neutral-300 leading-relaxed mb-4">
-                              We are currently closed on {selectedDate.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}.
-                            </p>
-                            <div className="bg-rose-950/40 border border-rose-800/50 rounded-xl p-4 text-left">
-                              <p className="text-[10px] text-rose-500 uppercase tracking-widest font-semibold mb-1">Reason for closure</p>
-                              <p className="text-sm text-neutral-200">{selectedClosedDate.reason}</p>
-                            </div>
-                          </div>
-                          <p className="text-xs text-neutral-500 mt-2">Please select a different date from the calendar to make your reservation.</p>
-                        </div>
-                      ) : (
-                        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 space-y-4">
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
-                            <input type="text" value={resForm.name} onChange={e => setResForm(f => ({ ...f, name: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">Email Address <span className="text-rose-500">*</span></label>
-                            <input type="email" value={resForm.email} onChange={e => setResForm(f => ({ ...f, email: e.target.value }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">Contact Number <span className="text-rose-500">*</span></label>
-                            <input 
-                              type="tel" 
-                              value={resForm.phone} 
-                              onChange={e => {
-                                const val = e.target.value.replace(/\D/g, '');
-                                if (val.length <= 11) setResForm(f => ({ ...f, phone: val }));
-                                setResError(''); 
-                              }} 
-                              placeholder="09XXXXXXXXX"
-                              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100 placeholder-neutral-600" 
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs text-neutral-400 mb-1.5">No. of Persons</label>
-                              <input type="number" min={1} max={20} value={resForm.pax} onChange={e => setResForm(f => ({ ...f, pax: parseInt(e.target.value) || 1 }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100" />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-neutral-400 mb-1.5">Duration (hours)</label>
-                              <select value={resForm.duration} onChange={e => setResForm(f => ({ ...f, duration: parseInt(e.target.value) }))} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2.5 text-sm text-neutral-100">
-                                {[1, 2, 3, 4, 5, 6].map(h => <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>)}
-                              </select>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">Preferred Time</label>
-                            <div className="grid grid-cols-4 gap-1.5">
-                              {TIME_SLOTS.map(t => {
-                                const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                                const count = slotCounts[t] || 0;
-                                const isFull = count >= 5;
-                                const bufferHours = 1;
-                                const isPastTime = isToday(selectedDate!) && parseInt(t.split(':')[0]) <= now.getHours() + bufferHours;
-                                const disabled = isHappyHour || isFull || isPastTime;
-
-                                return (
-                                  <button 
-                                    key={t} 
-                                    disabled={disabled} 
-                                    onClick={() => setResForm(f => ({ ...f, timeSlot: t }))} 
-                                    className={`relative py-2 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
-                                      isHappyHour 
-                                        ? 'bg-neutral-800/50 text-neutral-600 border border-neutral-800/50 cursor-not-allowed' 
-                                        : isPastTime
-                                        ? 'bg-neutral-900/30 text-neutral-600/50 border border-neutral-800/30 cursor-not-allowed'
-                                        : isFull
-                                        ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
-                                        : resForm.timeSlot === t 
-                                        ? 'bg-emerald-600 text-white' 
-                                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200'
-                                    }`}
-                                  >
-                                    {formatTime(t)}
-                                    {isFull && !isPastTime && !isHappyHour && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
-                                    {isPastTime && <span className="absolute inset-0 flex items-center justify-center bg-neutral-950/80 text-neutral-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Unavailable</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-neutral-400 mb-1.5">Promo Code <span className="text-neutral-600">(optional)</span></label>
-                            {appliedPromo ? (
-                              <div className="flex items-center gap-2 bg-emerald-600/10 border border-emerald-600/30 rounded-lg px-3 py-2">
-                                <span className="text-xs text-emerald-300 font-semibold flex-1">{appliedPromo.code} — {appliedPromo.discountPercent}% off applied!</span>
-                                <button onClick={handleRemovePromo} className="text-neutral-500 hover:text-rose-400 transition-colors"><X size={13} /></button>
+                              
+                              <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50 mt-4">
+                                <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
+                                <div className="space-y-1.5 text-xs">
+                                  <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
+                                  <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-neutral-700/50 flex gap-2 items-start">
+                                  <AlertTriangle size={12} className="text-rose-400 mt-0.5 flex-none" />
+                                  <p className="text-[10px] text-neutral-400 leading-tight">
+                                    <strong className="text-rose-400">Strict Policy:</strong> All down payments are final and <strong className="text-white">non-refundable</strong> in the event of cancellation or no-show. Rescheduling requires management approval.
+                                  </p>
+                                </div>
                               </div>
-                            ) : (
-                              <div className="flex gap-2">
-                                <input type="text" value={promoCodeInput} onChange={e => { setPromoCodeInput(e.target.value.toUpperCase()); setPromoError(''); }} className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100" />
-                                <button onClick={handleApplyPromo} className="px-4 py-2 bg-emerald-600/20 text-emerald-400 rounded-lg text-xs font-semibold">Apply</button>
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50 mt-4">
-                            <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
-                            <div className="space-y-1.5 text-xs">
-                              <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
-                              <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
-                            </div>
-                            
-                            {/* 🚨 NEW: Non-Refundable Warning 🚨 */}
-                            <div className="mt-3 pt-3 border-t border-neutral-700/50 flex gap-2 items-start">
-                              <AlertTriangle size={12} className="text-rose-400 mt-0.5 flex-none" />
-                              <p className="text-[10px] text-neutral-400 leading-tight">
-                                <strong className="text-rose-400">Strict Policy:</strong> All down payments are final and <strong className="text-white">non-refundable</strong> in the event of cancellation or no-show. Rescheduling requires management approval.
-                              </p>
-                            </div>
-                          </div>
 
-                          {resError && (
-                            <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mt-3">
-                              {resError}
-                            </div>
-                          )}
+                              {resError && (
+                                <div className="bg-rose-950/40 border border-rose-800/50 text-rose-400 text-xs px-3 py-2 rounded-lg mt-3">
+                                  {resError}
+                                </div>
+                              )}
 
-                          <button onClick={handleReservationSubmit} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
-                            Proceed to Payment
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* --- RIGHT SIDEBAR (MY BOOKINGS) --- */}
-                <div className="w-full lg:w-[320px] flex-none">
-                  {/* Sticky wrapper so it stays in view when scrolling down the form */}
-                  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 flex flex-col sticky top-24">
-                    
-                    {(() => {
-                      const myEmail = currentUser?.email || guestEmail;
-                      const myReservations = myEmail ? reservations.filter(r => r.email === myEmail).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
-                      
-                      // 🚨 RESCHEDULE FORM INJECTION 🚨
-                      if (rescheduleTargetId) {
-                        return (
-                          <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-                            <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
-                              <button onClick={() => setRescheduleTargetId(null)} className="p-1.5 bg-neutral-950 rounded-lg text-neutral-400 hover:text-white transition-colors">
-                                <ChevronLeft size={14}/>
+                              <button onClick={handleReservationSubmit} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-700 text-white py-3 rounded-xl text-sm font-semibold">
+                                Proceed to Payment
                               </button>
-                              <div>
-                                <h3 className="text-sm font-bold text-white">Reschedule Booking</h3>
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">1. Choose New Date</p>
-                              <MiniCalendar selectedDate={rescheduleDate} onSelect={setRescheduleDate} reservedDates={reservedDates} closedDates={closedDates} />
-                            </div>
-
-                            <div className="space-y-3">
-                              <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">2. Choose New Time</p>
-                              {!rescheduleDate ? (
-                                <div className="bg-neutral-950 border border-dashed border-neutral-800 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
-                                  <Calendar size={20} className="text-neutral-600" />
-                                  <p className="text-neutral-500 text-xs">Select a date first.</p>
-                                </div>
-                              ) : selectedClosedDate ? (
-                                 <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
-                                  <AlertTriangle size={20} className="text-rose-500" />
-                                  <p className="text-rose-400 text-xs font-bold">Store Closed</p>
-                                </div>
-                              ) : (
-                                <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
-                                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                                    {TIME_SLOTS.map(t => {
-                                      const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                                      const isPastTime = isToday(rescheduleDate) && parseInt(t.split(':')[0]) <= new Date().getHours() + 1;
-                                      if (isHappyHour || isPastTime) return null; 
-                                      
-                                      const count = slotCounts[t] || 0;
-                                      const isFull = count >= 5;
-
-                                      return (
-                                        <button 
-                                          key={t} 
-                                          disabled={isFull} 
-                                          onClick={() => setRescheduleTimeSlot(t)} 
-                                          className={`relative py-1.5 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
-                                            isFull
-                                              ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
-                                              : rescheduleTimeSlot === t 
-                                              ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40' 
-                                              : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
-                                          }`}
-                                        >
-                                          {formatTime(t)}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <button 
-                              onClick={handleSubmitReschedule}
-                              disabled={!rescheduleDate || !rescheduleTimeSlot || !!selectedClosedDate}
-                              className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2"
-                            >
-                              Submit Request <ArrowRight size={12}/>
-                            </button>
-                          </div>
-                        );
-                      }
-
-                      // 🚨 NORMAL BOOKINGS VIEW 🚨
-                      return (
-                        <>
-                          <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-3">
-                            <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
-                          </div>
-                          
-                          {!myEmail ? (
-                            <div className="flex-1 flex flex-col items-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2 space-y-4">
-                              <div>
-                                <h3 className="text-sm font-bold text-white">Track Reservation</h3>
-                                <p className="text-xs text-neutral-500 mt-1">Enter your Reference ID to view or reschedule.</p>
-                              </div>
-                              <div className="w-full flex gap-2">
-                                <input 
-                                  type="text" 
-                                  value={trackerId} 
-                                  onChange={(e) => { setTrackerId(e.target.value); setTrackerError(''); }} 
-                                  placeholder="Reservation ID" 
-                                  className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
-                                />
-                                <button 
-                                  onClick={() => {
-                                    const r = reservations.find(x => x.id.toLowerCase() === trackerId.toLowerCase().trim() || x.paymentReference === trackerId.trim());
-                                    if (r) { setTrackedRes(r); setTrackerError(''); }
-                                    else { setTrackedRes(null); setTrackerError('Not found'); }
-                                  }}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
-                                >
-                                  Track
-                                </button>
-                              </div>
-                              {trackerError && <p className="text-xs text-rose-400">{trackerError}</p>}
-
-                              {trackedRes && (
-                                <div className="w-full bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs text-left mt-2">
-                                  <div className="flex justify-between items-start mb-1.5">
-                                    <span className="font-semibold text-neutral-200">{format(new Date(trackedRes.date), 'MMM d, yyyy')}</span>
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400">{trackedRes.status}</span>
-                                  </div>
-                                  <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
-                                    <span>{formatTime(trackedRes.timeSlot || '00:00')} ({trackedRes.durationHours} hrs)</span>
-                                  </div>
-                                  
-                                  {trackedRes.status !== 'cancelled' && trackedRes.status !== 'completed' && new Date(trackedRes.date).getTime() > new Date().setHours(0,0,0,0) && !trackedRes.rescheduleRequested && (
-                                    <button 
-                                      onClick={() => {
-                                        setRescheduleTargetId(trackedRes.id);
-                                        setRescheduleDate(null);
-                                        setRescheduleTimeSlot('');
-                                        setTrackedRes(null);
-                                      }} 
-                                      className="w-full py-2 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
-                                    >
-                                      <CalendarDays size={12}/> Request Reschedule
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-
-                              <div className="w-full h-px bg-neutral-800 my-2" />
-                              <p className="text-xs text-neutral-500">Or log in to see all your bookings.</p>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
-                                  Login
-                                </button>
-                                <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
-                                  Register
-                                </button>
-                              </div>
-                            </div>
-                          ) : myReservations.length === 0 ? (
-                            <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>
-                          ) : (
-                            <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
-                              {myReservations.map(r => {
-                                const rDate = new Date(r.date);
-                                rDate.setHours(0,0,0,0);
-                                const today = new Date();
-                                today.setHours(0,0,0,0);
-                                
-                                const isPastDate = rDate.getTime() < today.getTime();
-                                const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
-                                const isActiveStatus = displayStatus === 'pending' || displayStatus === 'confirmed';
-
-                                return (
-                                  <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
-                                    <div className="flex justify-between items-start mb-1.5">
-                                      <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
-                                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                        displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
-                                        displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
-                                        displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
-                                        'bg-rose-500/10 text-rose-400'
-                                      }`}>{displayStatus}</span>
-                                    </div>
-                                    <div className="flex justify-between text-neutral-500 text-[11px]">
-                                      <span>{formatTime(r.timeSlot || '00:00')} ({r.durationHours} hrs)</span>
-                                      <span>₱{r.totalAmount}</span>
-                                    </div>
-                                    
-                                    {/* Action Required: Staff Proposed Reschedule */}
-                                    {r.rescheduleRequested && r.proposedDate && (
-                                      <div className="mt-3 bg-amber-950/30 border border-amber-800/50 rounded-xl p-3 animate-pulse-slow">
-                                        <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1.5 mb-1.5"><AlertTriangle size={12}/> Reschedule Proposed</p>
-                                        <p className="text-[10px] text-neutral-300 mb-3 leading-relaxed">Management proposed moving to <strong className="text-amber-300 font-black">{format(new Date(r.proposedDate), 'MMM d')} at {r.proposedTimeSlot}</strong>.</p>
-                                        <div className="flex gap-2">
-                                          <button onClick={() => confirmReschedule(r.id, true)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
-                                            <Check size={12}/> Accept
-                                          </button>
-                                          <button onClick={() => confirmReschedule(r.id, false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
-                                            <X size={12}/> Decline
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Action Buttons Container */}
-                                    <div className="flex gap-2 mt-2.5">
-                                      {/* Reschedule Button */}
-                                      {!isPastDate && isActiveStatus && !r.rescheduleRequested && (
-                                        <button 
-                                          onClick={() => {
-                                            setRescheduleTargetId(r.id);
-                                            setRescheduleDate(null);
-                                            setRescheduleTimeSlot('');
-                                          }} 
-                                          className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
-                                        >
-                                          <CalendarDays size={12}/> Reschedule
-                                        </button>
-                                      )}
-                                      
-                                      {/* Cancel Button */}
-                                      {!isPastDate && isActiveStatus && (
-                                        <button
-                                          onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
-                                          className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
-                                        >
-                                          Cancel
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
                             </div>
                           )}
-                        </>
-                      );
-                    })()}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
 
-              </div>
+              {/* 🚨 TATTOO RESERVATION FLOW 🚨 */}
+              {reservationType === 'tattoo' && (
+                <div className="max-w-4xl mx-auto px-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="mb-6 flex justify-between items-center">
+                    <button onClick={() => setReservationType('selection')} className="flex items-center gap-2 text-neutral-400 hover:text-white text-sm font-semibold transition-colors bg-neutral-900 px-4 py-2 rounded-lg border border-neutral-800 hover:border-neutral-700">
+                      <ChevronLeft size={16} /> Back to Services
+                    </button>
+                  </div>
+                  <TattooBookingFlow currentUserName={currentUser?.name} currentUserEmail={currentUser?.email} onCancel={() => setReservationType('selection')} />
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1540,7 +1287,7 @@ export function HomePage() {
                     </ul>
                     {name !== 'Happy Hour' ? (
                       <button
-                        onClick={() => setActiveSection('reservations')}
+                        onClick={() => { setActiveSection('reservations'); setReservationType('selection'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                         className={`mt-5 w-full py-2.5 rounded-xl text-xs font-semibold transition-all ${
                           color === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' :
                           'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700'
@@ -1577,7 +1324,7 @@ export function HomePage() {
                   {[
                     { label: 'Minimum booking time', value: '1 hour' },
                     { label: 'Down payment required', value: `${rates?.downPaymentPercent || 25}% of total` },
-                    { label: 'Remaining balance', value: 'Paid on-site before play begins' },
+                    { label: 'Remaining balance', value: 'Paid on-site After your session' },
                     { label: 'Cancellation policy', value: '24 hours before reservation' },
                     { label: 'Payment methods', value: 'GCash, Cash' },
                     { label: 'Walk-in queue', value: 'First Come, First Served — when tables are available' },
@@ -1739,6 +1486,11 @@ export function HomePage() {
               <TattooSection
                 currentUserName={currentUser?.name}
                 currentUserEmail={currentUser?.email}
+                onBookNow={() => {
+                  setActiveSection('reservations');
+                  setReservationType('tattoo');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
               />
             </motion.div>
           )}

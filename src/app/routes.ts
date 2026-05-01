@@ -15,7 +15,7 @@ import { FeedbackPage } from './pages/Feedback';
 import { PromoCodesPage } from './pages/PromoCodes';
 import { TattooReservationsPage } from './pages/TattooReservations';
 import { SettingsPage } from './pages/Settings';
-import { HistoryPage } from './pages/History'; // 🚨 STEPS 6 & 19
+import { HistoryPage } from './pages/History'; 
 // Admin pages
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminUsers } from './pages/AdminUsers';
@@ -27,11 +27,12 @@ import { AdminReservationTerms } from './pages/AdminReservationTerms';
 import { AdminAnnouncements } from './pages/AdminAnnouncements';
 import { AdminCalendar } from './pages/AdminCalendar';
 import { Analytics } from './pages/Analytics';
-import { ReportsPage } from './pages/Reports'; // 🚨 STEP 20
+import { ReportsPage } from './pages/Reports'; 
 import { SiteCustomization } from './pages/SiteCustomization';
 // Artist portal
 import { ArtistPortal } from './pages/ArtistPortal';
 import { NotFound } from './pages/NotFound';
+import { ResetPassword } from './pages/ResetPassword';
 
 export const router = createBrowserRouter([
   {
@@ -51,7 +52,7 @@ export const router = createBrowserRouter([
           { path: 'feedback',             Component: FeedbackPage },
           { path: 'promo-codes',          Component: PromoCodesPage },
           { path: 'tattoo-reservations',  Component: TattooReservationsPage },
-          { path: 'history',              Component: HistoryPage }, // 🚨 STEPS 6 & 19
+          { path: 'history',              Component: HistoryPage }, 
           { path: 'settings',             Component: SettingsPage },
         ],
       },
@@ -72,9 +73,9 @@ export const router = createBrowserRouter([
           { path: 'announcements',          Component: AdminAnnouncements },
           { path: 'calendar',               Component: AdminCalendar },
           { path: 'analytics',              Component: Analytics },
-          { path: 'reports',                Component: ReportsPage }, // 🚨 STEP 20
+          { path: 'reports',                Component: ReportsPage }, 
           { path: 'settings',               Component: SettingsPage },
-          { path: 'tattoo-reservations', Component: TattooReservationsPage },
+          { path: 'tattoo-reservations',    Component: TattooReservationsPage },
         ],
       },
       // ── Artist Portal ─────────────────────────────────────
@@ -85,6 +86,8 @@ export const router = createBrowserRouter([
           { index: true, Component: ArtistPortal },
         ],
       },
+      // 🚨 Reset Password Page ───────────────────────────────
+      { path: '/reset-password', Component: ResetPassword },
       { path: '*', Component: NotFound },
     ],
   },
