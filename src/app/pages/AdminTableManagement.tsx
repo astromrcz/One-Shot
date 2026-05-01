@@ -12,7 +12,8 @@ type PasswordModal = {
 };
 
 export function AdminTableManagement() {
-  const { tables, addTable, updateTable, toggleTableActive, staffProfile } = useAppContext();
+  // 🚨 ADDED staffUsers to check the real password
+  const { tables, addTable, updateTable, toggleTableActive, staffProfile, staffUsers } = useAppContext();
 
   const [newName, setNewName]         = useState('');
   const [editingId, setEditingId]     = useState<string | null>(null);
@@ -96,7 +97,13 @@ export function AdminTableManagement() {
 
     setPwConfirming(true);
     setTimeout(() => {
-      if (pwInput !== staffProfile.password) {
+      // 🚨 FIX: Robustly check against the loaded database users
+      const currentUserRecord = staffUsers.find(u => 
+        (u.username || '').toLowerCase() === (staffProfile.username || '').toLowerCase() || 
+        (u.email || '').toLowerCase() === (staffProfile.email || '').toLowerCase()
+      );
+
+      if (!currentUserRecord || pwInput.trim() !== currentUserRecord.password) {
         setPwError('Incorrect password. Please try again.');
         setPwConfirming(false);
         return;

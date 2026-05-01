@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useAppContext, TattooArtist } from '../context/AppContext';
 import {
-  Plus, X, Pencil, Trash2, Palette, ToggleLeft, ToggleRight,
+  Plus, X, Pencil, Archive, Palette, ToggleLeft, ToggleRight,
   CheckCircle, Phone, Mail, CalendarX2, ChevronLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval,
-  startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, parseISO } from 'date-fns';
+  startOfWeek, endOfWeek, isSameMonth, isToday } from 'date-fns';
 import { toast } from 'sonner';
 
 type FormState = Omit<TattooArtist, 'id' | 'unavailableDates'>;
@@ -120,7 +120,7 @@ function UnavailabilityCalendar({ artist, onClose }: { artist: TattooArtist; onC
 }
 
 export function AdminTattooArtists() {
-  const { tattooArtists, addTattooArtist, updateTattooArtist, deleteTattooArtist } = useAppContext();
+  const { tattooArtists, addTattooArtist, updateTattooArtist } = useAppContext();
   const [showForm, setShowForm]         = useState(false);
   const [editingId, setEditingId]       = useState<string | null>(null);
   const [form, setForm]                 = useState<FormState>(blank);
@@ -142,7 +142,6 @@ export function AdminTattooArtists() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 🚨 BULLETPROOF GUARD: Stops Enter-key bypass
     if (!confirmSave) {
       setConfirmSave(true);
       return;
@@ -156,9 +155,13 @@ export function AdminTattooArtists() {
     setShowForm(false); setEditingId(null); setForm(blank);
   };
 
-  const handleDelete = (id: string) => {
-    deleteTattooArtist(id); setDeleteConfirm(null); flash('Artist removed.');
-  };
+  const [filter, setFilter] = useState<'all' | 'active' | 'archived'>('active');
+
+  const filteredArtists = tattooArtists.filter(a => {
+    if (filter === 'active') return a.isActive;
+    if (filter === 'archived') return !a.isActive;
+    return true;
+  });
 
   const active = tattooArtists.filter(a => a.isActive);
   const availableToday = tattooArtists.filter(a => a.isAvailableToday && a.isActive);
@@ -185,8 +188,18 @@ export function AdminTattooArtists() {
         ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="flex justify-end">
+      {/* Toolbar & Filters */}
+      <div className="flex items-center justify-between bg-neutral-950 border border-neutral-800 rounded-xl px-5 py-4 flex-wrap gap-3">
+        <div className="flex gap-1.5">
+          {(['active', 'archived', 'all'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all capitalize ${filter === f
+                ? 'bg-pink-500/15 text-pink-400 border-pink-500/30'
+                : 'bg-neutral-900 text-neutral-500 border-neutral-800 hover:border-neutral-700'}`}>
+              {f}
+            </button>
+          ))}
+        </div>
         <button onClick={openAdd}
           className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white text-sm px-4 py-2 rounded-xl font-semibold transition-all shadow-lg shadow-amber-900/30">
           <Plus size={15} /> Add Artist
@@ -195,21 +208,21 @@ export function AdminTattooArtists() {
 
       {/* Artist Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {tattooArtists.length === 0 ? (
+        {filteredArtists.length === 0 ? (
           <div className="col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-12 text-center">
             <Palette size={32} className="mx-auto text-neutral-700 mb-3" />
-            <p className="text-neutral-500">No tattoo artists yet</p>
+            <p className="text-neutral-500">No tattoo artists found.</p>
           </div>
-        ) : tattooArtists.map(a => (
-          <div key={a.id} className={`bg-neutral-950 border rounded-xl p-5 ${a.isActive ? 'border-neutral-800' : 'border-neutral-800/40 opacity-60'}`}>
+        ) : filteredArtists.map(a => (
+          <div key={a.id} className={`bg-neutral-950 border rounded-xl p-5 transition-all ${a.isActive ? 'border-neutral-800' : 'border-neutral-800/40 opacity-60'}`}>
             <div className="flex items-start justify-between gap-3 mb-3">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center flex-shrink-0">
-                  <Palette size={18} className="text-pink-400" />
+                <div className={`w-11 h-11 rounded-xl border flex items-center justify-center flex-shrink-0 ${a.isActive ? 'bg-pink-500/10 border-pink-500/20' : 'bg-neutral-900 border-neutral-800'}`}>
+                  <Palette size={18} className={a.isActive ? "text-pink-400" : "text-neutral-600"} />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-neutral-100">{a.name}</p>
-                  <p className="text-xs text-pink-400/80">{a.specialty}</p>
+                  <p className={`text-xs ${a.isActive ? 'text-pink-400/80' : 'text-neutral-600'}`}>{a.specialty}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -219,24 +232,36 @@ export function AdminTattooArtists() {
                 {/* Unavailability Calendar button */}
                 <button
                   onClick={() => setCalendarArtist(a)}
+                  disabled={!a.isActive}
                   title="Manage unavailable dates"
-                  className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 rounded-lg transition-colors"
+                  className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-500"
                 >
                   <CalendarX2 size={13} />
                 </button>
                 <button onClick={() => updateTattooArtist(a.id, { isAvailableToday: !a.isAvailableToday })}
+                  disabled={!a.isActive}
                   title={a.isAvailableToday ? 'Mark unavailable today' : 'Mark available today'}
-                  className="p-1.5 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg transition-colors">
+                  className="p-1.5 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-500">
                   {a.isAvailableToday ? <ToggleRight size={18} className="text-emerald-400" /> : <ToggleLeft size={18} />}
                 </button>
+
+                {/* ARCHIVE / UNARCHIVE LOGIC */}
                 {deleteConfirm === a.id ? (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleDelete(a.id)} className="px-2 py-1 text-[10px] bg-rose-700 hover:bg-rose-600 text-white rounded-lg font-semibold">Yes</button>
+                    <button onClick={async () => {
+                        await updateTattooArtist(a.id, { isActive: !a.isActive });
+                        setDeleteConfirm(null);
+                        flash(`Artist ${a.isActive ? 'archived' : 'restored'}.`);
+                      }} 
+                      className={`px-2 py-1 text-[10px] text-white rounded-lg font-semibold ${a.isActive ? 'bg-rose-700 hover:bg-rose-600' : 'bg-emerald-700 hover:bg-emerald-600'}`}
+                    >
+                      Yes
+                    </button>
                     <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1 text-[10px] bg-neutral-800 text-neutral-400 rounded-lg">No</button>
                   </div>
                 ) : (
-                  <button onClick={() => setDeleteConfirm(a.id)} className="p-1.5 text-neutral-500 hover:text-rose-400 hover:bg-rose-950/20 rounded-lg transition-colors">
-                    <Trash2 size={13} />
+                  <button onClick={() => setDeleteConfirm(a.id)} title={a.isActive ? "Archive Artist" : "Unarchive Artist"} className="p-1.5 text-neutral-500 hover:text-amber-400 hover:bg-amber-950/20 rounded-lg transition-colors">
+                    {a.isActive ? <Archive size={13} /> : <RefreshCw size={13} />}
                   </button>
                 )}
               </div>
@@ -251,7 +276,7 @@ export function AdminTattooArtists() {
 
             <div className="flex gap-2 mt-3 flex-wrap">
               <span className={`text-[10px] px-2.5 py-0.5 rounded-full border font-semibold ${a.isActive ? 'bg-pink-500/10 text-pink-400 border-pink-500/20' : 'bg-neutral-800 text-neutral-500 border-neutral-700'}`}>
-                {a.isActive ? 'Active' : 'Inactive'}
+                {a.isActive ? 'Active' : 'Archived'}
               </span>
               <span className={`text-[10px] px-2.5 py-0.5 rounded-full border font-semibold ${a.isAvailableToday ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-neutral-800 text-neutral-500 border-neutral-700'}`}>
                 {a.isAvailableToday ? 'Available Today' : 'Unavailable Today'}
@@ -325,7 +350,6 @@ export function AdminTattooArtists() {
                 </label>
               </div>
               
-              {/* 🚨 BULLETPROOF BUTTONS */}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => { setShowForm(false); setConfirmSave(false); }}
                   className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
@@ -344,14 +368,6 @@ export function AdminTattooArtists() {
             </form>
           </div>
         </div>
-      )}
-
-      {/* Unavailability Calendar Modal */}
-      {calendarArtist && (
-        <UnavailabilityCalendar
-          artist={calendarArtist}
-          onClose={() => setCalendarArtist(null)}
-        />
       )}
     </div>
   );

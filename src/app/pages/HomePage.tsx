@@ -1641,7 +1641,7 @@ export function HomePage() {
                   {[
                     { label: 'Minimum booking time', value: '1 hour' },
                     { label: 'Down payment required', value: `${rates?.downPaymentPercent || 25}% of total` },
-                    { label: 'Remaining balance', value: 'Paid on-site before play begins' },
+                    { label: 'Remaining balance', value: 'Paid on-site After Session' },
                     { label: 'Cancellation policy', value: '24 hours before reservation' },
                     { label: 'Payment methods', value: 'GCash, Cash' },
                     { label: 'Walk-in queue', value: 'First Come, First Served — when tables are available' },
