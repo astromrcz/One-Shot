@@ -296,7 +296,7 @@ type AppContextType = {
   addToQueue: (item: Omit<QueueItem, 'id' | 'arrivalTime' | 'status'>) => Promise<void>;
   removeFromQueue: (id: string) => Promise<void>;
   callQueueItem: (id: string) => Promise<void>;
-  addReservation: (item: Omit<Reservation, 'id' | 'createdAt'>) => Promise<void>;
+  addReservation: (item: Omit<Reservation, 'id' | 'createdAt'> & { id?: string }) => Promise<string>;
   updateReservationStatus: (id: string, status: ReservationStatus) => Promise<void>;
   cancelReservation: (id: string, reason: string) => Promise<void>;
   updateDownPayment: (id: string, paid: boolean) => Promise<void>;
@@ -307,7 +307,7 @@ type AppContextType = {
   togglePromoCode: (id: string) => Promise<void>;
   deletePromoCode: (id: string) => Promise<void>;
   applyPromoCode: (code: string) => Promise<PromoCode | null>;
-  addTattooReservation: (item: Omit<TattooReservation, 'id' | 'createdAt'>) => Promise<void>;
+  addTattooReservation: (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => Promise<string>;
   updateTattooReservationStatus: (id: string, status: TattooReservationStatus) => Promise<void>;
   updateTattooDepositPaid: (id: string, paid: boolean) => Promise<void>;
   proposeReschedule: (id: string, proposedDate: Date, proposedTimeSlot: string) => Promise<void>; // 🚨 FIXED
@@ -979,8 +979,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await addActivity('queue_called', 'Queue item called');
   };
 
-  const addReservation = async (item: Omit<Reservation, 'id' | 'createdAt'>) => {
-    const id = crypto.randomUUID();
+  const addReservation = async (item: Omit<Reservation, 'id' | 'createdAt'> & { id?: string }) => {
+    const id = item.id || crypto.randomUUID();
     const reservation: Reservation = { ...item, id, createdAt: new Date() };
 
     const { error } = await supabase.from('reservations').insert([{
@@ -1001,6 +1001,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setReservations(prev => [...prev, reservation]);
     await addActivity('reservation_created', `New reservation for ${item.customerName}`);
     await sendAdminPush("New Reservation! 📅", `${item.customerName} just booked a table for ${item.partySize} people at ${item.timeSlot}.`);
+    
+    return id;
   };
 
   const updateReservationStatus = async (id: string, status: ReservationStatus) => {
@@ -1083,8 +1085,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return promo;
   };
 
-  const addTattooReservation = async (item: Omit<TattooReservation, 'id' | 'createdAt'>) => {
-    const id = `tr${Date.now()}`;
+  const addTattooReservation = async (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => {
+    const id = item.id || `tr${Date.now()}`;
     const reservation = { ...item, id, createdAt: new Date() };
 
     await supabase.from('tattoo_reservations').insert([{
@@ -1100,6 +1102,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }]);
     setTattooReservations(prev => [reservation, ...prev]);
     await addActivity('tattoo_reservation_created', `Tattoo reservation for ${item.customerName}`);
+    
+    return id;
   };
 
   const updateTattooReservationStatus = async (id: string, status: TattooReservationStatus) => {

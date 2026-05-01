@@ -2275,10 +2275,10 @@ export function HomePage() {
                     <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference Number <span className="text-rose-500">*</span></label>
                     <input
                       type="text"
+                      maxLength={13}
                       value={referenceNumber}
                       onChange={e => { 
                         const val = e.target.value;
-                        // Only update state if the length (excluding spaces) is 13 or less
                         if (val.replace(/\s/g, '').length <= 13) {
                           setReferenceNumber(val); 
                           setUploadError(''); 
@@ -2328,7 +2328,7 @@ export function HomePage() {
                 <div className="flex flex-col items-center pt-2">
                   <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold mb-1">Reservation ID</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-lg font-bold text-white">{createdReservationId.split('-')[0].toUpperCase()}</span>
+                    <span className="font-mono text-lg font-bold text-white">{createdReservationId}</span>
                     <button 
                       onClick={() => { navigator.clipboard.writeText(createdReservationId); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
                       className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded transition-colors"
