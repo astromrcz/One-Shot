@@ -8,7 +8,7 @@ import {
   ShoppingCart
 } from 'lucide-react';
 import { isToday, differenceInSeconds, addMinutes } from 'date-fns';
-import { useSearchParams, useNavigate } from 'react-router'; // 🚨 NEW IMPORTS
+import { useSearchParams, useNavigate } from 'react-router'; 
 
 // 🚨 POS HARDCODED MENU
 const POS_MENU = [
@@ -37,8 +37,8 @@ export function Tables() {
     rates
   } = useAppContext();
   
-  const [searchParams] = useSearchParams(); // 🚨 GET URL PARAMS
-  const navigate = useNavigate();           // 🚨 CLEAR URL PARAMS
+  const [searchParams] = useSearchParams(); 
+  const navigate = useNavigate();           
 
   const [filter, setFilter]       = useState<FilterStatus>('all');
   const [search, setSearch]       = useState('');
@@ -55,7 +55,19 @@ export function Tables() {
       return;
     }
     if (selectedPosTableId && voidOrderId) {
-      await removeOrderFromTable(selectedPosTableId, voidOrderId);
+      if (voidOrderId === 'OPEN_TIME_CONVERSION') {
+        // 🚨 REVERT OPEN TIME BACK TO FIXED DURATION
+        const activeTable = tables.find(t => t.id === selectedPosTableId);
+        if (activeTable?.session && activeTable.session.durationMinutes < 0) {
+          await assignTable(activeTable.id, {
+            ...activeTable.session,
+            durationMinutes: Math.abs(activeTable.session.durationMinutes)
+          });
+        }
+      } else {
+        // 🚨 NORMAL ORDER VOID
+        await removeOrderFromTable(selectedPosTableId, voidOrderId);
+      }
     }
     setVoidOrderId(null);
     setAdminPassword('');
@@ -73,6 +85,7 @@ export function Tables() {
     };
     await addOrderToTable(selectedPosTableId, order);
   };
+
   const [assigningTableId, setAssigningTableId] = useState<string | null>(null);
   const [extendingTableId, setExtendingTableId] = useState<string | null>(null);
   const [endingTableId,    setEndingTableId]    = useState<string | null>(null);
@@ -91,6 +104,9 @@ export function Tables() {
   const [endPayMethod,     setEndPayMethod]     = useState<PaymentMethod>('cash');
   const [endPartialAmount, setEndPartialAmount] = useState('');
   const [endGcashRef,      setEndGcashRef]      = useState('');
+  
+  const [endAdminPassword, setEndAdminPassword] = useState('');
+  const [endAdminError,    setEndAdminError]    = useState('');
 
   const activeTables = tables.filter(t => t.isActive);
   const available = activeTables.filter(t => t.status === 'available').length;
@@ -106,7 +122,7 @@ export function Tables() {
   });
 
   const waitingCustomers: CustomerSource[] = queue
-    .filter(q => q.status === 'waiting' || q.status === 'called') // 🚨 Include 'called' so they show up
+    .filter(q => q.status === 'waiting' || q.status === 'called') 
     .map(q => ({ kind: 'queue', id: q.id, name: q.customerName, partySize: q.partySize, contact: q.contactNumber, notes: q.notes }));
 
   const todayReservations: CustomerSource[] = reservations
@@ -116,7 +132,6 @@ export function Tables() {
 
   const allCustomers: CustomerSource[] = [...waitingCustomers, ...todayReservations];
 
-  // 🚨 NEW URL PARAMETER LISTENER 🚨
   useEffect(() => {
     const assignTableId = searchParams.get('assignTable');
     const queueId = searchParams.get('queueId');
@@ -133,8 +148,6 @@ export function Tables() {
           setAmountPaid(((60 / 60) * rates.hourlyRate).toFixed(2));
         }
       }
-      
-      // Clean up the URL so it doesn't trigger again on refresh
       navigate('/staff/tables', { replace: true });
     }
   }, [searchParams, navigate, waitingCustomers, rates.hourlyRate]);
@@ -150,9 +163,23 @@ export function Tables() {
     let bookedCharge = 0, overtimeCharge = 0, totalDue = 0, isOvertime = false, overtimeMins = 0;
 
     if (bookedMins === 0) {
+      // 🚨 PURE OPEN TIME
       totalDue = (elapsedSecs / 3600) * hourlyRate;
       bookedCharge = totalDue;
+    } else if (bookedMins < 0) {
+      // 🚨 CONVERTED OPEN TIME
+      const baseMins = Math.abs(bookedMins);
+      const endTime = addMinutes(new Date(startTime), baseMins);
+      if (now <= endTime) {
+        totalDue = (baseMins / 60) * hourlyRate;
+        bookedCharge = totalDue;
+      } else {
+        const extraMins = Math.ceil(differenceInSeconds(now, endTime) / 60);
+        totalDue = ((baseMins + extraMins) / 60) * hourlyRate;
+        bookedCharge = totalDue;
+      }
     } else {
+      // 🚨 NORMAL FIXED DURATION
       const endTime = addMinutes(new Date(startTime), bookedMins);
       isOvertime = now > endTime;
       overtimeMins = isOvertime ? Math.ceil(differenceInSeconds(now, endTime) / 60) : 0;
@@ -177,6 +204,24 @@ export function Tables() {
   const extendingTable = tables.find(t => t.id === extendingTableId);
   const extendCharge = (extendMinutes / 60) * rates.hourlyRate;
 
+  let currentOvertimeMins = 0;
+  if (extendingTable?.session && extendingTable.session.durationMinutes > 0) {
+    const endTime = addMinutes(new Date(extendingTable.session.startTime), extendingTable.session.durationMinutes);
+    const now = new Date();
+    if (now > endTime) {
+      currentOvertimeMins = Math.ceil(differenceInSeconds(now, endTime) / 60);
+    }
+  }
+
+  const handleSetOpenTime = async () => {
+    if (!selectedPosTableId) return;
+    const activeTable = tables.find(t => t.id === selectedPosTableId);
+    if (!activeTable || !activeTable.session || activeTable.session.durationMinutes <= 0) return;
+
+    const currentMins = activeTable.session.durationMinutes;
+    await extendSession(selectedPosTableId, -(currentMins * 2), 0);
+  };
+
   const openAssign = (tableId: string) => {
     setAssigningTableId(tableId);
     setSelectedCustomer(null);
@@ -191,6 +236,8 @@ export function Tables() {
     setEndPayMethod('cash');
     setEndPartialAmount('');
     setEndGcashRef('');
+    setEndAdminPassword(''); 
+    setEndAdminError('');    
   };
 
   const openExtend = (tableId: string) => {
@@ -201,7 +248,7 @@ export function Tables() {
     setExtendPartialAmount('');
   };
 
- const pickCustomer = (c: CustomerSource) => {
+  const pickCustomer = (c: CustomerSource) => {
     setSelectedCustomer(c);
     setCustomerName(c.name);
     if (c.kind === 'reservation') {
@@ -245,17 +292,36 @@ export function Tables() {
     if (e) e.preventDefault();
     if (!endingTableId || !endInfo) return;
     
+    if (endInfo.elapsedMins < 30) {
+      const isAdminValid = staffUsers.some(u => (u.isAdmin || u.role?.toLowerCase() === 'admin') && u.password === endAdminPassword);
+      if (!isAdminValid) {
+        setEndAdminError('Invalid admin password.');
+        return;
+      }
+    }
+
     if (endPayMethod === 'gcash' && endPayStatus !== 'unpaid' && endInfo.balance > 0 && !endGcashRef) return;
     
     freeTable(endingTableId);
     setEndingTableId(null);
   };
 
-  const handleConfirmExtend = (e: React.FormEvent) => {
+  const handleConfirmExtend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!extendingTableId) return;
+
+    if (extendMinutes === 0) {
+      const activeTable = tables.find(t => t.id === extendingTableId);
+      if (activeTable && activeTable.session && activeTable.session.durationMinutes > 0) {
+        const currentMins = activeTable.session.durationMinutes;
+        await extendSession(extendingTableId, -(currentMins * 2), 0);
+      }
+      setExtendingTableId(null);
+      return;
+    }
+
     const charge = extendPayStatus === 'paid' ? extendCharge : extendPayStatus === 'partial' ? parseFloat(extendPartialAmount) || 0 : 0;
-    extendSession(extendingTableId, extendMinutes, charge);
+    await extendSession(extendingTableId, extendMinutes, charge);
     setExtendingTableId(null);
   };
 
@@ -277,7 +343,7 @@ export function Tables() {
   ];
 
   const durationOptions = [0, 60, 120, 180, 240, 300]; 
-  const extendOptions   = [60, 90, 120];
+  const extendOptions   = [0, 60, 90, 120]; 
 
   const PayStatusBtn = ({ value, current, label, onChange }: { value: PaymentStatus; current: PaymentStatus; label: string; onChange: (v: PaymentStatus) => void }) => (
     <button
@@ -403,6 +469,17 @@ export function Tables() {
             if (session.durationMinutes === 0) {
               const elapsedSecs = Math.max(0, differenceInSeconds(new Date(), new Date(session.startTime)));
               tableCost = (elapsedSecs / 3600) * session.hourlyRate;
+            } else if (session.durationMinutes < 0) {
+              // 🚨 CALCULATE FOR CONVERTED OPEN TIME
+              const baseMins = Math.abs(session.durationMinutes);
+              const endTime = addMinutes(new Date(session.startTime), baseMins);
+              const now = new Date();
+              if (now <= endTime) {
+                tableCost = (baseMins / 60) * session.hourlyRate;
+              } else {
+                const extraMins = Math.ceil(differenceInSeconds(now, endTime) / 60);
+                tableCost = ((baseMins + extraMins) / 60) * session.hourlyRate;
+              }
             } else {
               tableCost = (session.durationMinutes / 60) * session.hourlyRate;
               const endTime = addMinutes(new Date(session.startTime), session.durationMinutes);
@@ -487,10 +564,26 @@ export function Tables() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800 border-dashed">
-                    <button onClick={() => openExtend(activeTable.id)} className="flex-1 bg-amber-950/30 hover:bg-amber-900/40 text-amber-500 border border-amber-900/50 hover:border-amber-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5">
-                      <Clock size={13} /> Extend
-                    </button>
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800 border-dashed flex-wrap">
+                    {session.durationMinutes > 0 ? (
+                      <>
+                        <button onClick={handleSetOpenTime} className="w-full mb-1 bg-blue-950/30 hover:bg-blue-900/40 text-blue-500 border border-blue-900/50 hover:border-blue-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5">
+                          <Clock size={13} /> Change to Open Time
+                        </button>
+                        <button onClick={() => openExtend(activeTable.id)} className="flex-1 bg-amber-950/30 hover:bg-amber-900/40 text-amber-500 border border-amber-900/50 hover:border-amber-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5">
+                          <Zap size={13} /> Extend
+                        </button>
+                      </>
+                    ) : (
+                      <div className="w-full flex items-center justify-between bg-blue-950/10 py-1.5 px-3 rounded-lg border border-blue-900/20 mb-2">
+                        <span className="text-[10px] text-blue-500/80 font-semibold">Session is on Open Time</span>
+                        {session.durationMinutes < 0 && (
+                          <button type="button" onClick={() => setVoidOrderId('OPEN_TIME_CONVERSION')} className="px-2 py-0.5 bg-rose-950/30 text-rose-400 hover:bg-rose-900/50 border border-rose-900/50 rounded text-[9px] font-bold uppercase tracking-wider transition-colors">
+                            Void
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <button onClick={() => openEnd(activeTable.id)} className="flex-1 bg-rose-950/30 hover:bg-rose-900/40 text-rose-500 border border-rose-900/50 hover:border-rose-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5">
                       <CheckCircle size={13} /> End Session
                     </button>
@@ -686,7 +779,13 @@ export function Tables() {
                   <span className="text-neutral-400">Customer</span><span className="text-neutral-200 font-semibold">{endingTable.session.customerName}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-neutral-400">Booked Duration</span><span className="text-neutral-200">{endingTable.session.durationMinutes === 0 ? 'Open Time' : endingTable.session.durationMinutes < 60 ? `${endingTable.session.durationMinutes}m` : `${endingTable.session.durationMinutes / 60}h`}</span>
+                  <span className="text-neutral-400">Booked Duration</span>
+                  <span className="text-neutral-200">
+                    {endingTable.session.durationMinutes === 0 ? 'Open Time' : 
+                     endingTable.session.durationMinutes < 0 ? `Converted Open Time (${Math.abs(endingTable.session.durationMinutes)}m Base)` : 
+                     endingTable.session.durationMinutes < 60 ? `${endingTable.session.durationMinutes}m` : 
+                     `${endingTable.session.durationMinutes / 60}h`}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-neutral-400">Booked Charge</span><span className="text-neutral-200">{formatPHP(endInfo.bookedCharge)}</span>
@@ -714,6 +813,29 @@ export function Tables() {
                 </div>
               </div>
 
+              {/* 🚨 EARLY END ADMIN OVERRIDE WARNING */}
+              {endInfo.elapsedMins < 30 && (
+                <div className="bg-rose-950/20 border border-rose-900/50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-rose-400">
+                    <AlertTriangle size={14} className="flex-shrink-0" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Early End Override</span>
+                  </div>
+                  <p className="text-[10px] text-rose-400/80 leading-relaxed">
+                    This session has only been active for {endInfo.elapsedMins} minute{endInfo.elapsedMins !== 1 ? 's' : ''}. A minimum of 30 minutes is required. An Admin password is required to end this early.
+                  </p>
+                  <div>
+                    <input 
+                      type="password" 
+                      value={endAdminPassword} 
+                      onChange={e => { setEndAdminPassword(e.target.value); setEndAdminError(''); }} 
+                      placeholder="Enter Admin Password" 
+                      className="w-full bg-neutral-900 border border-rose-900/50 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500" 
+                    />
+                    {endAdminError && <p className="text-[10px] text-rose-500 font-bold mt-1.5">{endAdminError}</p>}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">Payment Status</label>
                 <div className="flex gap-2">
@@ -740,7 +862,7 @@ export function Tables() {
               <div className="space-y-2">
                 <label className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">Payment Method</label>
                 <div className="flex gap-2">
-                  <PayMethodBtn value="cash"  current={endPayMethod} icon={Banknote}    label="Cash"  onChange={setEndPayMethod} />
+                  <PayMethodBtn value="cash"  current={endPayMethod} icon={Banknote}   label="Cash"  onChange={setEndPayMethod} />
                   <PayMethodBtn value="gcash" current={endPayMethod} icon={CreditCard}  label="GCash" onChange={setEndPayMethod} />
                 </div>
                 {endPayMethod === 'gcash' && endPayStatus !== 'unpaid' && endInfo.balance > 0 && (
@@ -756,7 +878,8 @@ export function Tables() {
                 <button type="button" onClick={() => setEndingTableId(null)} className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">
                   Cancel
                 </button>
-                <button type="button" onClick={handleConfirmEnd} disabled={endPayMethod === 'gcash' && endPayStatus !== 'unpaid' && endInfo.balance > 0 && !endGcashRef}
+                <button type="button" onClick={handleConfirmEnd} 
+                  disabled={(endPayMethod === 'gcash' && endPayStatus !== 'unpaid' && endInfo.balance > 0 && !endGcashRef) || (endInfo.elapsedMins < 30 && !endAdminPassword)}
                   className="flex-1 px-4 py-2.5 bg-rose-700 hover:bg-rose-600 disabled:opacity-50 text-white text-sm rounded-xl shadow-lg shadow-rose-900/30 transition-all flex items-center justify-center gap-2 font-semibold">
                   <CircleCheck size={15} /> Confirm End
                 </button>
@@ -790,44 +913,67 @@ export function Tables() {
                         extendMinutes === d ? 'bg-amber-600/15 border-amber-600 text-amber-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
                       }`}
                     >
-                      +{d < 60 ? `${d}min` : `${d / 60}hr`}
+                      {d === 0 ? 'Open Time' : `+${d < 60 ? `${d}min` : `${d / 60}hr`}`}
                       <br />
-                      <span className="text-[10px] font-normal opacity-70">+{formatPHP((d / 60) * rates.hourlyRate)}</span>
+                      <span className="text-[10px] font-normal opacity-70">
+                        {d === 0 ? 'Pay at end' : `+${formatPHP((d / 60) * rates.hourlyRate)}`}
+                      </span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-neutral-900 rounded-xl p-3 text-xs border border-neutral-800">
-                <div className="flex justify-between text-neutral-400">
-                  <span>Extension charge</span><span className="font-semibold text-amber-400">{formatPHP(extendCharge)}</span>
+              {/* 🚨 NEW: OVERTIME ABSORPTION NOTICE */}
+              {currentOvertimeMins > 0 && extendMinutes > 0 && (
+                <div className="bg-rose-950/20 border border-rose-900/30 rounded-xl p-3 text-xs text-rose-400 mt-2">
+                  <div className="flex items-center gap-1.5 font-bold mb-1"><AlertTriangle size={12}/> Overtime Applied</div>
+                  <p className="text-[10px] leading-relaxed">
+                    This table is currently <strong>{currentOvertimeMins}m in overtime</strong>. 
+                    Extending by {extendMinutes}m will automatically absorb the overtime charge, 
+                    giving the customer <strong>{Math.max(0, extendMinutes - currentOvertimeMins)}m</strong> of new playing time.
+                  </p>
                 </div>
-                <div className="flex justify-between text-neutral-500 mt-1">
-                  <span>Rate</span><span>₱{rates.hourlyRate}/hr</span>
-                </div>
-              </div>
+              )}
 
-              <div className="space-y-2">
-                <label className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">Extension Payment</label>
-                <div className="flex gap-2">
-                  <PayStatusBtn value="paid"    current={extendPayStatus} label="Paid Now"  onChange={setExtendPayStatus} />
-                  <PayStatusBtn value="partial" current={extendPayStatus} label="Partial"   onChange={setExtendPayStatus} />
-                  <PayStatusBtn value="unpaid"  current={extendPayStatus} label="Defer"     onChange={setExtendPayStatus} />
-                </div>
-                {extendPayStatus === 'partial' && (
-                  <input type="number" value={extendPartialAmount} onChange={e => setExtendPartialAmount(e.target.value)}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
-                    placeholder={`Amount collected (of ${formatPHP(extendCharge)})`} step="0.01" />
-                )}
-              </div>
+              {extendMinutes > 0 ? (
+                <>
+                  <div className="bg-neutral-900 rounded-xl p-3 text-xs border border-neutral-800">
+                    <div className="flex justify-between text-neutral-400">
+                      <span>Extension charge</span><span className="font-semibold text-amber-400">{formatPHP(extendCharge)}</span>
+                    </div>
+                    <div className="flex justify-between text-neutral-500 mt-1">
+                      <span>Rate</span><span>₱{rates.hourlyRate}/hr</span>
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <label className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">Payment Method</label>
-                <div className="flex gap-2">
-                  <PayMethodBtn value="cash"  current={extendPayMethod} icon={Banknote}   label="Cash"  onChange={setExtendPayMethod} />
-                  <PayMethodBtn value="gcash" current={extendPayMethod} icon={CreditCard} label="GCash" onChange={setExtendPayMethod} />
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">Extension Payment</label>
+                    <div className="flex gap-2">
+                      <PayStatusBtn value="paid"    current={extendPayStatus} label="Paid Now"  onChange={setExtendPayStatus} />
+                      <PayStatusBtn value="partial" current={extendPayStatus} label="Partial"   onChange={setExtendPayStatus} />
+                      <PayStatusBtn value="unpaid"  current={extendPayStatus} label="Defer"     onChange={setExtendPayStatus} />
+                    </div>
+                    {extendPayStatus === 'partial' && (
+                      <input type="number" value={extendPartialAmount} onChange={e => setExtendPartialAmount(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                        placeholder={`Amount collected (of ${formatPHP(extendCharge)})`} step="0.01" />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs text-neutral-500 uppercase tracking-widest font-semibold">Payment Method</label>
+                    <div className="flex gap-2">
+                      <PayMethodBtn value="cash"  current={extendPayMethod} icon={Banknote}   label="Cash"  onChange={setExtendPayMethod} />
+                      <PayMethodBtn value="gcash" current={extendPayMethod} icon={CreditCard} label="GCash" onChange={setExtendPayMethod} />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-4 flex items-start gap-2 text-blue-400 text-xs">
+                  <Clock size={14} className="mt-0.5 flex-shrink-0" />
+                  <p className="leading-relaxed">This table will be converted to an Open Time session. The timer will continue counting and the final bill will be collected when the session ends.</p>
                 </div>
-              </div>
+              )}
 
              <div className="flex gap-3">
                 <button type="button" onClick={() => setExtendingTableId(null)} className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">
@@ -850,7 +996,11 @@ export function Tables() {
               <AlertTriangle size={16} className="text-rose-500" />
               <h3 className="text-sm font-bold text-white">Admin Override Required</h3>
             </div>
-            <p className="text-xs text-neutral-500 mb-4">Please enter an admin password to void this order.</p>
+            <p className="text-xs text-neutral-500 mb-4">
+              {voidOrderId === 'OPEN_TIME_CONVERSION' 
+                ? "Please enter an admin password to void the Open Time extension and revert the table to its previous fixed duration."
+                : "Please enter an admin password to void this order."}
+            </p>
             
             {voidError && <p className="text-xs text-rose-400 mb-3 bg-rose-950/40 border border-rose-800/50 p-2 rounded-lg">{voidError}</p>}
             
@@ -861,7 +1011,7 @@ export function Tables() {
             
             <div className="flex gap-2">
               <button onClick={() => { setVoidOrderId(null); setAdminPassword(''); setVoidError(''); }} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 py-2.5 rounded-lg text-xs font-semibold transition-colors">Cancel</button>
-              <button onClick={handleConfirmVoid} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-lg text-xs font-semibold transition-colors">Void Item</button>
+              <button onClick={handleConfirmVoid} className="flex-1 bg-rose-600 hover:bg-rose-500 text-white py-2.5 rounded-lg text-xs font-semibold transition-colors">Void Action</button>
             </div>
           </div>
         </div>

@@ -23,6 +23,7 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
       const newNow = new Date();
       setNow(newNow);
       
+      // 🚨 ONLY SOUND ALARMS FOR STRICT FIXED SESSIONS (>0)
       if (table.session && table.session.durationMinutes > 0) {
         const endTime = addMinutes(new Date(table.session.startTime), table.session.durationMinutes);
         const secsLeft = differenceInSeconds(endTime, newNow);
@@ -48,17 +49,66 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     const activeRate = rates.hourlyRate; 
 
     if (durationMinutes === 0) {
+      // 🚨 PURE OPEN TIME (Counts up naturally from 0)
       const totalSecsElapsed = Math.max(0, differenceInSeconds(now, new Date(startTime)));
-      const mins = Math.floor(totalSecsElapsed / 60);
-      const secs = totalSecsElapsed % 60;
+      const minsElapsed = Math.floor(totalSecsElapsed / 60);
+      const secsElapsed = totalSecsElapsed % 60;
+      
       const currentCharge = (totalSecsElapsed / 3600) * activeRate;
+      
       return {
-        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+        formatted: `${minsElapsed.toString().padStart(2, '0')}:${secsElapsed.toString().padStart(2, '0')}`,
         isAlert: false, isOvertime: false, overtimeCharge: 0,
-        elapsed: mins, endTime: new Date(), currentCharge, isOpenTime: true, secsLeft: 0
+        elapsed: minsElapsed, endTime: new Date(), currentCharge, isOpenTime: true, secsLeft: 0
       };
+
+    } else if (durationMinutes < 0) {
+      // 🚨 CONVERTED TO OPEN TIME (Takes effect ONLY after fixed time ends)
+      const baseMins = Math.abs(durationMinutes);
+      const endTime = addMinutes(new Date(startTime), baseMins);
+      const totalSecsLeft = differenceInSeconds(endTime, now);
+
+      if (totalSecsLeft > 0) {
+        // Phase 1: Still counting down their original fixed time
+        const mins = Math.floor(totalSecsLeft / 60);
+        const secs = totalSecsLeft % 60;
+        return {
+          formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+          isAlert: false, // Turn off visual flashing alerts since they are staying
+          isOvertime: false, 
+          overtimeCharge: 0,
+          elapsed: Math.floor(differenceInSeconds(now, new Date(startTime)) / 60),
+          endTime, 
+          isOpenTime: false, 
+          currentCharge: (baseMins / 60) * activeRate, 
+          secsLeft: totalSecsLeft,
+          isConverted: true // UI helper flag
+        };
+      } else {
+        // Phase 2: Fixed time hit zero! Seamlessly flip to open time count-up.
+        const extraSecs = Math.abs(totalSecsLeft);
+        const mins = Math.floor(extraSecs / 60);
+        const secs = extraSecs % 60;
+        
+        const baseCharge = (baseMins / 60) * activeRate;
+        const extraCharge = (Math.ceil(extraSecs / 60) / 60) * activeRate;
+
+        return {
+          formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+          isAlert: false, 
+          isOvertime: false, // Prevents overtime penalties
+          overtimeCharge: 0, 
+          elapsed: baseMins + Math.ceil(extraSecs / 60),
+          endTime, 
+          isOpenTime: true, 
+          currentCharge: baseCharge + extraCharge, 
+          secsLeft: 0,
+          isConverted: true
+        };
+      }
     }
 
+    // 🚨 NORMAL FIXED DURATION
     const endTime = addMinutes(new Date(startTime), durationMinutes);
     const totalSecsLeft = differenceInSeconds(endTime, now);
     const isOvertime = totalSecsLeft < 0;
@@ -103,7 +153,6 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     return 'border-neutral-800';
   };
 
-  // 🚨 Dynamic Acceleration Math (Max 2.5s -> Min 0.8s so it isn't too fast)
   const pulseDuration = timer?.isAlert ? Math.max(0.8, (timer.secsLeft / 900) * 2.5) + 's' : undefined;
 
   return (
@@ -114,7 +163,6 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
       timer?.isOvertime && 'shadow-rose-900/20',
       timer?.isAlert && 'shadow-amber-900/20',
     )}>
-      {/* 🚨 DYNAMIC FLASHING OVERLAYS */}
       {timer?.isOvertime && (
         <div className="absolute inset-0 bg-rose-500/10 pointer-events-none" style={{ animation: 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
       )}
@@ -148,7 +196,10 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
           timer?.isOvertime && 'bg-rose-500/20 text-rose-300',
           table.status === 'reserved' && 'bg-amber-500/15 text-amber-400',
         )}>
-          {timer?.isOvertime ? 'Overtime' : timer?.isOpenTime ? 'Open Time' : timer?.isAlert ? 'Ending Soon' : table.status}
+          {timer?.isOvertime ? 'Overtime' : 
+           (timer as any)?.isConverted && !timer?.isOpenTime ? 'Open Time (Pending)' : 
+           timer?.isOpenTime ? 'Open Time' : 
+           timer?.isAlert ? 'Ending Soon' : table.status}
         </span>
       </div>
 
@@ -185,12 +236,14 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
             </div>
             {/* Actions */}
             <div className="flex gap-1.5">
-              <button
-                onClick={onExtend}
-                className="flex-1 flex items-center justify-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs py-1.5 rounded-lg transition-colors border border-neutral-700"
-              >
-                <Zap size={11} /> Extend
-              </button>
+              {table.session.durationMinutes > 0 && (
+                <button
+                  onClick={onExtend}
+                  className="flex-1 flex items-center justify-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs py-1.5 rounded-lg transition-colors border border-neutral-700"
+                >
+                  <Zap size={11} /> Extend
+                </button>
+              )}
               <button
                 onClick={onEnd}
                 className="flex-1 flex items-center justify-center gap-1 bg-rose-950/40 hover:bg-rose-900/40 text-rose-400 text-xs py-1.5 rounded-lg transition-colors border border-rose-900/40"

@@ -855,17 +855,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const table = tables.find(t => t.id === tableId);
     if (!table || !table.session) return;
 
-    const newDuration = table.session.durationMinutes + extraMinutes;
-    const newEndTime = new Date(table.session.startTime.getTime() + newDuration * 60000);
+    let newDuration = table.session.durationMinutes + extraMinutes;
+
+    // 🚨 MAGIC TRICK FIX: If extraMinutes is negative, we are converting to Open Time.
+    const isConvertingToOpenTime = extraMinutes < 0 && table.session.durationMinutes > 0;
+    if (isConvertingToOpenTime) {
+      // Set the new duration to EXACTLY the negative of their current duration
+      // (e.g. if they played 60 mins, it becomes -60). 
+      newDuration = -Math.abs(table.session.durationMinutes);
+    }
+
+    // We use the absolute value to calculate the physical end time for the conflict checker
+    const newEndTime = new Date(table.session.startTime.getTime() + Math.abs(newDuration) * 60000);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const conflict = reservations.find(r => {
       if (r.tableId !== tableId || r.status === 'cancelled' || r.status === 'completed' || !r.timeSlot || !r.date) return false;
       const rDateStr = new Date(r.date).toISOString().split('T')[0];
       if (rDateStr !== todayStr) return false;
+      
       const resStart = new Date(r.date);
       const [hours, minutes] = r.timeSlot.split(':').map(Number);
       resStart.setHours(hours, minutes, 0, 0);
+
+      // 🚨 If Open Time (0 or negative), it conflicts with ANY future reservation today
+      if (newDuration <= 0) {
+         return resStart > new Date();
+      }
       return newEndTime > resStart; 
     });
 
@@ -882,9 +898,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         amountPaid: table.session.amountPaid + extraPayment
       }
     };
-    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+
+    // 🚨 ADD ERROR HANDLING: This will catch if Supabase rejects the negative number!
+    const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    
+    if (error) {
+      console.error("Supabase Database Error:", error);
+      alert("Database Error: Failed to update the table session. If you are converting to Open Time, your database might have a rule preventing negative duration minutes. Please check your Supabase schema constraints.");
+      return; 
+    }
+
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('session_extended', `Table ${table.name} extended by ${extraMinutes} mins`);
+
+    const logMessage = isConvertingToOpenTime 
+      ? `Table ${table.name} converted to Open Time (Base: ${Math.abs(newDuration)} mins)` 
+      : `Table ${table.name} extended by ${extraMinutes} mins`;
+
+    await addActivity('session_extended', logMessage);
   };
 
   const addOrderToTable = async (tableId: string, order: OrderItem) => {
