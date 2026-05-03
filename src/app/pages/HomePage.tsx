@@ -962,77 +962,98 @@ export function HomePage() {
                     <div className="flex-1 min-w-0 space-y-10">
                       
                       {/* Live Status Overview */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-                          <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
-                          </div>
-                          <div className="space-y-1 max-h-56 overflow-y-auto">
-                            {tables.map(t => {
-                              if (!t.isActive) {
-                                return (
-                                  <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
-                                    <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
-                                    <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
-                                    <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
-                                  </div>
-                                );
-                              }
-                              
-                              const timerInfo = getTableTimerInfo(t.id);
-                              const nextRes = getNextResForTable(t.id);
-                              
-                              let dotColor = 'bg-emerald-500';
-                              if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
-                              else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
-                              else if (t.status === 'occupied') dotColor = 'bg-amber-500';
-                              else if (t.status === 'reserved') dotColor = 'bg-blue-500';
-                              
-                              return (
-                                <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
-                                  <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
-                                  <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
-                                  <div className="flex-1 min-w-0 flex items-center gap-2">
-                                    {timerInfo ? (
-                                      <>
-                                        <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
-                                          {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN TIME' : 'IN USE'}
-                                        </span>
-                                        <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
-                                          {timerInfo.formatted}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
-                                    )}
-                                  </div>
-                                  {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {formatTime(nextRes.timeSlot)}</span>}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
+    </div>
+    <div className="space-y-1 max-h-56 overflow-y-auto">
+      {tables.map(t => {
+        if (!t.isActive) {
+          return (
+            <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
+              <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
+              <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
+              <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
+            </div>
+          );
+        }
+        
+        const timerInfo = getTableTimerInfo(t.id);
+        const nextRes = getNextResForTable(t.id);
+        
+        let dotColor = 'bg-emerald-500';
+        if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
+        else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
+        else if (t.status === 'occupied') dotColor = 'bg-amber-500';
+        else if (t.status === 'reserved') dotColor = 'bg-blue-500';
 
-                        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-                          <div className="flex items-center justify-between mb-1">
-                            <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
-                            <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
-                          </div>
-                          {queue.filter(q => q.status === 'waiting').length === 0 ? (
-                            <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
-                          ) : (
-                            <div className="space-y-2">
-                              {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
-                                <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
-                                  <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
-                                  <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
-                                  <span className="text-xs text-neutral-500">{q.partySize} pax</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+        // 🚨 HELPER 1: Convert MM:SS duration to HH:MM:SS
+        const formatDurationHHMMSS = (mmSS: string) => {
+          if (!mmSS || !mmSS.includes(':')) return mmSS;
+          const [mStr, sStr] = mmSS.split(':');
+          const totalMins = parseInt(mStr, 10);
+          if (isNaN(totalMins)) return mmSS;
+          const hrs = Math.floor(totalMins / 60);
+          const mins = totalMins % 60;
+          return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${sStr}`;
+        };
+
+        // 🚨 HELPER 2: Convert Military Time to 12-Hour AM/PM with Seconds
+        const format12HourWithSeconds = (time24: string) => {
+          if (!time24) return '';
+          const [h, m, s = '00'] = time24.split(':');
+          const hour = parseInt(h, 10);
+          const ampm = hour >= 12 ? 'PM' : 'AM';
+          const formattedHour = hour % 12 || 12;
+          return `${formattedHour.toString().padStart(2, '0')}:${m}:${s} ${ampm}`;
+        };
+        
+        return (
+          <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
+            <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
+            <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              {timerInfo ? (
+                <>
+                  <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
+                    {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN TIME' : 'IN USE'}
+                  </span>
+                  <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
+                    {formatDurationHHMMSS(timerInfo.formatted)}
+                  </span>
+                </>
+              ) : (
+                <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
+              )}
+            </div>
+            {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {format12HourWithSeconds(nextRes.timeSlot)}</span>}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+
+  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+    <div className="flex items-center justify-between mb-1">
+      <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
+      <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
+    </div>
+    {queue.filter(q => q.status === 'waiting').length === 0 ? (
+      <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
+    ) : (
+      <div className="space-y-2">
+        {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
+          <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
+            <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
+            <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
+            <span className="text-xs text-neutral-500">{q.partySize} pax</span>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
 
                       {/* Booking Steps */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">

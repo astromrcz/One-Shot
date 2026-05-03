@@ -8,12 +8,11 @@ import { LiveMonitor } from './pages/LiveMonitor';
 // Staff pages
 import { OverviewDashboard } from './pages/OverviewDashboard';
 import { Tables } from './pages/Tables';
-import { Reservations } from './pages/Reservations';
+import { ReservationsPage } from './pages/Reservations'; // 🚨 Updated import
 import { Queue } from './pages/Queue';
 import { ActivityLog } from './pages/ActivityLog';
 import { FeedbackPage } from './pages/Feedback';
 import { PromoCodesPage } from './pages/PromoCodes';
-import { TattooReservationsPage } from './pages/TattooReservations';
 import { SettingsPage } from './pages/Settings';
 import { HistoryPage } from './pages/History'; 
 // Admin pages
@@ -47,11 +46,10 @@ export const router = createBrowserRouter([
         children: [
           { index: true,                  Component: OverviewDashboard },
           { path: 'tables',               Component: Tables },
-          { path: 'reservations',         Component: Reservations },
+          { path: 'reservations',         Component: ReservationsPage }, // 🚨 Updated component
           { path: 'queue',                Component: Queue },
           { path: 'feedback',             Component: FeedbackPage },
           { path: 'promo-codes',          Component: PromoCodesPage },
-          { path: 'tattoo-reservations',  Component: TattooReservationsPage },
           { path: 'history',              Component: HistoryPage }, 
           { path: 'settings',             Component: SettingsPage },
         ],
@@ -75,7 +73,7 @@ export const router = createBrowserRouter([
           { path: 'analytics',              Component: Analytics },
           { path: 'reports',                Component: ReportsPage }, 
           { path: 'settings',               Component: SettingsPage },
-          { path: 'tattoo-reservations',    Component: TattooReservationsPage },
+          { path: 'reservations',           Component: ReservationsPage }, // 🚨 Used single Reservations page for admin too
         ],
       },
       // ── Artist Portal ─────────────────────────────────────

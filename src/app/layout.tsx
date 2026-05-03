@@ -17,8 +17,7 @@ const navItems = [
   { to: '/staff/tables',            icon: Clock,       label: 'Table Monitor' },
   { to: '/staff/reservations',      icon: Calendar,    label: 'Reservations' },
   { to: '/staff/queue',             icon: UserPlus,    label: 'Queue' },
-  { to: '/staff/tattoo-reservations', icon: Palette,   label: 'Tattoo Reservations' },
-  { to: '/staff/history',           icon: History,     label: 'History' }, // 👈 Added
+  { to: '/staff/history',           icon: History,     label: 'History' }, 
   { to: '/staff/promo-codes',       icon: Tag,         label: 'Promo Codes' },
   { to: '/staff/feedback',          icon: Star,        label: 'Feedback' },
   { to: '/staff/settings',          icon: Settings,    label: 'Settings' },

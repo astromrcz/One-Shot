@@ -27,7 +27,8 @@ export function HistoryPage() {
 
   const exportCSV = () => {
     const headers = "ID,Customer,Contact,Date,Time,Status,Total Amount\n";
-    const rows = historyData.map(r => `${r.id},"${r.customerName}",${r.contactNumber},${format(new Date(r.date), 'yyyy-MM-dd')},${r.timeSlot},${r.status},${r.totalAmount}`).join("\n");
+    // 🚨 Updated to 12-hour format: hh:mm:ss a
+    const rows = historyData.map(r => `${r.id},"${r.customerName}",${r.contactNumber},${format(new Date(r.date), 'yyyy-MM-dd')},${format(new Date(r.date), 'hh:mm:ss a')},${r.status},${r.totalAmount}`).join("\n");
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -79,7 +80,11 @@ export function HistoryPage() {
           <tbody className="divide-y divide-neutral-800/50">
             {historyData.map(r => (
               <tr key={r.id} className="hover:bg-neutral-900/50">
-                <td className="p-4 text-neutral-300">{format(new Date(r.date), 'MMM d, yyyy')} <span className="text-neutral-500 ml-2">{r.timeSlot}</span></td>
+                <td className="p-4 text-neutral-300">
+                  {format(new Date(r.date), 'yyyy-MM-dd')} 
+                  {/* 🚨 Updated to 12-hour format: hh:mm:ss a */}
+                  <span className="text-neutral-500 ml-2">{format(new Date(r.date), 'hh:mm:ss a')}</span>
+                </td>
                 <td className="p-4 font-semibold text-neutral-200">{r.customerName}</td>
                 <td className="p-4">
                   <span className={`flex items-center gap-1.5 w-max px-2.5 py-1 rounded text-[10px] font-bold ${r.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
