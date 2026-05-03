@@ -4,19 +4,23 @@ import emailjs from '@emailjs/browser';
 import {
   X, Calendar, Clock, Users, Phone, CheckCircle,
   XCircle, Search, AlertTriangle, Receipt, CalendarDays, Copy, Loader2, ImageOff,
-  MapPin, FileText, Mail // 🚨 Added Mail here!
+  MapPin, FileText, Mail
 } from 'lucide-react';
 import { format, isToday, isTomorrow, isThisMonth, isThisYear } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router';
 
 const formatPHP = (amount: number) => `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
-const statusConfig: Record<ReservationStatus, { label: string; color: string; dot: string }> = {
+const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
   pending: { label: 'Pending', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', dot: 'bg-amber-400' },
   confirmed: { label: 'Confirmed', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-400' },
   'checked-in': { label: 'Checked In', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', dot: 'bg-blue-400' },
+  'in-progress': { label: 'In Progress', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', dot: 'bg-blue-400' },
   completed: { label: 'Completed', color: 'bg-neutral-700/50 text-neutral-400 border-neutral-700', dot: 'bg-neutral-500' },
   cancelled: { label: 'Cancelled', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20', dot: 'bg-rose-400' },
+  denied: { label: 'Denied', color: 'bg-red-500/10 text-red-500 border-red-500/20', dot: 'bg-red-500' },
 };
 
 const formatTimeSlot = (time24: string) => {
@@ -35,17 +39,37 @@ const formatReservationDate = (r: any) => {
   return `${format(r.date, 'MMM d, yyyy')} at ${timeStr}`;
 };
 
+const isSessionFinished = (date: Date | string | number, timeSlot: string, durationHours: number = 2) => {
+  try {
+    const now = new Date();
+    const start = new Date(date);
+    if (timeSlot) {
+      const [h, m] = timeSlot.split(':').map(Number);
+      start.setHours(h, m, 0, 0);
+    }
+    const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+    return now >= end;
+  } catch {
+    return true; 
+  }
+};
+
 type DateFilter = 'all' | 'today' | 'month' | 'year'; 
 
 // ─── TABLE RESERVATIONS VIEW ──────────────────────────────────────────────────
 function TableReservationsView() {
-  const { reservations, updateReservationStatus, cancelReservation, updateDownPayment, updateBalance, proposeReschedule } = useAppContext();
+  const navigate = useNavigate();
+  const { tables, reservations, updateReservationStatus, cancelReservation, updateDownPayment, updateBalance, proposeReschedule } = useAppContext();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | ReservationStatus>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [completeTarget, setCompleteTarget] = useState<string | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
@@ -92,6 +116,74 @@ function TableReservationsView() {
     setToastMessage(`Reschedule proposed for ${format(proposedDateObj, 'MMM d')} at ${formatTimeSlot(rescheduleTime)}`);
     setTimeout(() => setToastMessage(null), 3500);
     setShowRescheduleForm(false);
+  };
+
+  // 🚨 STRICT CHECK-IN INTERCEPTOR: Blocks future/past reservations from checking in
+  const handleCheckInClick = (r: any) => {
+    if (!isToday(new Date(r.date))) {
+      toast.error("Invalid Check-In Date", { 
+        description: "Customers can only be checked in on the exact date of their reservation. If they are arriving on a different day, please accommodate them as a regular Walk-In." 
+      });
+      return;
+    }
+    executeCheckIn(r);
+  };
+
+  const executeCheckIn = async (r: any) => {
+    const now = new Date();
+    const end = new Date(now.getTime() + r.durationHours * 60 * 60 * 1000);
+    const todayStr = now.toISOString().split('T')[0];
+
+    let targetTableId = null;
+
+    // 1. Try to honor their assigned table if it's currently free
+    if (r.tableId) {
+      const assignedTable = tables.find(t => t.id === r.tableId);
+      if (assignedTable && assignedTable.status === 'available') {
+         const hasConflict = reservations.some(otherRes => {
+            if (otherRes.id === r.id || otherRes.tableId !== assignedTable.id || otherRes.status === 'cancelled' || otherRes.status === 'completed') return false;
+            const rDateStr = new Date(otherRes.date).toISOString().split('T')[0];
+            if (rDateStr !== todayStr || !otherRes.timeSlot) return false;
+            const otherStart = new Date(otherRes.date);
+            const [hours, minutes] = otherRes.timeSlot.split(':').map(Number);
+            otherStart.setHours(hours, minutes, 0, 0);
+            return end > otherStart;
+         });
+         if (!hasConflict) targetTableId = assignedTable.id;
+      }
+    }
+
+    // 2. If no table assigned, or the assigned one is occupied, sweep ALL available tables
+    if (!targetTableId) {
+      for (const table of tables) {
+        if (!table.isActive || table.status !== 'available') continue;
+        
+        const hasConflict = reservations.some(otherRes => {
+          if (otherRes.id === r.id || otherRes.tableId !== table.id || otherRes.status === 'cancelled' || otherRes.status === 'completed') return false;
+          const rDateStr = new Date(otherRes.date).toISOString().split('T')[0];
+          if (rDateStr !== todayStr || !otherRes.timeSlot) return false;
+          
+          const otherStart = new Date(otherRes.date);
+          const [hours, minutes] = otherRes.timeSlot.split(':').map(Number);
+          otherStart.setHours(hours, minutes, 0, 0);
+          
+          return end > otherStart;
+        });
+
+        if (!hasConflict) {
+          targetTableId = table.id;
+          break;
+        }
+      }
+    }
+
+    if (!targetTableId) {
+      toast.error("No free tables available", { description: "There are currently no free tables that don't conflict with another booking for this duration." });
+      return;
+    }
+
+    setSelectedId(null);
+    navigate(`/staff/tables?assignTable=${targetTableId}&reservationId=${r.id}`);
   };
 
   const filtered = reservations
@@ -239,12 +331,22 @@ function TableReservationsView() {
                           </>
                         )}
                         {r.status === 'confirmed' && (
-                          <button onClick={() => updateReservationStatus(r.id, 'checked-in')} className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors">
+                          <button onClick={() => handleCheckInClick(r)} className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-[10px] font-bold rounded border border-blue-700/30 transition-colors">
                             Check In
                           </button>
                         )}
                         {r.status === 'checked-in' && (
-                          <button onClick={() => updateReservationStatus(r.id, 'completed')} className="px-2 py-1 bg-neutral-700/50 hover:bg-neutral-600/50 text-neutral-300 text-[10px] font-bold rounded border border-neutral-700 transition-colors">
+                          <button 
+                            onClick={() => {
+                              if (!isSessionFinished(r.date, r.timeSlot, r.durationHours)) {
+                                toast.error("Session Not Finished", { description: "You can only mark this reservation as complete after its scheduled time has ended." });
+                                return;
+                              }
+                              setCompleteTarget(r.id);
+                              setShowCompleteDialog(true);
+                            }} 
+                            className="px-2 py-1 bg-neutral-700/50 hover:bg-neutral-600/50 text-neutral-300 text-[10px] font-bold rounded border border-neutral-700 transition-colors"
+                          >
                             Complete
                           </button>
                         )}
@@ -380,10 +482,22 @@ function TableReservationsView() {
                   <button onClick={() => handleVerify(selected)} className="flex-1 px-3 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-sm font-semibold rounded-xl border border-emerald-700/30 transition-colors">Confirm Booking</button>
                 )}
                 {selected.status === 'confirmed' && (
-                  <button onClick={() => { updateReservationStatus(selected.id, 'checked-in'); setSelectedId(null); }} className="flex-1 px-3 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-sm font-semibold rounded-xl border border-blue-700/30 transition-colors">Check In Customer</button>
+                  <button onClick={() => handleCheckInClick(selected)} className="flex-1 px-3 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-sm font-semibold rounded-xl border border-blue-700/30 transition-colors">Check In Customer</button>
                 )}
                 {selected.status === 'checked-in' && (
-                  <button onClick={() => { updateReservationStatus(selected.id, 'completed'); setSelectedId(null); }} className="flex-1 px-3 py-2.5 bg-neutral-700/50 hover:bg-neutral-600/50 text-neutral-300 text-sm font-semibold rounded-xl border border-neutral-700 transition-colors">Mark Complete</button>
+                  <button 
+                    onClick={() => {
+                      if (!isSessionFinished(selected.date, selected.timeSlot, selected.durationHours)) {
+                        toast.error("Session Not Finished", { description: "You can only mark this reservation as complete after its scheduled time has ended." });
+                        return;
+                      }
+                      setCompleteTarget(selected.id);
+                      setShowCompleteDialog(true);
+                    }} 
+                    className="flex-1 px-3 py-2.5 bg-neutral-700/50 hover:bg-neutral-600/50 text-neutral-300 text-sm font-semibold rounded-xl border border-neutral-700 transition-colors"
+                  >
+                    Mark Complete
+                  </button>
                 )}
                 {selected.status !== 'cancelled' && selected.status !== 'completed' && (
                   <button onClick={() => { setCancelTarget(selected.id); setShowCancelDialog(true); }} className="px-3 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 text-sm font-semibold rounded-xl border border-rose-700/30 transition-colors">Cancel</button>
@@ -429,6 +543,39 @@ function TableReservationsView() {
                   }}
                   className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl font-semibold transition-all shadow-lg shadow-rose-900/30 flex items-center justify-center gap-2">
                   <X size={15} /> Confirm Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Reservation Dialog */}
+      {showCompleteDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-4 border-b border-neutral-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-neutral-100">Complete Reservation</h2>
+                <p className="text-xs text-neutral-500">Reservation #{completeTarget?.toUpperCase()}</p>
+              </div>
+              <button onClick={() => setShowCompleteDialog(false)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg"><X size={16} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-neutral-500">Are you sure you want to mark this reservation as complete? This will finalize the session and clear it from the active queue.</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowCompleteDialog(false)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
+                <button type="button" onClick={() => {
+                    if (completeTarget) {
+                      updateReservationStatus(completeTarget, 'completed');
+                      setShowCompleteDialog(false);
+                      setCompleteTarget(null);
+                      setSelectedId(null);
+                      toast.success("Reservation marked as completed!");
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-xl font-semibold transition-all shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2">
+                  <CheckCircle size={15} /> Confirm Complete
                 </button>
               </div>
             </div>
@@ -489,21 +636,29 @@ function TattooReservationsView() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all'); 
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [showRescheduleForm, setShowRescheduleForm] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
 
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [completeTarget, setCompleteTarget] = useState<string | null>(null);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+
   const filtered = tattooReservations.filter(r => {
     const matchSearch = !search || 
       r.customerName.toLowerCase().includes(search.toLowerCase()) || 
-      r.email.toLowerCase().includes(search.toLowerCase()) ||
+      r.email?.toLowerCase().includes(search.toLowerCase()) ||
       r.contactNumber.includes(search);
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     const d = new Date(r.date);
     const matchDate = dateFilter === 'all' ? true : dateFilter === 'today' ? isToday(d) : dateFilter === 'month' ? isThisMonth(d) : dateFilter === 'year' ? isThisYear(d) : true;
     return matchSearch && matchStatus && matchDate;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const selected = tattooReservations.find(r => r.id === selectedId);
 
   const handleProposeReschedule = async (id: string) => {
     if (!rescheduleDate || !rescheduleTime) return;
@@ -513,6 +668,7 @@ function TattooReservationsView() {
     
     await proposeReschedule(id, proposedDateObj, rescheduleTime);
     setShowRescheduleForm(null);
+    toast.success(`Reschedule proposed for ${format(proposedDateObj, 'MMM d')} at ${formatTimeSlot(rescheduleTime)}`);
   };
 
   return (
@@ -557,12 +713,12 @@ function TattooReservationsView() {
           return (
           <div key={r.id} className="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 hover:border-neutral-700 transition-colors flex flex-col">
             <div className="flex justify-between items-start mb-4">
-              <div>
+              <div className="cursor-pointer" onClick={() => setSelectedId(r.id)}>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-neutral-200 text-base">{r.customerName}</h3>
+                  <h3 className="font-bold text-neutral-200 text-base hover:text-violet-400 transition-colors">{r.customerName}</h3>
                   {isVerified && <CheckCircle size={14} className="text-emerald-500" title="Verified Customer" />}
                 </div>
-                <p className="text-[10px] text-neutral-500 mt-0.5">Booking #{r.id.split('-')[0].toUpperCase()}</p>
+                <p className="text-[10px] text-neutral-500 mt-0.5 hover:text-neutral-400">Booking #{r.id.split('-')[0].toUpperCase()}</p>
               </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold border ${
                 r.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
@@ -571,14 +727,14 @@ function TattooReservationsView() {
                 r.status === 'denied' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                 'bg-rose-500/10 text-rose-400 border-rose-500/20'
               }`}>
-                {r.status}
+                {r.status === 'in-progress' ? 'In Progress' : r.status}
               </span>
             </div>
 
-            <div className="space-y-2 mb-5 flex-1">
+            <div className="space-y-2 mb-5 flex-1 cursor-pointer" onClick={() => setSelectedId(r.id)}>
               <div className="flex items-center gap-2 text-xs text-neutral-300">
                 <Calendar size={13} className="text-neutral-500 flex-shrink-0" />
-                {format(new Date(r.date), 'MMM d, yyyy')} <span className="text-neutral-500 mx-1">•</span> {r.timeSlot}
+                {format(new Date(r.date), 'MMM d, yyyy')} <span className="text-neutral-500 mx-1">•</span> {formatTimeSlot(r.timeSlot)}
               </div>
               <div className="flex items-center gap-2 text-xs text-neutral-300">
                 <MapPin size={13} className="text-neutral-500 flex-shrink-0" />
@@ -592,7 +748,7 @@ function TattooReservationsView() {
 
             <div className="border-t border-neutral-800 pt-4 space-y-3">
               {r.description && (
-                <div>
+                <div className="cursor-pointer" onClick={() => setSelectedId(r.id)}>
                   <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-1">Concept</p>
                   <p className="text-xs text-neutral-400 italic line-clamp-2">"{r.description}"</p>
                 </div>
@@ -609,12 +765,26 @@ function TattooReservationsView() {
                 <a href={`tel:${r.contactNumber}`} className="w-7 h-7 rounded bg-neutral-900 flex items-center justify-center text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
                   <Phone size={12} />
                 </a>
-                <a href={`mailto:${r.email}`} className="w-7 h-7 rounded bg-neutral-900 flex items-center justify-center text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
-                  <Mail size={12} />
-                </a>
+                {r.email && (
+                  <a href={`mailto:${r.email}`} className="w-7 h-7 rounded bg-neutral-900 flex items-center justify-center text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors">
+                    <Mail size={12} />
+                  </a>
+                )}
               </div>
               
-              <select value={r.status} onChange={(e) => updateTattooReservationStatus(r.id, e.target.value as any)}
+              <select value={r.status} onChange={(e) => {
+                  const newStatus = e.target.value as any;
+                  if (newStatus === 'completed') {
+                    if (!isSessionFinished(r.date, r.timeSlot, 2)) {
+                      toast.error("Session Not Finished", { description: "You can only mark this reservation as complete after its scheduled time has ended."});
+                      return;
+                    }
+                    setCompleteTarget(r.id);
+                    setShowCompleteDialog(true);
+                  } else {
+                    updateTattooReservationStatus(r.id, newStatus);
+                  }
+                }}
                 className="bg-neutral-900 border border-neutral-700 text-neutral-300 text-xs font-semibold rounded-lg px-2 py-1.5 focus:border-violet-500 focus:outline-none cursor-pointer">
                 <option value="pending">Pending</option>
                 <option value="confirmed">Confirmed</option>
@@ -650,10 +820,178 @@ function TattooReservationsView() {
                 </button>
               )}
             </div>
+
+            {/* Status Quick Actions */}
+            <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800">
+              {r.status === 'pending' && (
+                <button onClick={() => { updateTattooReservationStatus(r.id, 'confirmed'); toast.success("Tattoo booking confirmed!"); }} className="flex-1 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-[10px] font-bold rounded-lg border border-emerald-700/30 transition-colors">
+                  Confirm Booking
+                </button>
+              )}
+              {r.status === 'confirmed' && (
+                <button 
+                  onClick={() => { 
+                    if (!isToday(new Date(r.date))) {
+                      toast.error("Invalid Start Date", { description: "You can only start a session on the exact date of the booking." });
+                      return;
+                    }
+                    updateTattooReservationStatus(r.id, 'in-progress'); 
+                    toast.success("Session started!"); 
+                  }} 
+                  className="flex-1 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[10px] font-bold rounded-lg border border-blue-700/30 transition-colors"
+                >
+                  Start Session
+                </button>
+              )}
+              {r.status === 'in-progress' && (
+                <button 
+                  onClick={() => {
+                    if (!isSessionFinished(r.date, r.timeSlot, 2)) {
+                      toast.error("Session Not Finished", { description: "You can only mark this reservation as complete after its scheduled time has ended." });
+                      return;
+                    }
+                    setCompleteTarget(r.id);
+                    setShowCompleteDialog(true);
+                  }} 
+                  className="flex-1 py-2 bg-neutral-700/50 hover:bg-neutral-600/50 text-neutral-300 text-[10px] font-bold rounded-lg border border-neutral-700 transition-colors"
+                >
+                  Mark Complete
+                </button>
+              )}
+              {(r.status !== 'cancelled' && r.status !== 'completed' && r.status !== 'denied') && (
+                <button onClick={() => { setCancelTarget(r.id); setShowCancelDialog(true); }} className="px-3 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 text-[10px] font-bold rounded-lg border border-rose-700/30 transition-colors">
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
           );
         })}
       </div>
+
+      {/* Detail Panel */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-4 border-b border-neutral-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-neutral-100">{selected.customerName}</h2>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-xs text-neutral-500 font-mono">#{selected.id.toUpperCase()}</p>
+                  <button onClick={() => { navigator.clipboard.writeText(selected.id.toUpperCase()); toast.success("ID copied!"); }} className="text-neutral-500 hover:text-neutral-300 transition-colors">
+                    <Copy size={12} />
+                  </button>
+                </div>
+              </div>
+              <button onClick={() => setSelectedId(null)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="space-y-0.5">
+                  <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Date & Time</p>
+                  <p className="text-neutral-300">{format(selected.date, 'MMM d, yyyy')}</p>
+                  <p className="text-neutral-500 text-xs">{selected.timeSlot ? formatTimeSlot(selected.timeSlot) : format(selected.date, 'h:mm a')}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Status</p>
+                  <span className={`inline-flex px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
+                    selected.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                    selected.status === 'confirmed' ? 'bg-sky-500/10 text-sky-400' :
+                    selected.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
+                    selected.status === 'denied' ? 'bg-red-500/10 text-red-500' :
+                    'bg-rose-500/10 text-rose-400'
+                  }`}>
+                    {selected.status === 'in-progress' ? 'In Progress' : selected.status}
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Contact</p>
+                  <p className="text-neutral-300">{selected.contactNumber}</p>
+                  {selected.email && <p className="text-neutral-500 text-xs">{selected.email}</p>}
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Placement</p>
+                  <p className="text-neutral-300">{selected.placement}</p>
+                  <p className="text-neutral-500 text-xs">{selected.size}</p>
+                </div>
+              </div>
+
+              {selected.description && (
+                <div className="bg-neutral-900 rounded-xl p-4 border border-neutral-800">
+                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-2">Design Concept</p>
+                  <p className="text-xs text-neutral-300 leading-relaxed">"{selected.description}"</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Reservation Dialog */}
+      {showCancelDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-4 border-b border-neutral-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-neutral-100">Cancel Tattoo Booking</h2>
+                <p className="text-xs text-neutral-500">Reservation #{cancelTarget?.toUpperCase()}</p>
+              </div>
+              <button onClick={() => setShowCancelDialog(false)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg"><X size={16} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-neutral-500">Are you sure you want to cancel this booking?</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowCancelDialog(false)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Keep Booking</button>
+                <button type="button" onClick={() => {
+                    if (cancelTarget) {
+                      updateTattooReservationStatus(cancelTarget, 'cancelled');
+                      setShowCancelDialog(false); setCancelTarget(null);
+                      toast.success("Booking cancelled.");
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-sm rounded-xl font-semibold transition-all shadow-lg shadow-rose-900/30 flex items-center justify-center gap-2">
+                  <X size={15} /> Confirm Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Reservation Dialog */}
+      {showCompleteDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-4 border-b border-neutral-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-neutral-100">Complete Tattoo Session</h2>
+                <p className="text-xs text-neutral-500">Reservation #{completeTarget?.toUpperCase()}</p>
+              </div>
+              <button onClick={() => setShowCompleteDialog(false)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg"><X size={16} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-neutral-500">Are you sure you want to mark this tattoo session as complete? This will finalize the session and lock the record.</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setShowCompleteDialog(false)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
+                <button type="button" onClick={() => {
+                    if (completeTarget) {
+                      updateTattooReservationStatus(completeTarget, 'completed');
+                      setShowCompleteDialog(false);
+                      setCompleteTarget(null);
+                      setSelectedId(null);
+                      toast.success("Session marked as completed!");
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-xl font-semibold transition-all shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2">
+                  <CheckCircle size={15} /> Confirm Complete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   CreditCard, Banknote, AlertTriangle, CircleCheck,
   ShoppingCart
 } from 'lucide-react';
-import { isToday, differenceInSeconds, addMinutes } from 'date-fns';
+import { isToday, differenceInSeconds, addMinutes, format } from 'date-fns';
 import { useSearchParams, useNavigate } from 'react-router'; 
 
 // 🚨 POS HARDCODED MENU
@@ -24,7 +24,7 @@ type PaymentStatus = 'paid' | 'partial' | 'unpaid';
 
 const formatPHP = (amount: number) => `₱${(amount || 0).toFixed(2)}`;
 
-// 🚨 NEW HELPER: Formats seconds into strictly HH:MM:SS
+// Formats seconds into strictly HH:MM:SS
 const formatHHMMSS = (totalSeconds: number) => {
   const hrs = Math.floor(totalSeconds / 3600);
   const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -32,9 +32,19 @@ const formatHHMMSS = (totalSeconds: number) => {
   return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
+// 🚨 NEW HELPER: Formats 24-hour time to 12-hour AM/PM
+const formatTimeSlot = (time24: string) => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 || 12;
+  return `${formattedHour}:${m} ${ampm}`;
+};
+
 type CustomerSource =
   | { kind: 'queue';        id: string; name: string; partySize: number; contact: string; notes?: string }
-  | { kind: 'reservation';  id: string; name: string; partySize: number; contact: string; durationHours: number; timeSlot: string };
+  | { kind: 'reservation';  id: string; name: string; partySize: number; contact: string; durationHours: number; timeSlot: string; date?: Date };
 
 export function Tables() {
   const { 
@@ -56,7 +66,7 @@ export function Tables() {
   const [adminPassword, setAdminPassword] = useState('');
   const [voidError, setVoidError] = useState('');
 
-  // 🚨 NEW: Global tick to make POS Sidebar & Modals live update every second
+  // Global tick to make POS Sidebar & Modals live update every second
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -141,13 +151,15 @@ export function Tables() {
   const todayReservations: CustomerSource[] = reservations
     .filter(r => (r.status === 'confirmed' || r.status === 'pending') && isToday(new Date(r.date)))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .map(r => ({ kind: 'reservation', id: r.id, name: r.customerName, partySize: r.partySize, contact: r.contactNumber, durationHours: r.durationHours, timeSlot: r.timeSlot }));
+    .map(r => ({ kind: 'reservation', id: r.id, name: r.customerName, partySize: r.partySize, contact: r.contactNumber, durationHours: r.durationHours, timeSlot: r.timeSlot, date: r.date }));
 
   const allCustomers: CustomerSource[] = [...waitingCustomers, ...todayReservations];
 
+  // Handles both queue assignment and direct reservation assignment
   useEffect(() => {
     const assignTableId = searchParams.get('assignTable');
     const queueId = searchParams.get('queueId');
+    const reservationId = searchParams.get('reservationId');
 
     if (assignTableId) {
       setAssigningTableId(assignTableId);
@@ -160,10 +172,31 @@ export function Tables() {
           setDurationMinutes(60);
           setAmountPaid(((60 / 60) * rates.hourlyRate).toFixed(2));
         }
+      } else if (reservationId) {
+        const matchingRes = reservations.find(r => r.id === reservationId);
+        if (matchingRes) {
+          const resSource: CustomerSource = {
+            kind: 'reservation', 
+            id: matchingRes.id, 
+            name: matchingRes.customerName, 
+            partySize: matchingRes.partySize, 
+            contact: matchingRes.contactNumber, 
+            durationHours: matchingRes.durationHours, 
+            timeSlot: matchingRes.timeSlot,
+            date: matchingRes.date
+          };
+          setSelectedCustomer(resSource);
+          setCustomerName(matchingRes.customerName);
+          const mins = matchingRes.durationHours * 60;
+          setDurationMinutes(mins);
+          
+          const advance = matchingRes.downPaymentPaid ? matchingRes.downPaymentAmount : 0;
+          setAmountPaid(advance > 0 ? advance.toFixed(2) : '0.00');
+        }
       }
       navigate('/staff/tables', { replace: true });
     }
-  }, [searchParams, navigate, waitingCustomers, rates.hourlyRate]);
+  }, [searchParams, navigate, queue, reservations, rates.hourlyRate]);
 
   const endingTable = tables.find(t => t.id === endingTableId);
   const getEndSessionInfo = () => {
@@ -288,8 +321,6 @@ export function Tables() {
     if (selectedCustomer) {
       if (selectedCustomer.kind === 'queue') {
         await removeFromQueue(selectedCustomer.id);
-      } else if (selectedCustomer.kind === 'reservation') {
-        await updateReservationStatus(selectedCustomer.id, 'checked-in');
       }
     }
 
@@ -478,7 +509,6 @@ export function Tables() {
             let overtimeCost = 0;
             let overtimeSecs = 0;
             
-            // 🚨 Use live ticking "now" for Sidebar stats
             const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(session.startTime)));
 
             if (session.durationMinutes === 0) {
@@ -707,7 +737,9 @@ export function Tables() {
                   {selectedCustomer && (
                     <p className="text-[11px] text-emerald-500 flex items-center gap-1">
                       <CheckCircle size={10} />
-                      {selectedCustomer.kind === 'queue' ? 'Assigned from walk-in queue' : `Assigned from today's reservation · ${(selectedCustomer as any).timeSlot}`}
+                      {selectedCustomer.kind === 'queue' 
+                        ? 'Assigned from walk-in queue' 
+                        : `Assigned from reservation · ${(selectedCustomer as any).date && !isToday(new Date((selectedCustomer as any).date)) ? format(new Date((selectedCustomer as any).date), 'MMM d') : "Today"} @ ${formatTimeSlot((selectedCustomer as any).timeSlot)}`}
                     </p>
                   )}
                 </div>
