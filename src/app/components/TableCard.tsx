@@ -14,6 +14,17 @@ interface TableCardProps {
 
 const formatPHP = (amount: number) => `₱${amount.toFixed(2)}`;
 
+// 🚨 NEW FORMATTER: Switches to HH:MM:SS if > 1 hour
+const formatTimeDisplay = (totalSecs: number) => {
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = Math.floor(totalSecs % 60);
+  if (h > 0) {
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
 export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }: TableCardProps) {
   const [now, setNow] = useState(new Date());
   const { rates } = useAppContext(); 
@@ -23,7 +34,6 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
       const newNow = new Date();
       setNow(newNow);
       
-      // 🚨 ONLY SOUND ALARMS FOR STRICT FIXED SESSIONS (>0)
       if (table.session && table.session.durationMinutes > 0) {
         const endTime = addMinutes(new Date(table.session.startTime), table.session.durationMinutes);
         const secsLeft = differenceInSeconds(endTime, newNow);
@@ -49,32 +59,30 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     const activeRate = rates.hourlyRate; 
 
     if (durationMinutes === 0) {
-      // 🚨 PURE OPEN TIME (Counts up naturally from 0)
+      // 🚨 PURE OPEN TIME
       const totalSecsElapsed = Math.max(0, differenceInSeconds(now, new Date(startTime)));
       const minsElapsed = Math.floor(totalSecsElapsed / 60);
-      const secsElapsed = totalSecsElapsed % 60;
       
-      const currentCharge = (totalSecsElapsed / 3600) * activeRate;
+      const billableSecs = Math.max(totalSecsElapsed, 30 * 60);
+      const currentCharge = (billableSecs / 3600) * activeRate;
       
       return {
-        formatted: `${minsElapsed.toString().padStart(2, '0')}:${secsElapsed.toString().padStart(2, '0')}`,
+        formatted: formatTimeDisplay(totalSecsElapsed),
         isAlert: false, isOvertime: false, overtimeCharge: 0,
         elapsed: minsElapsed, endTime: new Date(), currentCharge, isOpenTime: true, secsLeft: 0
       };
 
     } else if (durationMinutes < 0) {
-      // 🚨 CONVERTED TO OPEN TIME (Takes effect ONLY after fixed time ends)
+      // 🚨 CONVERTED TO OPEN TIME
       const baseMins = Math.abs(durationMinutes);
       const endTime = addMinutes(new Date(startTime), baseMins);
       const totalSecsLeft = differenceInSeconds(endTime, now);
 
       if (totalSecsLeft > 0) {
         // Phase 1: Still counting down their original fixed time
-        const mins = Math.floor(totalSecsLeft / 60);
-        const secs = totalSecsLeft % 60;
         return {
-          formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
-          isAlert: false, // Turn off visual flashing alerts since they are staying
+          formatted: formatTimeDisplay(totalSecsLeft),
+          isAlert: false, 
           isOvertime: false, 
           overtimeCharge: 0,
           elapsed: Math.floor(differenceInSeconds(now, new Date(startTime)) / 60),
@@ -82,21 +90,19 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
           isOpenTime: false, 
           currentCharge: (baseMins / 60) * activeRate, 
           secsLeft: totalSecsLeft,
-          isConverted: true // UI helper flag
+          isConverted: true 
         };
       } else {
-        // Phase 2: Fixed time hit zero! Seamlessly flip to open time count-up.
+        // Phase 2: Fixed time hit zero! Flip to total elapsed time.
+        const totalSecsElapsed = Math.max(0, differenceInSeconds(now, new Date(startTime)));
         const extraSecs = Math.abs(totalSecsLeft);
-        const mins = Math.floor(extraSecs / 60);
-        const secs = extraSecs % 60;
-        
         const baseCharge = (baseMins / 60) * activeRate;
         const extraCharge = (Math.ceil(extraSecs / 60) / 60) * activeRate;
 
         return {
-          formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+          formatted: formatTimeDisplay(totalSecsElapsed),
           isAlert: false, 
-          isOvertime: false, // Prevents overtime penalties
+          isOvertime: false, 
           overtimeCharge: 0, 
           elapsed: baseMins + Math.ceil(extraSecs / 60),
           endTime, 
@@ -113,15 +119,13 @@ export function TableCard({ table, onAssign, onEnd, onExtend, nextReservation }:
     const totalSecsLeft = differenceInSeconds(endTime, now);
     const isOvertime = totalSecsLeft < 0;
     const absSecs = Math.abs(totalSecsLeft);
-    const mins = Math.floor(absSecs / 60);
-    const secs = absSecs % 60;
     const isAlert = !isOvertime && totalSecsLeft <= 900;
 
     const overMins = isOvertime ? Math.ceil(absSecs / 60) : 0;
     const overtimeCharge = (overMins / 60) * activeRate; 
 
     return {
-      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+      formatted: formatTimeDisplay(absSecs),
       isAlert, isOvertime, overtimeCharge,
       elapsed: Math.floor(differenceInSeconds(now, new Date(startTime)) / 60),
       endTime, isOpenTime: false, currentCharge: table.session.amountPaid, secsLeft: totalSecsLeft

@@ -24,6 +24,14 @@ type PaymentStatus = 'paid' | 'partial' | 'unpaid';
 
 const formatPHP = (amount: number) => `₱${(amount || 0).toFixed(2)}`;
 
+// 🚨 NEW HELPER: Formats seconds into strictly HH:MM:SS
+const formatHHMMSS = (totalSeconds: number) => {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 type CustomerSource =
   | { kind: 'queue';        id: string; name: string; partySize: number; contact: string; notes?: string }
   | { kind: 'reservation';  id: string; name: string; partySize: number; contact: string; durationHours: number; timeSlot: string };
@@ -48,6 +56,13 @@ export function Tables() {
   const [adminPassword, setAdminPassword] = useState('');
   const [voidError, setVoidError] = useState('');
 
+  // 🚨 NEW: Global tick to make POS Sidebar & Modals live update every second
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const handleConfirmVoid = async () => {
     const isAdminValid = staffUsers.some(u => (u.isAdmin || u.role?.toLowerCase() === 'admin') && u.password === adminPassword);
     if (!isAdminValid) {
@@ -56,7 +71,6 @@ export function Tables() {
     }
     if (selectedPosTableId && voidOrderId) {
       if (voidOrderId === 'OPEN_TIME_CONVERSION') {
-        // 🚨 REVERT OPEN TIME BACK TO FIXED DURATION
         const activeTable = tables.find(t => t.id === selectedPosTableId);
         if (activeTable?.session && activeTable.session.durationMinutes < 0) {
           await assignTable(activeTable.id, {
@@ -65,7 +79,6 @@ export function Tables() {
           });
         }
       } else {
-        // 🚨 NORMAL ORDER VOID
         await removeOrderFromTable(selectedPosTableId, voidOrderId);
       }
     }
@@ -156,18 +169,16 @@ export function Tables() {
   const getEndSessionInfo = () => {
     if (!endingTable?.session) return null;
     const { startTime, durationMinutes: bookedMins, amountPaid: alreadyPaid, hourlyRate } = endingTable.session;
-    const now = new Date();
     const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(startTime)));
     const elapsedMins = Math.ceil(elapsedSecs / 60);
     
-    let bookedCharge = 0, overtimeCharge = 0, totalDue = 0, isOvertime = false, overtimeMins = 0;
+    let bookedCharge = 0, overtimeCharge = 0, totalDue = 0, isOvertime = false, overtimeMins = 0, overtimeSecs = 0;
 
     if (bookedMins === 0) {
-      // 🚨 PURE OPEN TIME
-      totalDue = (elapsedSecs / 3600) * hourlyRate;
+      const billableSecs = Math.max(elapsedSecs, 30 * 60); 
+      totalDue = (billableSecs / 3600) * hourlyRate;
       bookedCharge = totalDue;
     } else if (bookedMins < 0) {
-      // 🚨 CONVERTED OPEN TIME
       const baseMins = Math.abs(bookedMins);
       const endTime = addMinutes(new Date(startTime), baseMins);
       if (now <= endTime) {
@@ -179,10 +190,12 @@ export function Tables() {
         bookedCharge = totalDue;
       }
     } else {
-      // 🚨 NORMAL FIXED DURATION
       const endTime = addMinutes(new Date(startTime), bookedMins);
       isOvertime = now > endTime;
-      overtimeMins = isOvertime ? Math.ceil(differenceInSeconds(now, endTime) / 60) : 0;
+      if (isOvertime) {
+        overtimeSecs = differenceInSeconds(now, endTime);
+        overtimeMins = Math.ceil(overtimeSecs / 60);
+      }
       bookedCharge = (bookedMins / 60) * hourlyRate;
       overtimeCharge = (overtimeMins / 60) * hourlyRate;
       totalDue = bookedCharge + overtimeCharge;
@@ -195,8 +208,8 @@ export function Tables() {
     const balance = Math.max(0, totalDue - totalAlreadyPaid);
     
     return { 
-      elapsedMins, alreadyPaid: totalAlreadyPaid, bookedCharge, overtimeCharge, 
-      totalDue, balance, isOvertime, overtimeMins, hasResFee: resFee > 0 
+      elapsedMins, elapsedSecs, alreadyPaid: totalAlreadyPaid, bookedCharge, overtimeCharge, 
+      totalDue, balance, isOvertime, overtimeMins, overtimeSecs, hasResFee: resFee > 0 
     };
   };
   const endInfo = getEndSessionInfo();
@@ -204,12 +217,11 @@ export function Tables() {
   const extendingTable = tables.find(t => t.id === extendingTableId);
   const extendCharge = (extendMinutes / 60) * rates.hourlyRate;
 
-  let currentOvertimeMins = 0;
+  let currentOvertimeSecs = 0;
   if (extendingTable?.session && extendingTable.session.durationMinutes > 0) {
     const endTime = addMinutes(new Date(extendingTable.session.startTime), extendingTable.session.durationMinutes);
-    const now = new Date();
     if (now > endTime) {
-      currentOvertimeMins = Math.ceil(differenceInSeconds(now, endTime) / 60);
+      currentOvertimeSecs = differenceInSeconds(now, endTime);
     }
   }
 
@@ -464,16 +476,17 @@ export function Tables() {
 
             let tableCost = 0;
             let overtimeCost = 0;
-            let overtimeMins = 0;
+            let overtimeSecs = 0;
+            
+            // 🚨 Use live ticking "now" for Sidebar stats
+            const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(session.startTime)));
 
             if (session.durationMinutes === 0) {
-              const elapsedSecs = Math.max(0, differenceInSeconds(new Date(), new Date(session.startTime)));
-              tableCost = (elapsedSecs / 3600) * session.hourlyRate;
+              const billableSecs = Math.max(elapsedSecs, 30 * 60);
+              tableCost = (billableSecs / 3600) * session.hourlyRate;
             } else if (session.durationMinutes < 0) {
-              // 🚨 CALCULATE FOR CONVERTED OPEN TIME
               const baseMins = Math.abs(session.durationMinutes);
               const endTime = addMinutes(new Date(session.startTime), baseMins);
-              const now = new Date();
               if (now <= endTime) {
                 tableCost = (baseMins / 60) * session.hourlyRate;
               } else {
@@ -483,10 +496,9 @@ export function Tables() {
             } else {
               tableCost = (session.durationMinutes / 60) * session.hourlyRate;
               const endTime = addMinutes(new Date(session.startTime), session.durationMinutes);
-              const now = new Date();
               if (now > endTime) {
-                overtimeMins = Math.ceil(differenceInSeconds(now, endTime) / 60);
-                overtimeCost = (overtimeMins / 60) * session.hourlyRate;
+                overtimeSecs = differenceInSeconds(now, endTime);
+                overtimeCost = (Math.ceil(overtimeSecs / 60) / 60) * session.hourlyRate;
               }
             }
 
@@ -524,16 +536,16 @@ export function Tables() {
                 <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 mb-3 min-h-0 custom-scrollbar">
                   <div className="flex justify-between items-start bg-neutral-950 px-3 py-2 rounded-lg border border-neutral-800">
                     <div>
-                      <p className="text-[11px] text-neutral-300 font-semibold">Table Time</p>
+                      <p className="text-[11px] text-neutral-300 font-semibold">Table Time <span className="font-mono text-emerald-400 ml-1">({formatHHMMSS(elapsedSecs)})</span></p>
                       <p className="text-[9px] text-neutral-500">@ ₱{session.hourlyRate.toFixed(2)}/hr</p>
                     </div>
                     <span className="text-[11px] font-bold text-neutral-200">₱{tableCost.toFixed(2)}</span>
                   </div>
 
-                  {overtimeMins > 0 && (
+                  {overtimeSecs > 0 && (
                     <div className="flex justify-between items-start bg-amber-950/20 px-3 py-2 rounded-lg border border-amber-900/30">
                       <div>
-                        <p className="text-[11px] text-amber-500 font-semibold flex items-center gap-1"><AlertTriangle size={10} /> Overtime ({overtimeMins}m)</p>
+                        <p className="text-[11px] text-amber-500 font-semibold flex items-center gap-1"><AlertTriangle size={10} /> Overtime <span className="font-mono ml-0.5">({formatHHMMSS(overtimeSecs)})</span></p>
                         <p className="text-[9px] text-amber-500/70">@ ₱{session.hourlyRate.toFixed(2)}/hr</p>
                       </div>
                       <span className="text-[11px] font-bold text-amber-500">₱{overtimeCost.toFixed(2)}</span>
@@ -780,19 +792,22 @@ export function Tables() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-neutral-400">Booked Duration</span>
-                  <span className="text-neutral-200">
+                  <span className="text-neutral-200 font-mono">
                     {endingTable.session.durationMinutes === 0 ? 'Open Time' : 
-                     endingTable.session.durationMinutes < 0 ? `Converted Open Time (${Math.abs(endingTable.session.durationMinutes)}m Base)` : 
-                     endingTable.session.durationMinutes < 60 ? `${endingTable.session.durationMinutes}m` : 
-                     `${endingTable.session.durationMinutes / 60}h`}
+                     endingTable.session.durationMinutes < 0 ? `Converted Open Time (${formatHHMMSS(Math.abs(endingTable.session.durationMinutes) * 60)} Base)` : 
+                     formatHHMMSS(endingTable.session.durationMinutes * 60)}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-sm border-t border-neutral-800/50 mt-1 pt-1">
+                  <span className="text-neutral-400">Total Elapsed</span>
+                  <span className="text-neutral-200 font-mono">{formatHHMMSS(endInfo.elapsedSecs)}</span>
+                </div>
+                <div className="flex justify-between text-sm mt-2">
                   <span className="text-neutral-400">Booked Charge</span><span className="text-neutral-200">{formatPHP(endInfo.bookedCharge)}</span>
                 </div>
                 {endInfo.isOvertime && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-amber-400 flex items-center gap-1"><AlertTriangle size={12} /> Overtime ({endInfo.overtimeMins}m)</span>
+                    <span className="text-amber-400 flex items-center gap-1"><AlertTriangle size={12} /> Overtime <span className="font-mono text-xs">({formatHHMMSS(endInfo.overtimeSecs)})</span></span>
                     <span className="text-amber-400 font-semibold">+{formatPHP(endInfo.overtimeCharge)}</span>
                   </div>
                 )}
@@ -924,13 +939,13 @@ export function Tables() {
               </div>
 
               {/* 🚨 NEW: OVERTIME ABSORPTION NOTICE */}
-              {currentOvertimeMins > 0 && extendMinutes > 0 && (
+              {currentOvertimeSecs > 0 && extendMinutes > 0 && (
                 <div className="bg-rose-950/20 border border-rose-900/30 rounded-xl p-3 text-xs text-rose-400 mt-2">
                   <div className="flex items-center gap-1.5 font-bold mb-1"><AlertTriangle size={12}/> Overtime Applied</div>
                   <p className="text-[10px] leading-relaxed">
-                    This table is currently <strong>{currentOvertimeMins}m in overtime</strong>. 
+                    This table is currently <strong>{formatHHMMSS(currentOvertimeSecs)} in overtime</strong>. 
                     Extending by {extendMinutes}m will automatically absorb the overtime charge, 
-                    giving the customer <strong>{Math.max(0, extendMinutes - currentOvertimeMins)}m</strong> of new playing time.
+                    giving the customer <strong>{formatHHMMSS(Math.max(0, (extendMinutes * 60) - currentOvertimeSecs))}</strong> of new playing time.
                   </p>
                 </div>
               )}

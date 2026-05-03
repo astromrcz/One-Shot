@@ -3,31 +3,59 @@ import { useAppContext } from '../context/AppContext';
 import { Table, QueueItem } from '../context/AppContext';
 import { Clock, Users, X, Maximize2 } from 'lucide-react';
 
+// 🚨 FORMATTER: Switches to HH:MM:SS if > 1 hour
+const formatTimeDisplay = (totalSecs: number) => {
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = Math.floor(totalSecs % 60);
+  if (h > 0) {
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
 // ── Helpers ────────────────────────────────────────────────────
 function getSessionTimer(table: Table): {
-  mm: string; ss: string; isOvertime: boolean; percentLeft: number; label: string; isOpenTime: boolean; secsLeft: number;
+  formatted: string; isOvertime: boolean; percentLeft: number; label: string; isOpenTime: boolean; secsLeft: number;
 } {
-  if (!table.session) return { mm: '--', ss: '--', isOvertime: false, percentLeft: 0, label: '', isOpenTime: false, secsLeft: 0 };
+  if (!table.session) return { formatted: '--:--', isOvertime: false, percentLeft: 0, label: '', isOpenTime: false, secsLeft: 0 };
   const start = new Date(table.session.startTime).getTime();
   
   if (table.session.durationMinutes === 0) {
-    const elapsed = Math.max(0, Date.now() - start);
-    const mm = String(Math.floor(elapsed / 60000)).padStart(2, '0');
-    const ss = String(Math.floor((elapsed % 60000) / 1000)).padStart(2, '0');
-    return { mm, ss, isOvertime: false, percentLeft: 100, label: `${mm}:${ss} elapsed`, isOpenTime: true, secsLeft: 0 };
+    // Pure Open Time
+    const elapsedSecs = Math.floor(Math.max(0, Date.now() - start) / 1000);
+    const formatted = formatTimeDisplay(elapsedSecs);
+    return { formatted, isOvertime: false, percentLeft: 100, label: `${formatted} elapsed`, isOpenTime: true, secsLeft: 0 };
+  } else if (table.session.durationMinutes < 0) {
+     // Converted Open Time
+     const baseMins = Math.abs(table.session.durationMinutes);
+     const endMs = start + (baseMins * 60000);
+     const remainingMs = endMs - Date.now();
+     if (remainingMs > 0) {
+         // Still in fixed phase
+         const remainingSecs = Math.floor(remainingMs / 1000);
+         const formatted = formatTimeDisplay(remainingSecs);
+         const percentLeft = Math.max(0, Math.min(100, (remainingMs / (baseMins * 60000)) * 100));
+         return { formatted, isOvertime: false, percentLeft, label: `${formatted} remaining`, isOpenTime: false, secsLeft: remainingSecs };
+     } else {
+         // Flipped to open time phase
+         const elapsedSecs = Math.floor(Math.max(0, Date.now() - start) / 1000);
+         const formatted = formatTimeDisplay(elapsedSecs);
+         return { formatted, isOvertime: false, percentLeft: 100, label: `${formatted} elapsed`, isOpenTime: true, secsLeft: 0 };
+     }
   }
 
+  // Standard Fixed Time
   const totalMs = table.session.durationMinutes * 60000;
   const elapsed = Date.now() - start;
-  const remaining = totalMs - elapsed;
-  const isOvertime = remaining < 0;
-  const abs = Math.abs(remaining);
-  const mm = String(Math.floor(abs / 60000)).padStart(2, '0');
-  const ss = String(Math.floor((abs % 60000) / 1000)).padStart(2, '0');
-  const percentLeft = Math.max(0, Math.min(100, (remaining / totalMs) * 100));
-  const label = isOvertime ? `+${mm}:${ss} Overtime` : `${mm}:${ss} remaining`;
-  const secsLeft = Math.floor(remaining / 1000);
-  return { mm, ss, isOvertime, percentLeft, label, isOpenTime: false, secsLeft };
+  const remainingMs = totalMs - elapsed;
+  const isOvertime = remainingMs < 0;
+  const absSecs = Math.floor(Math.abs(remainingMs) / 1000);
+  const formatted = formatTimeDisplay(absSecs);
+  const percentLeft = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
+  const label = isOvertime ? `+${formatted} Overtime` : `${formatted} remaining`;
+  const secsLeft = Math.floor(remainingMs / 1000);
+  return { formatted, isOvertime, percentLeft, label, isOpenTime: false, secsLeft };
 }
 
 function formatWaitTime(arrivalTime: Date, position: number): string {
@@ -43,7 +71,6 @@ function formatWaitTime(arrivalTime: Date, position: number): string {
 function TableCard({ table, tick }: { table: Table; tick: number }) {
   const timer = getSessionTimer(table);
   const isAlert = !timer.isOvertime && !timer.isOpenTime && timer.secsLeft <= 900 && timer.secsLeft > 0;
-  // Adjusted minimum speed to 0.8s so it's not too harsh
   const alertPulseDuration = Math.max(0.8, (timer.secsLeft / 900) * 2.5) + 's';
 
   if (table.status === 'available') {
@@ -90,7 +117,6 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         ? 'bg-rose-950/40 border-rose-600/60'
         : timer.isOpenTime ? 'bg-blue-950/20 border-blue-800/40' : 'bg-neutral-900/80 border-neutral-700/50'
     }`}>
-      {/* 🚨 DYNAMIC FLASHING OVERLAYS */}
       {timer.isOvertime && (
         <div className="absolute inset-0 bg-rose-500/15 pointer-events-none" style={{ animation: 'pulse 0.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
       )}
@@ -98,7 +124,6 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         <div className="absolute inset-0 bg-amber-500/15 pointer-events-none" style={{ animation: `pulse ${alertPulseDuration} cubic-bezier(0.4, 0, 0.6, 1) infinite` }} />
       )}
 
-      {/* Table number + customer */}
       <div className="relative z-10 flex items-start justify-between">
         <div className="w-9 h-9 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center flex-shrink-0">
           <span className="text-white font-black">{table.name.replace('Table ', '')}</span>
@@ -116,13 +141,11 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         </div>
       </div>
 
-      {/* Customer name */}
       <div className="relative z-10">
         <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Customer</p>
         <p className="text-white font-bold text-sm mt-0.5 truncate">{table.session?.customerName || '—'}</p>
       </div>
 
-      {/* Countdown */}
       <div className="relative z-10 text-center">
         <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">
           {timer.isOvertime ? 'Overtime' : timer.isOpenTime ? 'Elapsed Time' : 'Time Left'}
@@ -130,10 +153,9 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         <div className={`font-black text-4xl tabular-nums tracking-tight ${
           timer.isOvertime ? 'text-rose-400' : timer.isOpenTime ? 'text-blue-400' : isAlert ? 'text-amber-400' : 'text-white'
         }`}>
-          {timer.mm}:{timer.ss}
+          {timer.isOvertime && '+'}{timer.formatted}
         </div>
 
-        {/* Progress bar */}
         {!timer.isOpenTime && (
           <div className="mt-2 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
             {!timer.isOvertime && (
@@ -198,18 +220,17 @@ export function LiveMonitor() {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    // 1. FAST TICK: Updates the local UI every 1 second for perfectly smooth countdowns and clocks
+    // 1. FAST TICK: Updates the local UI every 1 second
     const localTimer = setInterval(() => {
       setNow(new Date());
-      setTick(t => t + 1); // Forces the TableCards to re-calculate their remaining time instantly
+      setTick(t => t + 1); 
     }, 1000);
 
-    // 2. SLOW FETCH: Silently checks the database every 5 seconds for new reservations/queue members
+    // 2. SLOW FETCH: Checks DB every 5 seconds
     const dbFetcher = setInterval(() => {
       refreshData(true); 
     }, 5000);
 
-    // Cleanup both timers if the page closes
     return () => {
       clearInterval(localTimer);
       clearInterval(dbFetcher);
@@ -222,7 +243,7 @@ export function LiveMonitor() {
 
   const overtimeCount = tables.filter(t => {
     if (t.status !== 'occupied' || !t.session) return false;
-    if (t.session.durationMinutes === 0) return false; // 🚨 FIXED: OPEN TIME IS NEVER OVERTIME
+    if (t.session.durationMinutes <= 0) return false; 
     const end = new Date(t.session.startTime).getTime() + t.session.durationMinutes * 60000;
     return Date.now() > end;
   }).length;
@@ -246,7 +267,6 @@ export function LiveMonitor() {
           </div>
         </div>
 
-        {/* Live clock */}
         <div className="text-right">
           <p className="text-2xl font-black text-white tabular-nums tracking-tight">{timeStr}</p>
           <p className="text-[11px] text-neutral-500">{dateStr}</p>
@@ -326,7 +346,6 @@ export function LiveMonitor() {
                     item={item} 
                     position={i + 1} 
                     onSeat={() => {
-                      // Just navigate them directly to the table management page!
                       window.location.href = '/staff/tables';
                     }}
                   />
@@ -335,7 +354,6 @@ export function LiveMonitor() {
             )}
           </div>
 
-          {/* Queue footer info */}
           <div className="p-4 border-t border-neutral-800/40">
             <p className="text-[10px] text-neutral-700 text-center leading-relaxed">
               Please see staff at the counter to<br />join the queue or for assistance.
