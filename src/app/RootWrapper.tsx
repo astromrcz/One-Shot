@@ -177,12 +177,14 @@ export function RootWrapper() {
   return (
     <AppProvider>
       <RootContent />
+      {/* 🚨 FORCED HIGH Z-INDEX SO IT OVERLAYS ALL MODALS/SIDEBARS */}
       <Toaster 
         theme="dark"
         position="top-center" 
         expand={true} 
         richColors 
         closeButton 
+        style={{ zIndex: 999999 }}
         toastOptions={{ 
           className: 'toast-with-progress',
           duration: 4000
