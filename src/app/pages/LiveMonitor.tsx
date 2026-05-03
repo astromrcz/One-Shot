@@ -1,17 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Table, QueueItem } from '../context/AppContext';
-import { Clock, Users, X, Maximize2 } from 'lucide-react';
+import { Table, QueueItem, Reservation } from '../context/AppContext';
+import { Clock, Users, Calendar, ArrowRight } from 'lucide-react';
+import { isToday, format } from 'date-fns';
 
-// 🚨 FORMATTER: Switches to HH:MM:SS if > 1 hour
+// 🚨 FORMATTER: HH:MM:SS format
 const formatTimeDisplay = (totalSecs: number) => {
   const h = Math.floor(totalSecs / 3600);
   const m = Math.floor((totalSecs % 3600) / 60);
   const s = Math.floor(totalSecs % 60);
-  if (h > 0) {
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+// 12-hour clock formatter for display
+const formatTimeSlot = (time24: string) => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 || 12;
+  return `${formattedHour}:${m} ${ampm}`;
 };
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -22,30 +30,25 @@ function getSessionTimer(table: Table): {
   const start = new Date(table.session.startTime).getTime();
   
   if (table.session.durationMinutes === 0) {
-    // Pure Open Time
     const elapsedSecs = Math.floor(Math.max(0, Date.now() - start) / 1000);
     const formatted = formatTimeDisplay(elapsedSecs);
     return { formatted, isOvertime: false, percentLeft: 100, label: `${formatted} elapsed`, isOpenTime: true, secsLeft: 0 };
   } else if (table.session.durationMinutes < 0) {
-     // Converted Open Time
      const baseMins = Math.abs(table.session.durationMinutes);
      const endMs = start + (baseMins * 60000);
      const remainingMs = endMs - Date.now();
      if (remainingMs > 0) {
-         // Still in fixed phase
          const remainingSecs = Math.floor(remainingMs / 1000);
          const formatted = formatTimeDisplay(remainingSecs);
          const percentLeft = Math.max(0, Math.min(100, (remainingMs / (baseMins * 60000)) * 100));
          return { formatted, isOvertime: false, percentLeft, label: `${formatted} remaining`, isOpenTime: false, secsLeft: remainingSecs };
      } else {
-         // Flipped to open time phase
          const elapsedSecs = Math.floor(Math.max(0, Date.now() - start) / 1000);
          const formatted = formatTimeDisplay(elapsedSecs);
          return { formatted, isOvertime: false, percentLeft: 100, label: `${formatted} elapsed`, isOpenTime: true, secsLeft: 0 };
      }
   }
 
-  // Standard Fixed Time
   const totalMs = table.session.durationMinutes * 60000;
   const elapsed = Date.now() - start;
   const remainingMs = totalMs - elapsed;
@@ -58,17 +61,8 @@ function getSessionTimer(table: Table): {
   return { formatted, isOvertime, percentLeft, label, isOpenTime: false, secsLeft };
 }
 
-function formatWaitTime(arrivalTime: Date, position: number): string {
-  const avgMinutesPerTable = 60;
-  const waitMinutes = position * avgMinutesPerTable;
-  if (waitMinutes < 60) return `~${waitMinutes} min`;
-  const h = Math.floor(waitMinutes / 60);
-  const m = waitMinutes % 60;
-  return m > 0 ? `~${h}h ${m}m` : `~${h}h`;
-}
-
 // ── Single Table Card ──────────────────────────────────────────
-function TableCard({ table, tick }: { table: Table; tick: number }) {
+function TableCard({ table }: { table: Table }) {
   const timer = getSessionTimer(table);
   const isAlert = !timer.isOvertime && !timer.isOpenTime && timer.secsLeft <= 900 && timer.secsLeft > 0;
   const alertPulseDuration = Math.max(0.8, (timer.secsLeft / 900) * 2.5) + 's';
@@ -110,7 +104,6 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
     );
   }
 
-  // Occupied
   return (
     <div className={`relative border-2 rounded-2xl p-5 flex flex-col gap-3 overflow-hidden ${
       timer.isOvertime
@@ -134,8 +127,8 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
             : timer.isOpenTime 
               ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20'
               : isAlert 
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
         }`}>
           {timer.isOvertime ? '⚠ OVERTIME' : timer.isOpenTime ? 'OPEN TIME' : 'IN USE'}
         </div>
@@ -155,223 +148,166 @@ function TableCard({ table, tick }: { table: Table; tick: number }) {
         }`}>
           {timer.isOvertime && '+'}{timer.formatted}
         </div>
-
-        {!timer.isOpenTime && (
-          <div className="mt-2 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-            {!timer.isOvertime && (
-              <div
-                className={`h-full rounded-full transition-all duration-1000 ${
-                  timer.percentLeft < 15 ? 'bg-amber-500' : 'bg-emerald-500'
-                }`}
-                style={{ width: `${timer.percentLeft}%` }}
-              />
-            )}
-            {timer.isOvertime && (
-              <div className="h-full w-full bg-rose-500/40 animate-pulse" />
-            )}
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
-
-// ── Queue Row ──────────────────────────────────────────────────
-function QueueRow({ item, position, onSeat }: { item: QueueItem; position: number, onSeat: () => void }) {
-  return (
-    <div 
-      onClick={item.status === 'called' ? onSeat : undefined}
-      className={`flex items-center gap-4 px-4 py-3 rounded-xl border ${item.status === 'called' ? 'cursor-pointer hover:bg-emerald-950/60' : ''} ${
-      item.status === 'called'
-        ? 'bg-emerald-950/40 border-emerald-700/40'
-        : 'bg-neutral-900/60 border-neutral-800/60'
-    }`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-black text-sm ${
-        item.status === 'called'
-          ? 'bg-emerald-600 text-white'
-          : position === 1
-          ? 'bg-amber-600/20 border border-amber-600/40 text-amber-400'
-          : 'bg-neutral-800 border border-neutral-700 text-neutral-400'
-      }`}>
-        {position}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className={`font-bold text-sm truncate ${item.status === 'called' ? 'text-emerald-300' : 'text-white'}`}>
-          {item.customerName}
-        </p>
-        <p className="text-[11px] text-neutral-500">{item.partySize} person{item.partySize > 1 ? 's' : ''}</p>
-      </div>
-      {item.status !== 'called' && (
-        <div className="text-right flex-shrink-0">
-          <p className="text-xs font-semibold text-neutral-400">
-            {formatWaitTime(item.arrivalTime, position)}
-          </p>
-          <p className="text-[10px] text-neutral-600">est. wait</p>
-        </div>
-      )}
     </div>
   );
 }
 
 // ── Main Component ─────────────────────────────────────────────
 export function LiveMonitor() {
-  const { tables, queue, refreshData } = useAppContext();
-  const [tick, setTick] = useState(0);
+  const { tables, queue, reservations, refreshData } = useAppContext();
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    // 1. FAST TICK: Updates the local UI every 1 second
-    const localTimer = setInterval(() => {
-      setNow(new Date());
-      setTick(t => t + 1); 
-    }, 1000);
-
-    // 2. SLOW FETCH: Checks DB every 5 seconds
-    const dbFetcher = setInterval(() => {
-      refreshData(true); 
-    }, 5000);
-
+    const localTimer = setInterval(() => setNow(new Date()), 1000);
+    const dbFetcher = setInterval(() => refreshData(true), 5000);
     return () => {
       clearInterval(localTimer);
       clearInterval(dbFetcher);
     };
-  }, []);
+  }, [refreshData]);
+
+  // Derived Waiting Lists
+  const waitingQueue = queue.filter(q => q.status === 'waiting' || q.status === 'called');
+  const todayReservations = reservations.filter(r => 
+    isToday(new Date(r.date)) && (r.status === 'confirmed' || r.status === 'pending')
+  ).sort((a, b) => a.timeSlot.localeCompare(b.timeSlot));
 
   const availableCount = tables.filter(t => t.status === 'available').length;
   const occupiedCount = tables.filter(t => t.status === 'occupied').length;
   const reservedCount = tables.filter(t => t.status === 'reserved').length;
-
+  
   const overtimeCount = tables.filter(t => {
-    if (t.status !== 'occupied' || !t.session) return false;
-    if (t.session.durationMinutes <= 0) return false; 
+    if (t.status !== 'occupied' || !t.session || t.session.durationMinutes <= 0) return false;
     const end = new Date(t.session.startTime).getTime() + t.session.durationMinutes * 60000;
-    return Date.now() > end;
+    return now.getTime() > end;
   }).length;
 
-  const waitingQueue = queue.filter(q => q.status === 'waiting' || q.status === 'called');
-
-  const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const getGraceTime = (startTime: Date) => {
+    const elapsed = now.getTime() - new Date(startTime).getTime();
+    const remaining = Math.max(0, (15 * 60 * 1000) - elapsed);
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    return { 
+      formatted: `${mins}:${secs.toString().padStart(2, '0')}`,
+      isUrgent: mins < 5
+    };
+  };
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex flex-col overflow-auto">
-      {/* ── Header Bar ── */}
+    <div className="min-h-screen bg-neutral-950 flex flex-col overflow-hidden">
+      {/* ── Header ── */}
       <header className="flex-none bg-black/60 border-b border-neutral-800/80 px-6 py-4 flex items-center justify-between backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-950">
             <span className="text-white font-black text-base tracking-tight">1S</span>
           </div>
           <div>
-            <p className="text-white font-black text-base tracking-tight leading-tight">ONE SHOT BAR & BILLIARDS</p>
-            <p className="text-[11px] text-neutral-500 uppercase tracking-widest">Live Table Status & Walk-in Queue</p>
+            <p className="text-white font-black text-base tracking-tight leading-tight uppercase">One Shot Bar & Billiards</p>
+            <p className="text-[11px] text-neutral-500 uppercase tracking-widest">Live Status & Waiting List</p>
           </div>
         </div>
-
         <div className="text-right">
-          <p className="text-2xl font-black text-white tabular-nums tracking-tight">{timeStr}</p>
-          <p className="text-[11px] text-neutral-500">{dateStr}</p>
+          <p className="text-2xl font-black text-white tabular-nums tracking-tight uppercase">
+            {now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+          </p>
+          <p className="text-[11px] text-neutral-500 uppercase">{format(now, 'EEEE, MMMM do, yyyy')}</p>
         </div>
       </header>
 
-      {/* ── Status Summary Bar ── */}
+      {/* ── Summary ── */}
       <div className="flex-none bg-neutral-900/50 border-b border-neutral-800/50 px-6 py-3 flex items-center gap-6">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
-          <span className="text-sm font-semibold text-emerald-300">{availableCount} Available</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-          <span className="text-sm font-semibold text-amber-300">{occupiedCount} In Use</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-          <span className="text-sm font-semibold text-blue-300">{reservedCount} Reserved</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] animate-pulse" />
-          <span className="text-sm font-semibold text-rose-300">{overtimeCount} Overtime</span>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[11px] text-neutral-500 uppercase tracking-widest font-semibold">Live</span>
-        </div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /><span className="text-sm font-semibold text-emerald-300">{availableCount} Available</span></div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /><span className="text-sm font-semibold text-amber-300">{occupiedCount} In Use</span></div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /><span className="text-sm font-semibold text-blue-300">{reservedCount} Reserved</span></div>
+        <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" /><span className="text-sm font-semibold text-rose-300">{overtimeCount} Overtime</span></div>
       </div>
 
       {/* ── Main Body ── */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-0 overflow-hidden">
-
-        {/* Tables Section */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         <div className="flex-1 p-6 overflow-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-1 h-5 bg-emerald-500 rounded-full" />
-            <h2 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">Table Status</h2>
-          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
-            {tables.map(table => (
-              <TableCard key={table.id} table={table} tick={tick} />
-            ))}
+            {tables.map(table => <TableCard key={table.id} table={table} />)}
           </div>
-
-          
         </div>
 
-        {/* Queue Section */}
-        <div className="lg:w-80 xl:w-96 flex-none border-t lg:border-t-0 lg:border-l border-neutral-800/60 bg-neutral-950/60 flex flex-col">
-          <div className="px-5 pt-5 pb-3 border-b border-neutral-800/40">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-1 h-5 bg-amber-500 rounded-full" />
-              <h2 className="text-sm font-bold text-neutral-300 uppercase tracking-widest">Walk-in Queue</h2>
-            </div>
-            <p className="text-[11px] text-neutral-600 pl-3.5">First Come, First Served</p>
+        {/* ── Waiting Sidebar ── */}
+        <div className="lg:w-96 flex-none border-l border-neutral-800/60 bg-neutral-950/60 flex flex-col">
+          <div className="p-5 border-b border-neutral-800/40">
+            <h2 className="text-sm font-bold text-neutral-300 uppercase tracking-widest flex items-center gap-2">
+              <Users size={16} className="text-amber-500" /> Waiting List
+            </h2>
           </div>
 
-          <div className="flex-1 overflow-auto p-4">
-            {waitingQueue.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 gap-3">
-                <div className="w-14 h-14 rounded-full bg-emerald-950/40 border border-emerald-800/30 flex items-center justify-center">
-                  <Users size={22} className="text-emerald-600" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-emerald-400">No Queue</p>
-                  <p className="text-[11px] text-neutral-600 mt-0.5">Walk right in — tables available!</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {waitingQueue.map((item, i) => (
-                  <QueueRow 
-                    key={item.id} 
-                    item={item} 
-                    position={i + 1} 
-                    onSeat={() => {
-                      window.location.href = '/staff/tables';
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+          <div className="flex-1 overflow-auto p-4 space-y-6">
+            {/* 🗓️ RESERVATIONS */}
+            <section className="space-y-3">
+              <p className="text-[10px] text-neutral-500 uppercase font-black tracking-tighter flex items-center gap-2">
+                <Calendar size={10}/> Today's Bookings
+              </p>
+              {todayReservations.length === 0 ? (
+                <p className="text-[11px] text-neutral-700 italic">No reservations today.</p>
+              ) : todayReservations.map(res => {
+                const [h, m] = res.timeSlot.split(':').map(Number);
+                const startTime = new Date(res.date);
+                startTime.setHours(h, m, 0, 0);
+                const isLate = now > startTime;
+                const grace = isLate ? getGraceTime(startTime) : null;
+
+                return (
+                  <div key={res.id} className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-3 flex justify-between items-center transition-all">
+                    <div>
+                      <p className="text-sm font-bold text-blue-100">{res.customerName}</p>
+                      <p className="text-[10px] text-blue-400 font-semibold">{formatTimeSlot(res.timeSlot)} · {res.partySize} pax</p>
+                    </div>
+                    {grace ? (
+                      <div className="text-right">
+                        <p className={`text-xs font-mono font-black ${grace.isUrgent ? 'text-rose-400 animate-pulse' : 'text-amber-400'}`}>{grace.formatted}</p>
+                        <p className="text-[8px] text-neutral-500 uppercase font-bold">Expires</p>
+                      </div>
+                    ) : <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-bold uppercase">Booked</span>}
+                  </div>
+                );
+              })}
+            </section>
+
+            {/* 🚶 WALK-IN QUEUE */}
+            <section className="space-y-3">
+              <p className="text-[10px] text-neutral-500 uppercase font-black tracking-tighter flex items-center gap-2">
+                <Users size={10}/> Walk-in Queue
+              </p>
+              {waitingQueue.length === 0 ? (
+                <p className="text-[11px] text-neutral-700 italic">Queue is empty.</p>
+              ) : waitingQueue.map((item, i) => {
+                const grace = item.status === 'called' ? getGraceTime(item.arrivalTime) : null;
+                return (
+                  <div key={item.id} className={`p-3 rounded-xl border flex justify-between items-center transition-all ${item.status === 'called' ? 'bg-emerald-950/20 border-emerald-800/40 shadow-lg shadow-emerald-900/10' : 'bg-neutral-900/40 border-neutral-800'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-black text-neutral-400">{i+1}</span>
+                      <div>
+                        <p className={`text-sm font-bold ${item.status === 'called' ? 'text-emerald-400' : 'text-neutral-200'}`}>{item.customerName}</p>
+                        <p className="text-[10px] text-neutral-500">{item.partySize} pax</p>
+                      </div>
+                    </div>
+                    {item.status === 'called' && grace && (
+                      <div className="text-right">
+                        <p className={`text-xs font-mono font-black ${grace.isUrgent ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>{grace.formatted}</p>
+                        <p className="text-[8px] text-emerald-600/70 uppercase font-bold">Claim Table</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
           </div>
 
           <div className="p-4 border-t border-neutral-800/40">
-            <p className="text-[10px] text-neutral-700 text-center leading-relaxed">
-              Please see staff at the counter to<br />join the queue or for assistance.
+            <p className="text-[10px] text-neutral-600 text-center leading-relaxed">
+              Customers have a **15-minute grace period** after being called or after their reservation time to claim their table before automatic removal.
             </p>
           </div>
         </div>
       </div>
-
-      {/* ── Footer ── */}
-      <footer className="flex-none bg-black/40 border-t border-neutral-800/50 px-6 py-2 flex items-center justify-between">
-        <p className="text-[11px] text-neutral-700">Autobase OAX, San Juan, Cainta, Rizal · Mon–Sat 12PM–3AM · Sun 5PM–3AM</p>
-        <a
-          href="/staff"
-          className="text-[11px] text-neutral-700 hover:text-neutral-500 transition-colors"
-        >
-          ← Staff Dashboard
-        </a>
-      </footer>
     </div>
   );
 }

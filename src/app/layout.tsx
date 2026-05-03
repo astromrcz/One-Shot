@@ -193,7 +193,7 @@ export function Layout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-<header className="relative z-50 h-14 flex-none bg-neutral-950/80 border-b border-neutral-800 flex items-center justify-between px-5 backdrop-blur-sm">          <div className="flex items-center gap-3">
+<header className="relative z-50 h-14 flex-none bg-neutral-950/80 border-b border-neutral-800 flex items-center justify-between px-5 backdrop-blur-sm">           <div className="flex items-center gap-3">
             <button
               className="lg:hidden text-neutral-400 hover:text-neutral-200 p-1"
               onClick={() => setSidebarOpen(true)}

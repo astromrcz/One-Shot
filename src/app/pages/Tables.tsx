@@ -32,7 +32,7 @@ const formatHHMMSS = (totalSeconds: number) => {
   return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-// 🚨 NEW HELPER: Formats 24-hour time to 12-hour AM/PM
+// Formats 24-hour time to 12-hour AM/PM
 const formatTimeSlot = (time24: string) => {
   if (!time24) return '';
   const [h, m] = time24.split(':');
@@ -155,7 +155,66 @@ export function Tables() {
 
   const allCustomers: CustomerSource[] = [...waitingCustomers, ...todayReservations];
 
-  // Handles both queue assignment and direct reservation assignment
+  // 🚨 SMART CAPACITY ENGINE
+  // Mathematically checks if extending/assigning a table will steal a slot from a future reservation
+  const checkCapacityConflict = (targetTableId: string, proposedEnd: Date, isAssigningResId?: string) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const pendingRes = reservations.filter(r => 
+      (r.status === 'pending' || r.status === 'confirmed') && 
+      r.id !== isAssigningResId && 
+      new Date(r.date).toISOString().split('T')[0] === todayStr
+    );
+
+    // 1. Direct Table Conflict (If this specific table is pre-reserved)
+    const specificConflict = pendingRes.find(r => r.tableId === targetTableId);
+    if (specificConflict) {
+      const specStart = new Date(specificConflict.date);
+      const [sh, sm] = specificConflict.timeSlot.split(':').map(Number);
+      specStart.setHours(sh, sm, 0, 0);
+      if (proposedEnd > specStart) {
+        return { safe: false, conflictTime: specificConflict.timeSlot, reason: 'Specific Table Reserved' };
+      }
+    }
+
+    // 2. Global Capacity Conflict (Are we running out of tables for Walk-ins vs Reservations?)
+    for (const res of pendingRes) {
+      const resStart = new Date(res.date);
+      const [h, m] = res.timeSlot.split(':').map(Number);
+      resStart.setHours(h, m, 0, 0);
+
+      const checkTime = resStart < now ? now : resStart;
+
+      let occupiedCount = 0;
+      for (const t of activeTables) {
+        if (t.id === targetTableId) {
+          if (proposedEnd > checkTime) occupiedCount++;
+        } else if (t.session) {
+          const tEnd = t.session.durationMinutes <= 0 
+            ? addMinutes(new Date(t.session.startTime), 12 * 60) 
+            : addMinutes(new Date(t.session.startTime), Math.abs(t.session.durationMinutes));
+          if (tEnd > checkTime) occupiedCount++;
+        }
+      }
+
+      const overlappingRes = pendingRes.filter(other => {
+        const oStart = new Date(other.date);
+        const [oh, om] = other.timeSlot.split(':').map(Number);
+        oStart.setHours(oh, om, 0, 0);
+        const oEnd = addMinutes(oStart, other.durationHours * 60);
+        
+        const targetTime = oStart < now ? now : oStart;
+        return targetTime <= checkTime && oEnd > checkTime;
+      }).length;
+
+      const availableCount = activeTables.length - occupiedCount;
+      if (availableCount < overlappingRes) {
+        return { safe: false, conflictTime: res.timeSlot, reason: 'Global Capacity Reached' };
+      }
+    }
+    return { safe: true };
+  };
+
   useEffect(() => {
     const assignTableId = searchParams.get('assignTable');
     const queueId = searchParams.get('queueId');
@@ -321,6 +380,8 @@ export function Tables() {
     if (selectedCustomer) {
       if (selectedCustomer.kind === 'queue') {
         await removeFromQueue(selectedCustomer.id);
+      } else if (selectedCustomer.kind === 'reservation') {
+        await updateReservationStatus(selectedCustomer.id, 'checked-in');
       }
     }
 
@@ -369,7 +430,6 @@ export function Tables() {
   };
 
   const getNextReservation = (tableId: string) => {
-    const now = new Date();
     const upcoming = reservations
       .filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && new Date(r.date) > now)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -609,7 +669,17 @@ export function Tables() {
                   <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800 border-dashed flex-wrap">
                     {session.durationMinutes > 0 ? (
                       <>
-                        <button onClick={handleSetOpenTime} className="w-full mb-1 bg-blue-950/30 hover:bg-blue-900/40 text-blue-500 border border-blue-900/50 hover:border-blue-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5">
+                        <button 
+                          onClick={async () => {
+                            const capacityCheck = checkCapacityConflict(activeTable.id, addMinutes(now, 12 * 60));
+                            if (!capacityCheck.safe) {
+                               toast.error("Capacity Conflict", { description: `Cannot convert to Open Time. We need this table for a reservation at ${formatTimeSlot(capacityCheck.conflictTime!)}.` });
+                               return;
+                            }
+                            handleSetOpenTime();
+                          }} 
+                          className="w-full mb-1 bg-blue-950/30 hover:bg-blue-900/40 text-blue-500 border border-blue-900/50 hover:border-blue-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5"
+                        >
                           <Clock size={13} /> Change to Open Time
                         </button>
                         <button onClick={() => openExtend(activeTable.id)} className="flex-1 bg-amber-950/30 hover:bg-amber-900/40 text-amber-500 border border-amber-900/50 hover:border-amber-700/50 py-2 rounded-lg text-[11px] font-semibold transition-colors flex justify-center items-center gap-1.5">
@@ -749,15 +819,25 @@ export function Tables() {
                     <Clock size={11} /> Duration
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    {durationOptions.map(d => (
-                      <button key={d} type="button"
-                        onClick={() => { setDurationMinutes(d); setAmountPaid(((d / 60) * rates.hourlyRate).toFixed(2)); }}
-                        className={`py-2 rounded-xl border text-xs font-semibold transition-all ${
-                          durationMinutes === d ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
-                        }`}
-                      >{d === 0 ? 'Open Time' : d < 60 ? `${d}m` : `${d / 60}h`}</button>
-                    ))}
+                    {durationOptions.map(d => {
+                      // 🚨 CAPACITY CHECK FOR ASSIGN BUTTONS
+                      const proposedEnd = d <= 0 ? addMinutes(now, 12 * 60) : addMinutes(now, d);
+                      const isSafe = checkCapacityConflict(assigningTableId, proposedEnd, selectedCustomer?.kind === 'reservation' ? selectedCustomer.id : undefined).safe;
+                      
+                      return (
+                        <button key={d} type="button" disabled={!isSafe}
+                          onClick={() => { setDurationMinutes(d); setAmountPaid(((d / 60) * rates.hourlyRate).toFixed(2)); }}
+                          className={`py-2 rounded-xl border text-xs font-semibold transition-all ${
+                            !isSafe ? 'opacity-30 cursor-not-allowed bg-neutral-900 border-neutral-800 text-neutral-600' :
+                            durationMinutes === d ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                          }`}
+                        >{d === 0 ? 'Open Time' : d < 60 ? `${d}m` : `${d / 60}h`}</button>
+                      );
+                    })}
                   </div>
+                  {!checkCapacityConflict(assigningTableId, addMinutes(now, Math.max(...durationOptions)), selectedCustomer?.kind === 'reservation' ? selectedCustomer.id : undefined).safe && (
+                    <p className="text-[10px] text-amber-500/90 flex gap-1 mt-1 font-medium"><AlertTriangle size={12}/> Some options are disabled to ensure tables are available for upcoming reservations.</p>
+                  )}
                 </div>
 
                 {selectedCustomer?.kind === 'reservation' ? (
@@ -954,19 +1034,29 @@ export function Tables() {
               <div className="space-y-1.5">
                 <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Extra Time</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {extendOptions.map(d => (
-                    <button key={d} type="button" onClick={() => setExtendMinutes(d)}
-                      className={`py-2.5 rounded-lg border text-xs font-semibold transition-all ${
-                        extendMinutes === d ? 'bg-amber-600/15 border-amber-600 text-amber-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
-                      }`}
-                    >
-                      {d === 0 ? 'Open Time' : `+${d < 60 ? `${d}min` : `${d / 60}hr`}`}
-                      <br />
-                      <span className="text-[10px] font-normal opacity-70">
-                        {d === 0 ? 'Pay at end' : `+${formatPHP((d / 60) * rates.hourlyRate)}`}
-                      </span>
-                    </button>
-                  ))}
+                  {extendOptions.map(d => {
+                     // 🚨 CAPACITY CHECK FOR EXTEND BUTTONS
+                     const currentEnd = extendingTable.session!.durationMinutes <= 0 
+                       ? now 
+                       : addMinutes(new Date(extendingTable.session!.startTime), Math.abs(extendingTable.session!.durationMinutes));
+                     const proposedEnd = d <= 0 ? addMinutes(now, 12 * 60) : addMinutes(currentEnd, d);
+                     const isSafe = checkCapacityConflict(extendingTableId, proposedEnd).safe;
+
+                     return (
+                      <button key={d} type="button" disabled={!isSafe} onClick={() => setExtendMinutes(d)}
+                        className={`py-2.5 rounded-lg border text-xs font-semibold transition-all ${
+                          !isSafe ? 'opacity-30 cursor-not-allowed bg-neutral-900 border-neutral-800 text-neutral-600' :
+                          extendMinutes === d ? 'bg-amber-600/15 border-amber-600 text-amber-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                        }`}
+                      >
+                        {d === 0 ? 'Open Time' : `+${d < 60 ? `${d}min` : `${d / 60}hr`}`}
+                        <br />
+                        <span className="text-[10px] font-normal opacity-70">
+                          {d === 0 ? 'Pay at end' : `+${formatPHP((d / 60) * rates.hourlyRate)}`}
+                        </span>
+                      </button>
+                     );
+                  })}
                 </div>
               </div>
 

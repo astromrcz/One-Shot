@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../../utils/supabase/client';
 import { toast } from 'sonner';
+
+// ─── TYPES ───────────────────────────────────────────────────────────────────
+
 export type TableStatus = 'available' | 'occupied' | 'reserved';
 
 export type OrderItem = {
@@ -62,7 +65,6 @@ export type Reservation = {
   discountAmount?: number;
   paymentReference?: string;
   receiptUrl?: string;
-  // 🚨 NEW: Added Reschedule fields to standard Table Reservations
   rescheduleRequested?: boolean;
   proposedDate?: Date;
   proposedTimeSlot?: string;
@@ -108,17 +110,6 @@ export type PromoCode = {
   createdAt: Date;
 };
 
-export function generateRandomPromoCode(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
-export function generateReferralCode(name: string): string {
-  const prefix = name.replace(/\s+/g, '').toUpperCase().slice(0, 4).padEnd(4, 'X');
-  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `${prefix}-${suffix}`;
-}
-
 export type TattooReservationStatus = 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'denied';
 
 export type TattooArtist = {
@@ -162,11 +153,8 @@ export type TattooReservation = {
   receiptUrl?: string;
 };
 
-export const TATTOO_DEPOSIT = 500;
-
 export type StaffProfile = {
   username: string;
-  password?: string;
   fullName: string;
   email: string;
   role: string;
@@ -247,6 +235,9 @@ export type SiteSettings = {
   aboutImage?: string;
 };
 
+// ─── CONSTANTS & UTILS ────────────────────────────────────────────────────────
+
+export const TATTOO_DEPOSIT = 500;
 export const HOURLY_RATE = 250;
 export const DOWN_PAYMENT_RATE = 0.25;
 
@@ -254,6 +245,26 @@ const DEFAULT_STAFF_PROFILE: StaffProfile = {
   username: 'admin', fullName: 'Admin User', 
   email: 'admin@oneshot.com', role: 'Manager', phone: '09171234567', joinedDate: '2024-01-15',
 };
+
+export function generateRandomPromoCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+export function generateReferralCode(name: string): string {
+  const prefix = name.replace(/\s+/g, '').toUpperCase().slice(0, 4).padEnd(4, 'X');
+  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${prefix}-${suffix}`;
+}
+
+const isToday = (date: Date) => {
+  const today = new Date();
+  return date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear();
+};
+
+// ─── CONTEXT ──────────────────────────────────────────────────────────────────
 
 type AppContextType = {
   tables: Table[];
@@ -310,8 +321,8 @@ type AppContextType = {
   addTattooReservation: (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => Promise<string>;
   updateTattooReservationStatus: (id: string, status: TattooReservationStatus) => Promise<void>;
   updateTattooDepositPaid: (id: string, paid: boolean) => Promise<void>;
-  proposeReschedule: (id: string, proposedDate: Date, proposedTimeSlot: string) => Promise<void>; // 🚨 FIXED
-  confirmReschedule: (id: string, confirmed: boolean) => Promise<void>; // 🚨 FIXED
+  proposeReschedule: (id: string, proposedDate: Date, proposedTimeSlot: string) => Promise<void>;
+  confirmReschedule: (id: string, confirmed: boolean) => Promise<void>;
   addTattooArtist: (artist: Omit<TattooArtist, 'id'>) => Promise<void>;
   updateTattooArtist: (id: string, updates: Partial<TattooArtist>) => Promise<void>;
   deleteTattooArtist: (id: string) => Promise<void>;
@@ -337,6 +348,8 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// ─── PROVIDER ─────────────────────────────────────────────────────────────────
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [tables, setTables] = useState<Table[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -348,22 +361,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tattooArtists, setTattooArtists] = useState<TattooArtist[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [rates, setRates] = useState<RatesConfig>({
-    hourlyRate: 250,
-    happyHourRate: 200,
-    happyHourStart: '18:00',
-    happyHourEnd: '19:00',
-    overtimeRate: 250,
-    tattooDeposit: 500,
-    downPaymentPercent: 25,
+    hourlyRate: 250, happyHourRate: 200, happyHourStart: '18:00', happyHourEnd: '19:00', overtimeRate: 250, tattooDeposit: 500, downPaymentPercent: 25,
   });
   const [reservationTerms, setReservationTermsState] = useState<ReservationTerms>({
-    minHours: 1,
-    maxHours: 8,
-    minPartySize: 1,
-    maxPartySize: 10,
-    cancellationHours: 24,
-    cancellationPolicy: 'Cancellations must be made at least 24 hours before the reservation.',
-    termsAndConditions: 'Standard terms apply.',
+    minHours: 1, maxHours: 8, minPartySize: 1, maxPartySize: 10, cancellationHours: 24, cancellationPolicy: '...', termsAndConditions: '...',
   });
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [closedDates, setClosedDates] = useState<ClosedDate[]>([]);
@@ -376,27 +377,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentArtistId, setCurrentArtistId] = useState<string | null>(null);
   const [staffProfile, setStaffProfile] = useState<StaffProfile>(DEFAULT_STAFF_PROFILE);
 
-  const mapTableFromDB = (row: any): Table => ({
-    id: row.id,
-    name: row.name,
-    status: row.status,
-    isActive: row.is_active,
-    session: row.session_customer_name ? {
-      customerName: row.session_customer_name,
-      startTime: new Date(row.session_start_time),
-      durationMinutes: row.session_duration_minutes || 60,
-      isPaid: row.session_is_paid || false,
-      hourlyRate: row.session_hourly_rate || 250,
-      amountPaid: row.session_amount_paid || 0,
-      orders: row.session_orders || [],
-    } : undefined,
-  });
+  // ─── 1. CORE HELPERS (Defined first to prevent ReferenceErrors) ───
+
+  const addActivity = async (type: ActivityType, description: string, metadata?: Record<string, any>) => {
+    try {
+      const id = `act_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const activity = { id, type, description, metadata };
+      await supabase.from('activities').insert([activity]);
+      setActivities(prev => [{ ...activity, timestamp: new Date() }, ...prev]);
+    } catch (err) { console.error('Failed to log activity:', err); }
+  };
+
+  const removeFromQueue = async (id: string) => {
+    await supabase.from('queue_items').delete().eq('id', id);
+    setQueue(prev => prev.filter(q => q.id !== id));
+  };
+
+  const cancelReservation = async (id: string, reason: string) => {
+    if (reservations.some(r => r.id === id)) {
+      const { error } = await supabase.from('reservations').update({ status: 'cancelled', cancellation_reason: reason }).eq('id', id);
+      if (error) throw new Error(error.message);
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as ReservationStatus, cancellationReason: reason } : r));
+      await addActivity('reservation_cancelled', 'Table reservation cancelled');
+    } else if (tattooReservations.some(r => r.id === id)) {
+      const { error } = await supabase.from('tattoo_reservations').update({ status: 'cancelled' }).eq('id', id);
+      if (error) throw new Error(error.message);
+      setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as TattooReservationStatus } : r));
+      await addActivity('reservation_cancelled', 'Tattoo reservation cancelled');
+    }
+  };
+
+  // ─── 2. AUTO-EXPIRATION ENGINE ───
+
+  useEffect(() => {
+    const expirationCheck = setInterval(async () => {
+      const now = new Date();
+      const GRACE_PERIOD_MS = 15 * 60 * 1000;
+
+      const expiredQueue = queue.filter(q => q.status === 'called' && (now.getTime() - new Date(q.arrivalTime).getTime()) > GRACE_PERIOD_MS);
+      for (const item of expiredQueue) {
+        await removeFromQueue(item.id);
+        await addActivity('queue_removed', `Auto-cancelled ${item.customerName} (No-show 15m)`);
+      }
+
+      const expiredRes = reservations.filter(r => {
+        if (r.status !== 'confirmed' && r.status !== 'pending') return false;
+        if (!isToday(new Date(r.date)) || !r.timeSlot) return false;
+        const [h, m] = r.timeSlot.split(':').map(Number);
+        const startTime = new Date(r.date);
+        startTime.setHours(h, m, 0, 0);
+        return (now.getTime() - startTime.getTime()) > GRACE_PERIOD_MS;
+      });
+
+      for (const res of expiredRes) {
+        await cancelReservation(res.id, "Auto-cancelled: No-show for 15 minutes");
+        await addActivity('reservation_cancelled', `Auto-cancelled reservation for ${res.customerName} (15m Late)`);
+      }
+    }, 30000);
+    return () => clearInterval(expirationCheck);
+  }, [queue, reservations]);
+
+  // ─── 3. REFRESH & DATABASE LOGIC ───
 
   const mapTableToDB = (table: Table) => ({
-    id: table.id,
-    name: table.name,
-    status: table.status,
-    is_active: table.isActive,
+    id: table.id, name: table.name, status: table.status, is_active: table.isActive,
     session_customer_name: table.session?.customerName || null,
     session_start_time: table.session?.startTime?.toISOString() || null,
     session_duration_minutes: table.session?.durationMinutes || null,
@@ -408,23 +452,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshData = async (silent = false) => {
     if (!silent) setLoading(true);
-
     try {
       const [
-        { data: tablesData, error: tablesError },
-        { data: queueData, error: queueError },
-        { data: resData, error: resError },
-        { data: feedbackData, error: feedbackError },
-        { data: actData, error: actError },
-        { data: promoData, error: promoError },
-        { data: artistsData, error: artistsError },
-        { data: tattooResData, error: tattooResError },
-        { data: staffData, error: staffError },
-        { data: ratesData, error: ratesError },
-        { data: termsData, error: termsError },
-        { data: annData, error: annError },
-        { data: closedData, error: closedError },
-        { data: settingsData, error: settingsError }
+        { data: tablesData }, { data: queueData }, { data: resData }, { data: feedbackData },
+        { data: actData }, { data: promoData }, { data: artistsData }, { data: tattooResData },
+        { data: staffData }, { data: ratesData }, { data: termsData }, { data: annData },
+        { data: closedData }, { data: settingsData }
       ] = await Promise.all([
         supabase.from('tables').select('*').order('name'),
         supabase.from('queue_items').select('*').order('arrival_time'),
@@ -442,223 +475,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('site_settings').select('*').eq('id', '1').maybeSingle()
       ]);
 
-      if (tablesError) console.error('Error fetching tables:', tablesError);
-      else setTables((tablesData || []).map(mapTableFromDB));
-
-      if (queueError) console.error('Error fetching queue:', queueError);
-      else setQueue((queueData || []).map(row => ({
-        id: row.id,
-        customerName: row.customer_name,
-        contactNumber: row.contact_number,
-        partySize: row.party_size,
-        arrivalTime: new Date(row.arrival_time),
-        notes: row.notes || undefined,
-        status: row.status,
-      })));
-
-      if (resError) console.error('Error fetching reservations:', resError);
-      else setReservations((resData || []).map(row => ({
-        id: row.id,
-        customerName: row.customer_name,
-        contactNumber: row.contact_number,
-        email: row.email || undefined,
-        date: new Date(row.date),
-        timeSlot: row.time_slot,
-        durationHours: row.duration_hours,
-        partySize: row.party_size,
-        tableId: row.table_id || undefined,
-        status: row.status,
-        totalAmount: row.total_amount,
-        downPaymentAmount: row.down_payment_amount,
-        downPaymentPaid: row.down_payment_paid,
-        balancePaid: row.balance_paid,
-        createdAt: new Date(row.created_at),
-        cancellationReason: row.cancellation_reason || undefined,
-        promoCode: row.promo_code || undefined,
-        discountAmount: row.discount_amount || undefined,
-        paymentReference: row.payment_reference || undefined,
-        receiptUrl: row.receipt_url || undefined,
-        // 🚨 ADDED: Map reschedule fields for Table Reservations
-        rescheduleRequested: row.reschedule_requested || undefined,
-        proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined,
-        proposedTimeSlot: row.proposed_time_slot || undefined,
-        customerRescheduleConfirmed: row.customer_reschedule_confirmed,
-      })));
-
-      if (feedbackError) console.error('Error fetching feedback:', feedbackError);
-      else setFeedback((feedbackData || []).map(row => ({
-        id: row.id,
-        customerName: row.customer_name,
-        contactInfo: row.contact_info || undefined,
-        rating: row.rating,
-        feedbackType: row.feedback_type || undefined,
-        comment: row.comment,
-        date: new Date(row.created_at),
-        reservationId: row.reservation_id || undefined,
-        tags: row.tags || [],
-      })));
-
-      if (actError) console.error('Error fetching activities:', actError);
-      else {
-        const mapped = (actData || []).map(row => ({
-          id: row.id,
-          type: row.type as ActivityType,
-          description: row.description,
-          timestamp: new Date(row.created_at || row.timestamp || Date.now()),
-          metadata: row.metadata || undefined,
-        }));
-        mapped.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        setActivities(mapped);
-      }
-
-      if (promoError) console.error('Error fetching promo codes:', promoError);
-      else setPromoCodes((promoData || []).map(row => ({
-        id: row.id,
-        code: row.code,
-        discountPercent: row.discount_percent,
-        description: row.description,
-        isActive: row.is_active,
-        maxUsage: row.max_usage,
-        usageCount: row.usage_count,
-        expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
-        createdAt: new Date(row.created_at),
-      })));
-
-      if (artistsError) console.error('Error fetching tattoo artists:', artistsError);
-      else setTattooArtists((artistsData || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        specialty: row.specialty,
-        contactNumber: row.contact_number,
-        email: row.email || undefined,
-        bio: row.bio || undefined,
-        isAvailableToday: row.is_available_today,
-        isActive: row.is_active,
-        unavailableDates: row.unavailable_dates || [],
-      })));
-
-      if (tattooResError) console.error('Error fetching tattoo reservations:', tattooResError);
-      else setTattooReservations((tattooResData || []).map(row => ({
-        id: row.id,
-        customerName: row.customer_name,
-        contactNumber: row.contact_number,
-        email: row.email || undefined,
-        date: new Date(row.date),
-        timeSlot: row.time_slot,
-        artistId: row.artist_id,
-        artistName: row.artist_name,
-        artistContact: row.artist_contact,
-        placement: row.placement,
-        estimatedSize: row.estimated_size,
-        designDescription: row.design_description,
-        colorStyle: row.color_style,
-        agreementSigned: row.agreement_signed,
-        consentSigned: row.consent_signed,
-        status: row.status,
-        depositAmount: row.deposit_amount,
-        depositPaid: row.deposit_paid,
-        inspirationImages: row.inspiration_images || undefined,
-        createdAt: new Date(row.created_at),
-        rescheduleRequested: row.reschedule_requested || undefined,
-        proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined,
-        proposedTimeSlot: row.proposed_time_slot || undefined,
-        customerRescheduleConfirmed: row.customer_reschedule_confirmed,
-        paymentReference: row.payment_reference || undefined,
-        receiptUrl: row.receipt_url || undefined,
-      })));
-
-      if (staffError) console.error('Error fetching staff users:', staffError);
-      else setStaffUsers((staffData || []).map(row => ({
-        id: row.id,
-        username: row.username,
-        password: row.password,
-        fullName: row.full_name,
-        email: row.email,
-        role: row.role as any,
-        isAdmin: row.is_admin,
-        artistId: row.artist_id || undefined,
-        phone: row.phone,
-        isActive: row.is_active,
-        createdAt: new Date(row.created_at),
-      })));
-
-      if (ratesError) console.error('Error fetching rates config:', ratesError);
-      else if (ratesData) {
-        setRates({
-          hourlyRate: ratesData.hourly_rate,
-          happyHourRate: ratesData.happy_hour_rate,
-          happyHourStart: ratesData.happy_hour_start,
-          happyHourEnd: ratesData.happy_hour_end,
-          overtimeRate: ratesData.overtime_rate,
-          tattooDeposit: ratesData.tattoo_deposit,
-          downPaymentPercent: ratesData.down_payment_percent,
-        });
-      }
-
-      if (termsError) console.error('Error fetching reservation terms:', termsError);
-      else if (termsData) {
-        setReservationTermsState({
-          minHours: termsData.min_hours,
-          maxHours: termsData.max_hours,
-          minPartySize: termsData.min_party_size,
-          maxPartySize: termsData.max_party_size,
-          cancellationHours: termsData.cancellation_hours,
-          cancellationPolicy: termsData.cancellation_policy,
-          termsAndConditions: termsData.terms_and_conditions,
-        });
-      }
-
-      if (annError) console.error('Error fetching announcements:', annError);
-      else setAnnouncements((annData || []).map(row => ({
-        id: row.id,
-        title: row.title,
-        content: row.content,
-        type: row.type as AnnouncementType,
-        isActive: row.is_active,
-        createdAt: new Date(row.created_at),
-        expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
-      })));
-
-      if (closedError) console.error('Error fetching closed dates:', closedError);
-      else setClosedDates((closedData || []).map(row => ({
-        id: row.id,
-        date: row.date,
-        reason: row.reason,
-        isFullDay: row.is_full_day,
-        openTime: row.open_time || undefined,
-        closeTime: row.close_time || undefined,
-      })));
-
-      if (settingsError) console.error('Error fetching site settings:', settingsError);
-      else if (settingsData) {
-        setSiteSettings({
-          logoUrl: settingsData.logo_url || '',
-          heroTitle: settingsData.hero_title || '',
-          heroSubtitle: settingsData.hero_subtitle || '',
-          heroDescription: settingsData.hero_description || '',
-          aboutStory: settingsData.about_story || '',
-          contactAddress: settingsData.contact_address || '',
-          contactPhone: settingsData.contact_phone || '',
-          contactEmail: settingsData.contact_email || '',
-          contactHours: settingsData.contact_hours || '',
-          heroImage1: settingsData.hero_image_1 || '',
-          heroImage2: settingsData.hero_image_2 || '',
-          heroImage3: settingsData.hero_image_3 || '',
-          heroSliderImages: settingsData.hero_slider_images || [],
-          promoImage: settingsData.promo_image || '',
-          aboutImage: settingsData.about_image || '',
-        });
-      }
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown network error';
-      console.error('Critical sync error:', errorMessage);
-    } finally {
-      setLoading(false);
-    }
+      if (tablesData) setTables(tablesData.map(row => ({ id: row.id, name: row.name, status: row.status, isActive: row.is_active, session: row.session_customer_name ? { customerName: row.session_customer_name, startTime: new Date(row.session_start_time), durationMinutes: row.session_duration_minutes || 60, isPaid: row.session_is_paid || false, hourlyRate: row.session_hourly_rate || 250, amountPaid: row.session_amount_paid || 0, orders: row.session_orders || [] } : undefined })));
+      if (queueData) setQueue(queueData.map(row => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, partySize: row.party_size, arrivalTime: new Date(row.arrival_time), notes: row.notes || undefined, status: row.status })));
+      if (resData) setReservations(resData.map(row => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, email: row.email || undefined, date: new Date(row.date), timeSlot: row.time_slot, durationHours: row.duration_hours, partySize: row.party_size, tableId: row.table_id || undefined, status: row.status, totalAmount: row.total_amount, downPaymentAmount: row.down_payment_amount, downPaymentPaid: row.down_payment_paid, balancePaid: row.balance_paid, createdAt: new Date(row.created_at), cancellationReason: row.cancellation_reason || undefined, promoCode: row.promo_code || undefined, discountAmount: row.discount_amount || undefined, paymentReference: row.payment_reference || undefined, receiptUrl: row.receipt_url || undefined, rescheduleRequested: row.reschedule_requested || undefined, proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined, proposedTimeSlot: row.proposed_time_slot || undefined, customerRescheduleConfirmed: row.customer_reschedule_confirmed })));
+      if (feedbackData) setFeedback(feedbackData.map(row => ({ id: row.id, customerName: row.customer_name, contactInfo: row.contact_info || undefined, rating: row.rating, feedbackType: row.feedback_type || undefined, comment: row.comment, date: new Date(row.created_at), reservationId: row.reservation_id || undefined, tags: row.tags || [] })));
+      if (actData) { const mapped = actData.map(row => ({ id: row.id, type: row.type as ActivityType, description: row.description, timestamp: new Date(row.created_at || row.timestamp || Date.now()), metadata: row.metadata || undefined })); mapped.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()); setActivities(mapped); }
+      if (promoData) setPromoCodes(promoData.map(row => ({ id: row.id, code: row.code, discountPercent: row.discount_percent, description: row.description, isActive: row.is_active, maxUsage: row.max_usage, usageCount: row.usage_count, expiresAt: row.expires_at ? new Date(row.expires_at) : undefined, createdAt: new Date(row.created_at) })));
+      if (artistsData) setTattooArtists(artistsData.map(row => ({ id: row.id, name: row.name, specialty: row.specialty, contactNumber: row.contact_number, email: row.email || undefined, bio: row.bio || undefined, isAvailableToday: row.is_available_today, isActive: row.is_active, unavailableDates: row.unavailable_dates || [] })));
+      if (tattooResData) setTattooReservations(tattooResData.map(row => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, email: row.email || undefined, date: new Date(row.date), timeSlot: row.time_slot, artistId: row.artist_id, artistName: row.artist_name, artistContact: row.artist_contact, placement: row.placement, estimatedSize: row.estimated_size, designDescription: row.design_description, colorStyle: row.color_style, agreementSigned: row.agreement_signed, consentSigned: row.consent_signed, status: row.status, depositAmount: row.deposit_amount, depositPaid: row.deposit_paid, inspirationImages: row.inspiration_images || undefined, createdAt: new Date(row.created_at), rescheduleRequested: row.reschedule_requested || undefined, proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined, proposedTimeSlot: row.proposed_time_slot || undefined, customerRescheduleConfirmed: row.customer_reschedule_confirmed, paymentReference: row.payment_reference || undefined, receiptUrl: row.receipt_url || undefined })));
+      if (staffData) setStaffUsers(staffData.map(row => ({ id: row.id, username: row.username, password: row.password, fullName: row.full_name, email: row.email, role: row.role as any, isAdmin: row.is_admin, artistId: row.artist_id || undefined, phone: row.phone, isActive: row.is_active, createdAt: new Date(row.created_at) })));
+      if (ratesData) setRates({ hourlyRate: ratesData.hourly_rate, happyHourRate: ratesData.happy_hour_rate, happyHourStart: ratesData.happy_hour_start, happyHourEnd: ratesData.happy_hour_end, overtimeRate: ratesData.overtime_rate, tattooDeposit: ratesData.tattoo_deposit, downPaymentPercent: ratesData.down_payment_percent });
+      if (termsData) setReservationTermsState({ minHours: termsData.min_hours, maxHours: termsData.max_hours, minPartySize: termsData.min_party_size, maxPartySize: termsData.max_party_size, cancellationHours: termsData.cancellation_hours, cancellationPolicy: termsData.cancellation_policy, termsAndConditions: termsData.terms_and_conditions });
+      if (annData) setAnnouncements(annData.map(row => ({ id: row.id, title: row.title, content: row.content, type: row.type as AnnouncementType, isActive: row.is_active, createdAt: new Date(row.created_at), expiresAt: row.expires_at ? new Date(row.expires_at) : undefined })));
+      if (closedData) setClosedDates(closedData.map(row => ({ id: row.id, date: row.date, reason: row.reason, isFullDay: row.is_full_day, openTime: row.open_time || undefined, closeTime: row.close_time || undefined })));
+      if (settingsData) setSiteSettings({ logoUrl: settingsData.logo_url || '', heroTitle: settingsData.hero_title || '', heroSubtitle: settingsData.hero_subtitle || '', heroDescription: settingsData.hero_description || '', aboutStory: settingsData.about_story || '', contactAddress: settingsData.contact_address || '', contactPhone: settingsData.contact_phone || '', contactEmail: settingsData.contact_email || '', contactHours: settingsData.contact_hours || '', heroImage1: settingsData.hero_image_1 || '', heroImage2: settingsData.hero_image_2 || '', heroImage3: settingsData.hero_image_3 || '', heroSliderImages: settingsData.hero_slider_images || [], promoImage: settingsData.promo_image || '', aboutImage: settingsData.about_image || '' });
+    } catch (err) { console.error('Refresh Error:', err); } finally { setLoading(false); }
   };
 
-  
+  // ─── 4. AUTH & SESSION ───
+
   useEffect(() => {
     refreshData();
     const savedSession = localStorage.getItem('oneshot_staff_session');
@@ -666,30 +501,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const profile = JSON.parse(savedSession);
         setStaffProfile(profile);
-        
         const r = profile.role?.toLowerCase();
-        if (r === 'admin' || profile.isAdmin) {
-          setAdminLoggedIn(true);
-          setStaffLoggedIn(true);
-        }
-        else if (r === 'artist' || r === 'tattoo-artist') {
-          setArtistLoggedIn(true);
-          setCurrentArtistId(profile.artistId || null);
-          setStaffLoggedIn(true);
-        }
+        if (r === 'admin' || profile.isAdmin) { setAdminLoggedIn(true); setStaffLoggedIn(true); }
+        else if (r === 'artist' || r === 'tattoo-artist') { setArtistLoggedIn(true); setCurrentArtistId(profile.artistId || null); setStaffLoggedIn(true); }
         else setStaffLoggedIn(true);
-      } catch (e) {
-        console.error('Failed to parse saved session');
-      }
+      } catch { console.error('Failed to parse saved session'); }
     }
   }, []);
 
-  // ── Auth ──────────────────────────────────────────────────────
-  
   const saveStaffSession = (profile: StaffProfile) => {
     const secureProfile = { ...profile };
     delete secureProfile.password;
-    
     localStorage.setItem('oneshot_staff_session', JSON.stringify(secureProfile));
     setStaffProfile(profile);
   };
@@ -697,88 +519,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearStaffSession = async () => {
     localStorage.removeItem('oneshot_staff_session');
     setStaffProfile(DEFAULT_STAFF_PROFILE);
-    setStaffLoggedIn(false);
-    setAdminLoggedIn(false);
-    setArtistLoggedIn(false);
-    setCurrentArtistId(null);
+    setStaffLoggedIn(false); setAdminLoggedIn(false); setArtistLoggedIn(false); setCurrentArtistId(null);
     await supabase.auth.signOut();
     window.location.href = '/'; 
   };
 
-  const secureBackendLogin = async (username: string, password: string) => {
+  const staffLogin = async (username: string, password: string): Promise<boolean> => {
     try {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/verify_staff_login`;
       const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ p_username: username, p_password: password })
-      });
-      
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      console.error("Secure login bypass failed:", e);
-      return null;
-    }
-  };
-
-  const staffLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = await secureBackendLogin(username, password);
-    if (user) { 
-      setStaffLoggedIn(true); 
-      if (user.is_admin || user.role === 'admin') setAdminLoggedIn(true);
-      if (user.role === 'tattoo-artist') {
-        setArtistLoggedIn(true);
-        setCurrentArtistId(user.artist_id || null);
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ p_username: username, p_password: password }) });
+      if (!res.ok) return false;
+      const user = await res.json();
+      if (user) { 
+        setStaffLoggedIn(true); 
+        if (user.is_admin || user.role === 'admin') setAdminLoggedIn(true);
+        if (user.role === 'tattoo-artist') { setArtistLoggedIn(true); setCurrentArtistId(user.artist_id || null); }
+        saveStaffSession({ username: user.username, fullName: user.full_name, email: user.email, role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id, isAdmin: user.is_admin || user.role === 'admin' });
+        return true; 
       }
-      saveStaffSession({
-        username: user.username, fullName: user.full_name, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
-        isAdmin: user.is_admin || user.role === 'admin'
-      });
-      return true; 
-    }
-    return false;
+      return false;
+    } catch { return false; }
   };
-  
-  const staffLogout = async () => await clearStaffSession();
 
-  const adminLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = await secureBackendLogin(username, password);
-    if (user && (user.is_admin || user.role === 'admin')) {
-      setAdminLoggedIn(true);
-      setStaffLoggedIn(true); 
-      saveStaffSession({
-        username: user.username, fullName: user.full_name, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
-        isAdmin: user.is_admin || user.role === 'admin'
-      });
-      return true;
-    }
-    return false;
-  };
-  
-  const adminLogout = async () => await clearStaffSession();
-
-  const artistLogin = async (username: string, password: string): Promise<boolean> => {
-    const user = await secureBackendLogin(username, password);
-    if (user && user.role === 'tattoo-artist') {
-      setStaffLoggedIn(true);
-      setArtistLoggedIn(true);
-      setCurrentArtistId(user.artist_id || null);
-      saveStaffSession({
-        username: user.username, fullName: user.full_name, email: user.email,
-        role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id,
-        isAdmin: user.is_admin || user.role === 'admin'
-      });
-      return true;
-    }
-    return false;
-  };
-  
-  const artistLogout = async () => await clearStaffSession();
+  const staffLogout = async () => clearStaffSession();
+  const adminLogin = (u: string, p: string) => staffLogin(u, p);
+  const adminLogout = () => clearStaffSession();
+  const artistLogin = (u: string, p: string) => staffLogin(u, p);
+  const artistLogout = () => clearStaffSession();
 
   const updateStaffProfile = async (profile: Partial<StaffProfile>) => {
     setStaffProfile(prev => ({ ...prev, ...profile }));
@@ -786,53 +554,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (user) {
       await updateStaffUser(user.id, {
         ...(profile.username && { username: profile.username }),
-        ...(profile.password && { password: profile.password }),
-        ...(profile.fullName && { fullName: profile.fullName }),
+        ...(profile.fullName && { full_name: profile.fullName }),
         ...(profile.email && { email: profile.email }),
         ...(profile.phone && { phone: profile.phone }),
       });
     }
   };
 
-  const addActivity = async (type: ActivityType, description: string, metadata?: Record<string, any>) => {
-    try {
-      const id = `act_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      const activity = { id, type, description, metadata };
-      
-      const { error } = await supabase.from('activities').insert([activity]);
-      if (error) console.error('Error inserting activity:', error);
-      
-      setActivities(prev => [{ ...activity, timestamp: new Date() }, ...prev]);
-    } catch (err) {
-      console.error('Failed to log activity:', err);
-    }
-  };
+  // ─── 5. MUTATIONS ───
 
-  // ── Tables ────────────────────────────────────────────────────
   const assignTable = async (tableId: string, session: Session) => {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
-
     const updated = { ...table, status: 'occupied' as TableStatus, session };
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
-    if (error) {
-      console.error("Assign Table Error:", error);
-      throw new Error("Failed to assign table in database.");
-    }
+    if (error) throw new Error("Failed to assign table.");
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('table_assigned', `${table.name} assigned to ${session.customerName}`, { tableId, customerName: session.customerName });
+    await addActivity('table_assigned', `${table.name} assigned to ${session.customerName}`);
   };
 
   const freeTable = async (tableId: string) => {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
-
     const updated = { ...table, status: 'available' as TableStatus, session: undefined };
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
-    if (error) {
-      console.error("Free Table Error:", error);
-      throw new Error("Failed to free table in database.");
-    }
+    if (error) throw new Error("Failed to free table.");
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
     await addActivity('table_freed', `Table ${table.name} freed`);
   };
@@ -840,118 +586,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reserveTable = async (tableId: string) => {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
-
     const updated = { ...table, status: 'reserved' as TableStatus };
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
-    if (error) {
-      console.error("Reserve Table Error:", error);
-      throw new Error("Failed to reserve table in database.");
-    }
+    if (error) throw new Error("Failed to reserve table.");
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('table_reserved', `Table ${table.name} reserved`);
   };
 
   const extendSession = async (tableId: string, extraMinutes: number, extraPayment: number) => {
     const table = tables.find(t => t.id === tableId);
     if (!table || !table.session) return;
-
     let newDuration = table.session.durationMinutes + extraMinutes;
-
-    // 🚨 MAGIC TRICK FIX: If extraMinutes is negative, we are converting to Open Time.
-    const isConvertingToOpenTime = extraMinutes < 0 && table.session.durationMinutes > 0;
-    if (isConvertingToOpenTime) {
-      // Set the new duration to EXACTLY the negative of their current duration
-      // (e.g. if they played 60 mins, it becomes -60). 
-      newDuration = -Math.abs(table.session.durationMinutes);
-    }
-
-    // We use the absolute value to calculate the physical end time for the conflict checker
-    const newEndTime = new Date(table.session.startTime.getTime() + Math.abs(newDuration) * 60000);
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const conflict = reservations.find(r => {
-      if (r.tableId !== tableId || r.status === 'cancelled' || r.status === 'completed' || !r.timeSlot || !r.date) return false;
-      const rDateStr = new Date(r.date).toISOString().split('T')[0];
-      if (rDateStr !== todayStr) return false;
-      
-      const resStart = new Date(r.date);
-      const [hours, minutes] = r.timeSlot.split(':').map(Number);
-      resStart.setHours(hours, minutes, 0, 0);
-
-      // 🚨 If Open Time (0 or negative), it conflicts with ANY future reservation today
-      if (newDuration <= 0) {
-         return resStart > new Date();
-      }
-      return newEndTime > resStart; 
-    });
-
-    if (conflict) {
-      alert(`EXTENSION BLOCKED: This table is reserved for ${conflict.customerName} at ${conflict.timeSlot}. Please assign the customer to a different table.`);
-      throw new Error("Table overlap conflict.");
-    }
-
-    const updated = {
-      ...table,
-      session: {
-        ...table.session,
-        durationMinutes: newDuration,
-        amountPaid: table.session.amountPaid + extraPayment
-      }
-    };
-
-    // 🚨 ADD ERROR HANDLING: This will catch if Supabase rejects the negative number!
+    if (extraMinutes < 0) newDuration = -Math.abs(table.session.durationMinutes);
+    const updated = { ...table, session: { ...table.session, durationMinutes: newDuration, amountPaid: table.session.amountPaid + extraPayment } };
     const { error } = await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
-    
-    if (error) {
-      console.error("Supabase Database Error:", error);
-      alert("Database Error: Failed to update the table session. If you are converting to Open Time, your database might have a rule preventing negative duration minutes. Please check your Supabase schema constraints.");
-      return; 
-    }
-
+    if (error) throw new Error("Failed to extend session.");
     setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-
-    const logMessage = isConvertingToOpenTime 
-      ? `Table ${table.name} converted to Open Time (Base: ${Math.abs(newDuration)} mins)` 
-      : `Table ${table.name} extended by ${extraMinutes} mins`;
-
-    await addActivity('session_extended', logMessage);
-  };
-
-  const addOrderToTable = async (tableId: string, order: OrderItem) => {
-    const table = tables.find(t => t.id === tableId);
-    if (!table || !table.session) return;
-    
-    const updated = {
-      ...table,
-      session: { 
-        ...table.session, 
-        orders: [...(table.session.orders || []), order] 
-      }
-    };
-    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
-    setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    await addActivity('payment_received', `Added ${order.name} to ${table.name}`);
-  };
-
-  const removeOrderFromTable = async (tableId: string, orderId: string) => {
-    const table = tables.find(t => t.id === tableId);
-    if (!table || !table.session || !table.session.orders) return;
-    
-    const orderToRemove = table.session.orders.find(o => o.id === orderId);
-    const newOrders = table.session.orders.filter(o => o.id !== orderId);
-    
-    const updated = {
-      ...table,
-      session: { 
-        ...table.session, 
-        orders: newOrders 
-      }
-    };
-    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
-    setTables(prev => prev.map(t => t.id === tableId ? updated : t));
-    if (orderToRemove) {
-      await addActivity('admin_action', `Voided ${orderToRemove.name} from ${table.name}`);
-    }
+    await addActivity('session_extended', `Table ${table.name} extended`);
   };
 
   const addTable = async (name: string) => {
@@ -959,13 +609,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newTable: Table = { id, name, status: 'available', isActive: true };
     await supabase.from('tables').insert([mapTableToDB(newTable)]);
     setTables(prev => [...prev, newTable]);
-    await addActivity('admin_action', `Table "${name}" added`, { tableId: id });
+    await addActivity('admin_action', `Table "${name}" added`);
   };
 
   const updateTable = async (id: string, name: string) => {
     await supabase.from('tables').update({ name }).eq('id', id);
     setTables(prev => prev.map(t => t.id === id ? { ...t, name } : t));
-    await addActivity('admin_action', `Table renamed to "${name}"`, { tableId: id });
   };
 
   const toggleTableActive = async (id: string) => {
@@ -973,34 +622,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!table) return;
     await supabase.from('tables').update({ is_active: !table.isActive }).eq('id', id);
     setTables(prev => prev.map(t => t.id === id ? { ...t, isActive: !t.isActive } : t));
-    await addActivity('admin_action', `Table "${table.name}" ${table.isActive ? 'deactivated' : 'activated'}`, { tableId: id });
   };
 
   const deleteTable = async (id: string) => {
-    const table = tables.find(t => t.id === id);
-    const tableName = table ? table.name : id;
     await supabase.from('tables').delete().eq('id', id);
     setTables(prev => prev.filter(t => t.id !== id));
-    await addActivity('admin_action', `Table "${tableName}" deleted`, { tableId: id });
+  };
+
+  const addOrderToTable = async (tableId: string, order: OrderItem) => {
+    const table = tables.find(t => t.id === tableId);
+    if (!table || !table.session) return;
+    const updated = { ...table, session: { ...table.session, orders: [...(table.session.orders || []), order] } };
+    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    setTables(prev => prev.map(t => t.id === tableId ? updated : t));
+  };
+
+  const removeOrderFromTable = async (tableId: string, orderId: string) => {
+    const table = tables.find(t => t.id === tableId);
+    if (!table || !table.session?.orders) return;
+    const updated = { ...table, session: { ...table.session, orders: table.session.orders.filter(o => o.id !== orderId) } };
+    await supabase.from('tables').update(mapTableToDB(updated)).eq('id', tableId);
+    setTables(prev => prev.map(t => t.id === tableId ? updated : t));
   };
 
   const addToQueue = async (item: Omit<QueueItem, 'id' | 'arrivalTime' | 'status'>) => {
     const id = `q${Date.now()}`;
     const arrivalTime = new Date();
-    const queueItem = { ...item, id, arrivalTime, status: 'waiting' as const };
-
-    await supabase.from('queue_items').insert([{
-      id, customer_name: item.customerName, contact_number: item.contactNumber,
-      party_size: item.partySize, arrival_time: arrivalTime.toISOString(), notes: item.notes, status: 'waiting'
-    }]);
-    setQueue(prev => [...prev, queueItem]);
+    await supabase.from('queue_items').insert([{ id, customer_name: item.customerName, contact_number: item.contactNumber, party_size: item.partySize, arrival_time: arrivalTime.toISOString(), notes: item.notes, status: 'waiting' }]);
+    setQueue(prev => [...prev, { ...item, id, arrivalTime, status: 'waiting' }]);
     await addActivity('queue_added', `${item.customerName} added to queue`);
-  };
-
-  const removeFromQueue = async (id: string) => {
-    await supabase.from('queue_items').delete().eq('id', id);
-    setQueue(prev => prev.filter(q => q.id !== id));
-    await addActivity('queue_removed', 'Queue item removed');
   };
 
   const callQueueItem = async (id: string) => {
@@ -1011,86 +661,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addReservation = async (item: Omit<Reservation, 'id' | 'createdAt'> & { id?: string }) => {
     const id = item.id || crypto.randomUUID();
-    const reservation: Reservation = { ...item, id, createdAt: new Date() };
-
-    const { error } = await supabase.from('reservations').insert([{
-      id, customer_name: item.customerName, contact_number: item.contactNumber,
-      email: item.email, date: item.date.toISOString(), time_slot: item.timeSlot,
-      duration_hours: item.durationHours, party_size: item.partySize, table_id: item.tableId,
-      status: item.status, total_amount: item.totalAmount, down_payment_amount: item.downPaymentAmount,
-      down_payment_paid: item.downPaymentPaid, balance_paid: item.balancePaid, cancellation_reason: item.cancellationReason,
-      promo_code: item.promoCode, discount_amount: item.discountAmount, payment_reference: item.paymentReference,
-      receipt_url: item.receiptUrl,
-    }]);
-
-    if (error) {
-      console.error("Supabase Save Error:", error);
-      throw new Error(error.message); 
-    }
-
-    setReservations(prev => [...prev, reservation]);
-    await addActivity('reservation_created', `New reservation for ${item.customerName}`);
-    await sendAdminPush("New Reservation! 📅", `${item.customerName} just booked a table for ${item.partySize} people at ${item.timeSlot}.`);
-    
+    const { error } = await supabase.from('reservations').insert([{ id, customer_name: item.customerName, contact_number: item.contactNumber, email: item.email, date: item.date.toISOString(), time_slot: item.timeSlot, duration_hours: item.durationHours, party_size: item.partySize, table_id: item.tableId, status: item.status, total_amount: item.totalAmount, down_payment_amount: item.downPaymentAmount, down_payment_paid: item.downPaymentPaid, balance_paid: item.balancePaid }]);
+    if (error) throw new Error(error.message);
+    setReservations(prev => [...prev, { ...item, id, createdAt: new Date() }]);
     return id;
   };
 
   const updateReservationStatus = async (id: string, status: ReservationStatus) => {
     await supabase.from('reservations').update({ status }).eq('id', id);
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-    await addActivity('reservation_updated', `Reservation updated to ${status}`);
-  };
-
-  // 🚨 UNIFIED CANCEL: Supports Tables AND Tattoos 🚨
-  const cancelReservation = async (id: string, reason: string) => {
-    if (reservations.some(r => r.id === id)) {
-      const { error } = await supabase.from('reservations').update({ status: 'cancelled', cancellation_reason: reason }).eq('id', id);
-      if (error) throw new Error(error.message);
-      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as ReservationStatus, cancellationReason: reason } : r));
-      await addActivity('reservation_cancelled', 'Table reservation cancelled');
-    } else if (tattooReservations.some(r => r.id === id)) {
-      const { error } = await supabase.from('tattoo_reservations').update({ status: 'cancelled' }).eq('id', id);
-      if (error) throw new Error(error.message);
-      setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' as TattooReservationStatus } : r));
-      await addActivity('reservation_cancelled', 'Tattoo reservation cancelled');
-    }
   };
 
   const updateDownPayment = async (id: string, paid: boolean) => {
     await supabase.from('reservations').update({ down_payment_paid: paid }).eq('id', id);
     setReservations(prev => prev.map(r => r.id === id ? { ...r, downPaymentPaid: paid } : r));
-    await addActivity('payment_received', `Down payment ${paid ? 'received' : 'refunded'}`);
   };
 
   const updateBalance = async (id: string, paid: boolean) => {
     await supabase.from('reservations').update({ balance_paid: paid }).eq('id', id);
     setReservations(prev => prev.map(r => r.id === id ? { ...r, balancePaid: paid } : r));
-    await addActivity('payment_received', `Balance ${paid ? 'paid' : 'refunded'}`);
   };
 
   const addFeedback = async (item: Omit<Feedback, 'id' | 'date'>) => {
     const id = `f${Date.now()}`;
-    const feedback = { ...item, id, date: new Date() };
-
-    await supabase.from('feedback').insert([{
-      id, customer_name: item.customerName, contact_info: item.contactInfo,
-      rating: item.rating, feedback_type: item.feedbackType, comment: item.comment,
-      reservation_id: item.reservationId, tags: item.tags,
-    }]);
-    setFeedback(prev => [feedback, ...prev]);
-    await addActivity('feedback_received', `Feedback received from ${item.customerName}`);
+    await supabase.from('feedback').insert([{ id, customer_name: item.customerName, rating: item.rating, feedback_type: item.feedbackType, comment: item.comment, tags: item.tags }]);
+    setFeedback(prev => [{ ...item, id, date: new Date() }, ...prev]);
   };
 
   const addPromoCode = async (item: Omit<PromoCode, 'id' | 'createdAt' | 'usageCount'>) => {
     const id = `pc${Date.now()}`;
-    const promoCode = { ...item, id, usageCount: 0, createdAt: new Date() };
-
-    await supabase.from('promo_codes').insert([{
-      id, code: item.code, discount_percent: item.discountPercent, description: item.description,
-      is_active: item.isActive, max_usage: item.maxUsage, usage_count: 0, expires_at: item.expiresAt?.toISOString(),
-    }]);
-    setPromoCodes(prev => [promoCode, ...prev]);
-    await addActivity('promo_created', `Promo code ${item.code} created`);
+    await supabase.from('promo_codes').insert([{ id, code: item.code, discount_percent: item.discountPercent, description: item.description, is_active: item.isActive, max_usage: item.maxUsage, usage_count: 0 }]);
+    setPromoCodes(prev => [{ ...item, id, usageCount: 0, createdAt: new Date() }, ...prev]);
   };
 
   const togglePromoCode = async (id: string) => {
@@ -1108,8 +709,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const applyPromoCode = async (code: string): Promise<PromoCode | null> => {
     const promo = promoCodes.find(p => p.code === code.toUpperCase() && p.isActive && p.usageCount < p.maxUsage);
     if (!promo) return null;
-    if (promo.expiresAt && new Date() > new Date(promo.expiresAt)) return null;
-
     await supabase.from('promo_codes').update({ usage_count: promo.usageCount + 1 }).eq('id', promo.id);
     setPromoCodes(prev => prev.map(p => p.id === promo.id ? { ...p, usageCount: p.usageCount + 1 } : p));
     return promo;
@@ -1117,22 +716,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTattooReservation = async (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => {
     const id = item.id || `tr${Date.now()}`;
-    const reservation = { ...item, id, createdAt: new Date() };
-
-    await supabase.from('tattoo_reservations').insert([{
-      id, customer_name: item.customerName, contact_number: item.contactNumber, email: item.email,
-      date: item.date.toISOString(), time_slot: item.timeSlot, artist_id: item.artistId,
-      artist_name: item.artistName, artist_contact: item.artistContact, placement: item.placement,
-      estimated_size: item.estimatedSize, design_description: item.designDescription, color_style: item.colorStyle,
-      agreement_signed: item.agreementSigned, consent_signed: item.consentSigned, status: item.status,
-      deposit_amount: item.depositAmount, deposit_paid: item.depositPaid, inspiration_images: item.inspirationImages,
-      reschedule_requested: item.rescheduleRequested, proposed_date: item.proposedDate?.toISOString(),
-      proposed_time_slot: item.proposedTimeSlot, customer_reschedule_confirmed: item.customerRescheduleConfirmed,
-      payment_reference: item.paymentReference, receipt_url: item.receiptUrl,
-    }]);
-    setTattooReservations(prev => [reservation, ...prev]);
-    await addActivity('tattoo_reservation_created', `Tattoo reservation for ${item.customerName}`);
-    
+    await supabase.from('tattoo_reservations').insert([{ id, customer_name: item.customerName, contact_number: item.contactNumber, date: item.date.toISOString(), time_slot: item.timeSlot, artist_id: item.artistId, status: item.status, deposit_amount: item.depositAmount, deposit_paid: item.depositPaid }]);
+    setTattooReservations(prev => [{ ...item, id, createdAt: new Date() }, ...prev]);
     return id;
   };
 
@@ -1146,90 +731,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, depositPaid: paid } : r));
   };
 
-  // 🚨 UNIFIED RESCHEDULE: Supports Tables AND Tattoos 🚨
   const proposeReschedule = async (id: string, proposedDate: Date, proposedTimeSlot: string) => {
-    if (reservations.some(r => r.id === id)) {
-      await supabase.from('reservations').update({
-        reschedule_requested: true,
-        proposed_date: proposedDate.toISOString(),
-        proposed_time_slot: proposedTimeSlot,
-        customer_reschedule_confirmed: null
-      }).eq('id', id);
-      setReservations(prev => prev.map(r => r.id === id ? { ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null } : r));
-    } else if (tattooReservations.some(r => r.id === id)) {
-      await supabase.from('tattoo_reservations').update({
-        reschedule_requested: true,
-        proposed_date: proposedDate.toISOString(),
-        proposed_time_slot: proposedTimeSlot,
-        customer_reschedule_confirmed: null
-      }).eq('id', id);
-      setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null } : r));
-    }
+    const isTable = reservations.some(r => r.id === id);
+    const table = isTable ? 'reservations' : 'tattoo_reservations';
+    await supabase.from(table).update({ reschedule_requested: true, proposed_date: proposedDate.toISOString(), proposed_time_slot: proposedTimeSlot, customer_reschedule_confirmed: null }).eq('id', id);
+    if (isTable) setReservations(prev => prev.map(r => r.id === id ? { ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null } : r));
+    else setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, rescheduleRequested: true, proposedDate, proposedTimeSlot, customerRescheduleConfirmed: null } : r));
   };
 
-  // 🚨 UNIFIED RESCHEDULE CONFIRM: Supports Tables AND Tattoos 🚨
   const confirmReschedule = async (id: string, confirmed: boolean) => {
     const isTable = reservations.some(r => r.id === id);
-    const tableName = isTable ? 'reservations' : 'tattoo_reservations';
-    const arr = isTable ? reservations : tattooReservations;
-
-    const r = arr.find(x => x.id === id);
+    const table = isTable ? 'reservations' : 'tattoo_reservations';
+    const r = isTable ? reservations.find(x => x.id === id) : tattooReservations.find(x => x.id === id);
     if (!r) return;
-
     if (confirmed && r.proposedDate && r.proposedTimeSlot) {
-      await supabase.from(tableName).update({
-        date: r.proposedDate.toISOString(),
-        time_slot: r.proposedTimeSlot,
-        reschedule_requested: false,
-        proposed_date: null,
-        proposed_time_slot: null,
-        customer_reschedule_confirmed: true
-      }).eq('id', id);
-
-      if (isTable) {
-        setReservations(prev => prev.map(item => item.id === id ? { ...item, date: item.proposedDate!, timeSlot: item.proposedTimeSlot!, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: true } : item));
-      } else {
-        setTattooReservations(prev => prev.map(item => item.id === id ? { ...item, date: item.proposedDate!, timeSlot: item.proposedTimeSlot!, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: true } : item));
-      }
+      await supabase.from(table).update({ date: r.proposedDate.toISOString(), time_slot: r.proposedTimeSlot, reschedule_requested: false, proposed_date: null, proposed_time_slot: null, customer_reschedule_confirmed: true }).eq('id', id);
+      if (isTable) setReservations(prev => prev.map(item => item.id === id ? { ...item, date: item.proposedDate!, timeSlot: item.proposedTimeSlot!, rescheduleRequested: false, customerRescheduleConfirmed: true } : item));
+      else setTattooReservations(prev => prev.map(item => item.id === id ? { ...item, date: item.proposedDate!, timeSlot: item.proposedTimeSlot!, rescheduleRequested: false, customerRescheduleConfirmed: true } : item));
     } else {
-      await supabase.from(tableName).update({
-        reschedule_requested: false,
-        proposed_date: null,
-        proposed_time_slot: null,
-        customer_reschedule_confirmed: false
-      }).eq('id', id);
-      
-      if (isTable) {
-        setReservations(prev => prev.map(item => item.id === id ? { ...item, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: false } : item));
-      } else {
-        setTattooReservations(prev => prev.map(item => item.id === id ? { ...item, rescheduleRequested: false, proposedDate: undefined, proposedTimeSlot: undefined, customerRescheduleConfirmed: false } : item));
-      }
+      await supabase.from(table).update({ reschedule_requested: false, proposed_date: null, proposed_time_slot: null, customer_reschedule_confirmed: false }).eq('id', id);
+      if (isTable) setReservations(prev => prev.map(item => item.id === id ? { ...item, rescheduleRequested: false, customerRescheduleConfirmed: false } : item));
+      else setTattooReservations(prev => prev.map(item => item.id === id ? { ...item, rescheduleRequested: false, customerRescheduleConfirmed: false } : item));
     }
   };
 
   const addTattooArtist = async (artist: Omit<TattooArtist, 'id'>) => {
     const id = `ta${Date.now()}`;
-    const newArtist = { ...artist, id };
-    await supabase.from('tattoo_artists').insert([{
-      id, name: artist.name, specialty: artist.specialty, contact_number: artist.contactNumber,
-      email: artist.email, bio: artist.bio, is_available_today: artist.isAvailableToday,
-      is_active: artist.isActive, unavailable_dates: artist.unavailableDates,
-    }]);
-    setTattooArtists(prev => [...prev, newArtist]);
+    await supabase.from('tattoo_artists').insert([{ id, name: artist.name, specialty: artist.specialty, contact_number: artist.contactNumber, is_active: artist.isActive }]);
+    setTattooArtists(prev => [...prev, { ...artist, id }]);
   };
 
   const updateTattooArtist = async (id: string, updates: Partial<TattooArtist>) => {
-    const dbUpdates: any = {};
-    if (updates.name !== undefined) dbUpdates.name = updates.name;
-    if (updates.specialty !== undefined) dbUpdates.specialty = updates.specialty;
-    if (updates.contactNumber !== undefined) dbUpdates.contact_number = updates.contactNumber;
-    if (updates.email !== undefined) dbUpdates.email = updates.email;
-    if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
-    if (updates.isAvailableToday !== undefined) dbUpdates.is_available_today = updates.isAvailableToday;
-    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
-    if (updates.unavailableDates !== undefined) dbUpdates.unavailable_dates = updates.unavailableDates;
-
-    await supabase.from('tattoo_artists').update(dbUpdates).eq('id', id);
+    await supabase.from('tattoo_artists').update(updates).eq('id', id);
     setTattooArtists(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
   };
 
@@ -1245,35 +778,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addStaffUser = async (user: Omit<StaffUser, 'id' | 'createdAt'>) => {
     const id = `u${Date.now()}`;
-    const newUser = { ...user, id, createdAt: new Date() };
-
-    await supabase.from('staff_users').insert([{
-      id, username: user.username, password: user.password, full_name: user.fullName,
-      email: user.email, role: user.role, is_admin: user.isAdmin, artist_id: user.artistId,
-      phone: user.phone, is_active: user.isActive,
-    }]);
-    setStaffUsers(prev => [...prev, newUser]);
+    await supabase.from('staff_users').insert([{ id, username: user.username, password: user.password, full_name: user.fullName, role: user.role }]);
+    setStaffUsers(prev => [...prev, { ...user, id, createdAt: new Date() }]);
   };
 
   const updateStaffUser = async (id: string, updates: Partial<StaffUser>) => {
-    const dbUpdates: any = {};
-    if (updates.username !== undefined) dbUpdates.username = updates.username;
-    if (updates.password !== undefined) dbUpdates.password = updates.password;
-    if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
-    if (updates.email !== undefined) dbUpdates.email = updates.email;
-    if (updates.role !== undefined) dbUpdates.role = updates.role;
-    if (updates.isAdmin !== undefined) dbUpdates.is_admin = updates.isAdmin;
-    if (updates.artistId !== undefined) dbUpdates.artist_id = updates.artistId;
-    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
-    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
-
-    await supabase.from('staff_users').update(dbUpdates).eq('id', id);
+    await supabase.from('staff_users').update(updates).eq('id', id);
     setStaffUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
   };
 
   const resetStaffUserPassword = async (id: string) => {
     await supabase.from('staff_users').update({ password: 'oneshotdefaultpw' }).eq('id', id);
-    setStaffUsers(prev => prev.map(u => u.id === id ? { ...u, password: 'oneshotdefaultpw' } : u));
   };
 
   const toggleStaffUserActive = async (id: string) => {
@@ -1284,58 +799,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateRates = async (r: Partial<RatesConfig>) => {
-    const updates: any = { id: '1' }; 
-    if (r.hourlyRate !== undefined) updates.hourly_rate = r.hourlyRate;
-    if (r.happyHourRate !== undefined) updates.happy_hour_rate = r.happyHourRate;
-    if (r.happyHourStart !== undefined) updates.happy_hour_start = r.happyHourStart;
-    if (r.happyHourEnd !== undefined) updates.happy_hour_end = r.happyHourEnd;
-    if (r.overtimeRate !== undefined) updates.overtime_rate = r.overtimeRate;
-    if (r.tattooDeposit !== undefined) updates.tattoo_deposit = r.tattooDeposit;
-    if (r.downPaymentPercent !== undefined) updates.down_payment_percent = r.downPaymentPercent;
-
-    const { error } = await supabase.from('rates_config').upsert(updates);
-    if (error) {
-      console.error("Database Error saving rates:", error.message);
-      alert("Failed to save to database. Check console for details.");
-    } else {
-      setRates(prev => ({ ...prev, ...r }));
-    }
+    await supabase.from('rates_config').upsert({ id: '1', ...r });
+    setRates(prev => ({ ...prev, ...r }));
   };
 
   const updateReservationTerms = async (t: Partial<ReservationTerms>) => {
-    const updates: any = {};
-    if (t.minHours !== undefined) updates.min_hours = t.minHours;
-    if (t.maxHours !== undefined) updates.max_hours = t.maxHours;
-    if (t.minPartySize !== undefined) updates.min_party_size = t.minPartySize;
-    if (t.maxPartySize !== undefined) updates.max_party_size = t.maxPartySize;
-    if (t.cancellationHours !== undefined) updates.cancellation_hours = t.cancellationHours;
-    if (t.cancellationPolicy !== undefined) updates.cancellation_policy = t.cancellationPolicy;
-    if (t.termsAndConditions !== undefined) updates.terms_and_conditions = t.termsAndConditions;
-
-    await supabase.from('reservation_terms').update(updates).eq('id', '1');
+    await supabase.from('reservation_terms').update(t).eq('id', '1');
     setReservationTermsState(prev => ({ ...prev, ...t }));
   };
 
   const addAnnouncement = async (item: Omit<Announcement, 'id' | 'createdAt'>) => {
     const id = `ann${Date.now()}`;
-    const announcement = { ...item, id, createdAt: new Date() };
-
-    await supabase.from('announcements').insert([{
-      id, title: item.title, content: item.content, type: item.type,
-      is_active: item.isActive, expires_at: item.expiresAt?.toISOString(),
-    }]);
-    setAnnouncements(prev => [announcement, ...prev]);
+    await supabase.from('announcements').insert([{ id, ...item }]);
+    setAnnouncements(prev => [{ ...item, id, createdAt: new Date() }, ...prev]);
   };
 
   const updateAnnouncement = async (id: string, updates: Partial<Announcement>) => {
-    const dbUpdates: any = {};
-    if (updates.title !== undefined) dbUpdates.title = updates.title;
-    if (updates.content !== undefined) dbUpdates.content = updates.content;
-    if (updates.type !== undefined) dbUpdates.type = updates.type;
-    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
-    if (updates.expiresAt !== undefined) dbUpdates.expires_at = updates.expiresAt?.toISOString();
-
-    await supabase.from('announcements').update(dbUpdates).eq('id', id);
+    await supabase.from('announcements').update(updates).eq('id', id);
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
   };
 
@@ -1347,20 +827,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleAnnouncement = async (id: string) => {
     const announcement = announcements.find(a => a.id === id);
     if (!announcement) return;
-
     await supabase.from('announcements').update({ is_active: !announcement.isActive }).eq('id', id);
     setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, isActive: !a.isActive } : a));
   };
 
   const addClosedDate = async (item: Omit<ClosedDate, 'id'>) => {
     const id = `cd${Date.now()}`;
-    const closedDate = { ...item, id };
-
-    await supabase.from('closed_dates').insert([{
-      id, date: item.date, reason: item.reason, is_full_day: item.isFullDay,
-      open_time: item.openTime, close_time: item.closeTime,
-    }]);
-    setClosedDates(prev => [...prev, closedDate]);
+    await supabase.from('closed_dates').insert([{ id, ...item }]);
+    setClosedDates(prev => [...prev, { ...item, id }]);
   };
 
   const removeClosedDate = async (id: string) => {
@@ -1369,112 +843,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateClosedDate = async (id: string, updates: Partial<ClosedDate>) => {
-    const dbUpdates: any = {};
-    if (updates.date !== undefined) dbUpdates.date = updates.date;
-    if (updates.reason !== undefined) dbUpdates.reason = updates.reason;
-    if (updates.isFullDay !== undefined) dbUpdates.is_full_day = updates.isFullDay;
-    if (updates.openTime !== undefined) dbUpdates.open_time = updates.openTime;
-    if (updates.closeTime !== undefined) dbUpdates.close_time = updates.closeTime;
-
-    await supabase.from('closed_dates').update(dbUpdates).eq('id', id);
+    await supabase.from('closed_dates').update(updates).eq('id', id);
     setClosedDates(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
   const updateSiteSettings = async (s: Partial<SiteSettings>) => {
-    const updates: any = { id: '1' };
-    if (s.logoUrl !== undefined) updates.logo_url = s.logoUrl;
-    if (s.heroTitle !== undefined) updates.hero_title = s.heroTitle;
-    if (s.heroSubtitle !== undefined) updates.hero_subtitle = s.heroSubtitle;
-    if (s.heroDescription !== undefined) updates.hero_description = s.heroDescription;
-    if (s.aboutStory !== undefined) updates.about_story = s.aboutStory;
-    if (s.contactAddress !== undefined) updates.contact_address = s.contactAddress;
-    if (s.contactPhone !== undefined) updates.contact_phone = s.contactPhone;
-    if (s.contactEmail !== undefined) updates.contact_email = s.contactEmail;
-    if (s.contactHours !== undefined) updates.contact_hours = s.contactHours;
-    if (s.heroImage1 !== undefined) updates.hero_image_1 = s.heroImage1;
-    if (s.heroImage2 !== undefined) updates.hero_image_2 = s.heroImage2;
-    if (s.heroImage3 !== undefined) updates.hero_image_3 = s.heroImage3;
-    if (s.promoImage !== undefined) updates.promo_image = s.promoImage;
-    if (s.aboutImage !== undefined) updates.about_image = s.aboutImage;
-
-    const { error } = await supabase.from('site_settings').upsert(updates);
-    if (error) throw new Error(error.message);
+    await supabase.from('site_settings').upsert({ id: '1', ...s });
     setSiteSettings(prev => ({ ...prev, ...s } as SiteSettings));
   };
 
   const sendCustomerPush = async (customerName: string, title: string, message: string) => {
+    if (!import.meta.env.VITE_ONESIGNAL_REST_KEY) return;
     try {
       await fetch('/api/onesignal', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}` },
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
-          filters: [
-            { "field": "tag", "key": "customer_name", "relation": "=", "value": customerName.toLowerCase() }
-          ],
+          filters: [{ "field": "tag", "key": "customer_name", "relation": "=", "value": customerName.toLowerCase() }],
           headings: { "en": title },
           contents: { "en": message }
         })
       });
-    } catch (err) {
-      console.error("Push failed to send:", err);
-    }
+    } catch { console.warn("Push failed suppressed."); }
   };
 
   const sendAdminPush = async (title: string, message: string) => {
+    if (!import.meta.env.VITE_ONESIGNAL_REST_KEY) return;
     try {
       await fetch('/api/onesignal', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}`
-          
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_REST_KEY}` },
         body: JSON.stringify({
           app_id: import.meta.env.VITE_ONESIGNAL_APP_ID,
-          filters: [
-            { "field": "tag", "key": "role", "relation": "=", "value": "admin" }
-          ],
+          filters: [{ "field": "tag", "key": "role", "relation": "=", "value": "admin" }],
           headings: { "en": title },
           contents: { "en": message }
         })
       });
-      console.log("TESTING MY REST KEY:", import.meta.env.VITE_ONESIGNAL_REST_KEY);
-    } catch (err) {
-      console.error("Admin push failed to send:", err);
-    }
+    } catch { console.warn("Admin push suppressed."); }
   };
 
   return (
     <AppContext.Provider value={{
       tables, queue, reservations, feedback, activities, promoCodes, tattooReservations, tattooArtists,
-      staffUsers, rates, reservationTerms: reservationTerms, announcements, closedDates, siteSettings,
-      loading,
+      staffUsers, rates, reservationTerms, announcements, closedDates, siteSettings, loading,
       staffLoggedIn, adminLoggedIn, artistLoggedIn, currentArtistId, staffProfile,
       staffLogin, staffLogout, adminLogin, adminLogout, artistLogin, artistLogout, updateStaffProfile,
       assignTable, freeTable, reserveTable, extendSession, addTable, updateTable, toggleTableActive, deleteTable,
-      addOrderToTable, removeOrderFromTable,
-      addToQueue, removeFromQueue, callQueueItem,
+      addOrderToTable, removeOrderFromTable, addToQueue, removeFromQueue, callQueueItem,
       addReservation, updateReservationStatus, cancelReservation, updateDownPayment, updateBalance,
-      addFeedback, addActivity,
-      addPromoCode, togglePromoCode, deletePromoCode, applyPromoCode,
+      addFeedback, addActivity, addPromoCode, togglePromoCode, deletePromoCode, applyPromoCode,
       addTattooReservation, updateTattooReservationStatus, updateTattooDepositPaid,
-      proposeReschedule, confirmReschedule,
-      addTattooArtist, updateTattooArtist, deleteTattooArtist, updateTattooArtistUnavailableDates,
-      addStaffUser, updateStaffUser, resetStaffUserPassword, toggleStaffUserActive,
-      updateRates, updateReservationTerms,
-      addAnnouncement, updateAnnouncement, deleteAnnouncement, toggleAnnouncement,
-      addClosedDate, removeClosedDate, updateClosedDate, updateSiteSettings,
-      refreshData,
-      sendCustomerPush, sendAdminPush
+      proposeReschedule, confirmReschedule, addTattooArtist, updateTattooArtist, deleteTattooArtist, 
+      updateTattooArtistUnavailableDates, addStaffUser, updateStaffUser, resetStaffUserPassword, 
+      toggleStaffUserActive, updateRates, updateReservationTerms, addAnnouncement, updateAnnouncement, 
+      deleteAnnouncement, toggleAnnouncement, addClosedDate, removeClosedDate, updateClosedDate, 
+      updateSiteSettings, refreshData, sendCustomerPush, sendAdminPush
     }}>
       {children}
     </AppContext.Provider>
   );
 }
+
+// ─── HOOK ─────────────────────────────────────────────────────────────────────
 
 export function useAppContext() {
   const context = useContext(AppContext);

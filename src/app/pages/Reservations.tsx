@@ -562,7 +562,7 @@ function TableReservationsView() {
               <button onClick={() => setShowCompleteDialog(false)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg"><X size={16} /></button>
             </div>
             <div className="p-6 space-y-4">
-              <p className="text-sm text-neutral-500">Are you sure you want to mark this reservation as complete? This will finalize the session and clear it from the active queue.</p>
+              <p className="text-sm text-neutral-500">Are you sure you want to mark this reservation as complete? This will finalize the session and clear it from reservations.</p>
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowCompleteDialog(false)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
                 <button type="button" onClick={() => {
