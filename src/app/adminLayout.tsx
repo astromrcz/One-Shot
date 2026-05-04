@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard, Users, Table2, Tag, BarChart3,
-  Banknote, // 👈 Replaced DollarSign with Banknote
+  Banknote, 
   FileText, Megaphone, CalendarX2, LayoutTemplate,
   Palette, Menu, X, LogOut, ChevronRight,
   ShieldCheck, Bell, Circle, Activity, MessageSquare, Settings as SettingsIcon, FileSpreadsheet
@@ -23,7 +23,6 @@ const navItems = [
   { to: '/admin/reservation-terms', icon: FileText,    label: 'Reservation Terms' },
   { to: '/admin/calendar',      icon: CalendarX2,      label: 'Closing Calendar' },
   { to: '/admin/analytics',     icon: BarChart3,       label: 'Analytics' },
-  { to: '/admin/reports',       icon: FileSpreadsheet, label: 'Reports' }, 
   { to: '/admin/activity',      icon: Activity,        label: 'Activity Log' },
   { to: '/admin/feedback',      icon: MessageSquare,   label: 'Customer Feedback' },
   { to: '/admin/settings',      icon: SettingsIcon,    label: 'Account Settings' },
@@ -40,7 +39,6 @@ const pageTitles: Record<string, string> = {
   '/admin/reservation-terms': 'Reservation Terms',
   '/admin/calendar': 'Closing Calendar',
   '/admin/analytics': 'Analytics',
-  '/admin/reports': 'Reports', // 👈 Added
   '/admin/activity': 'Activity Log',
   '/admin/settings': 'Settings',
 };

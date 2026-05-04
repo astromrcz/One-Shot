@@ -1,14 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
+  AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { useAppContext } from '../context/AppContext';
-import { TrendingUp, TrendingDown, BarChart3, Clock, TableProperties, Download, RefreshCw, PhilippinePeso, Users, CheckCircle } from 'lucide-react';
-import { isToday, isThisMonth, isThisYear, subDays, format, startOfDay } from 'date-fns';
+import { 
+  TrendingUp, TrendingDown, BarChart3, Clock, TableProperties, 
+  Download, RefreshCw, PhilippinePeso, Users, CheckCircle 
+} from 'lucide-react';
+import { 
+  isToday, isThisMonth, isThisYear, subDays, subMonths, 
+  format, isSameDay, isSameWeek, isSameMonth, 
+  eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval,
+  isAfter, startOfDay
+} from 'date-fns';
 
 const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'];
-type DateFilter = 'today' | 'month' | 'year' | 'all';
+type GlobalRange = 'today' | '7d' | 'month' | 'year';
 
 // --- HELPERS ---
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -18,8 +26,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="text-xs text-neutral-400 mb-1">{label}</p>
         {payload.map((p: any, i: number) => (
           <p key={i} className="text-xs font-semibold" style={{ color: p.color }}>
-            {p.name}: {p.dataKey === 'revenue' || p.dataKey === 'value' ? `₱${p.value.toLocaleString()}` : p.value}
-            {p.dataKey === 'occupancy' ? '%' : ''}
+            {p.name}: ₱{p.value.toLocaleString()}
           </p>
         ))}
       </div>
@@ -28,7 +35,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-function StatCard({ label, value, sub, trend, icon: Icon, color }: any) {
+function StatCard({ label, value, sub, icon: Icon, color }: any) {
   return (
     <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-4">
       <div className="flex items-start justify-between mb-2">
@@ -39,135 +46,172 @@ function StatCard({ label, value, sub, trend, icon: Icon, color }: any) {
       </div>
       <p className={`text-2xl font-black ${color}`}>{value}</p>
       {sub && <p className="text-xs text-neutral-500 mt-1">{sub}</p>}
-      {trend !== undefined && (
-        <div className={`flex items-center gap-1 mt-1.5 text-xs font-semibold ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-          {trend >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-          {Math.abs(trend)}% vs last period
-        </div>
-      )}
     </div>
   );
 }
 
 export function Analytics() {
   const { tables, reservations } = useAppContext();
-  const [filter, setFilter] = useState<DateFilter>('month');
+  const [range, setRange] = useState<GlobalRange>('month');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fake Loading Effect when switching filters
+  // Unified loading effect for the entire page
   useEffect(() => {
     setIsLoading(true);
     const timer = setTimeout(() => setIsLoading(false), 500);
     return () => clearTimeout(timer);
-  }, [filter]);
+  }, [range]);
 
-  // --- 1. CALCULATE REPORT DATA (Verbatim from Reports logic) ---
-  const reportData = reservations.filter(r => {
-    const d = new Date(r.date);
-    return filter === 'today' ? isToday(d) : filter === 'month' ? isThisMonth(d) : filter === 'year' ? isThisYear(d) : true;
-  });
+  // --- 1. DYNAMIC DATE RANGE FILTERING ---
+  const filteredReservations = useMemo(() => {
+    const now = new Date();
+    
+    return reservations.filter(r => {
+      const resDate = new Date(r.date);
+      if (r.status !== 'completed') return false;
 
-  const completed = reportData.filter(r => r.status === 'completed');
-  const totalRevenue = completed.reduce((sum, r) => sum + r.totalAmount, 0);
-  const totalGuests = completed.reduce((sum, r) => sum + r.partySize, 0);
+      if (range === 'today') return isToday(resDate);
+      
+      let startDate: Date;
+      if (range === '7d') startDate = subDays(now, 6);
+      else if (range === 'month') startDate = subMonths(now, 1);
+      else startDate = subMonths(now, 11);
 
-  // --- 2. CALCULATE DYNAMIC CHART DATA ---
-  
-  // Weekly Revenue (Last 7 Days)
-  const last7Days = [...Array(7)].map((_, i) => {
-    const d = subDays(new Date(), i);
-    const dayName = format(d, 'EEE');
-    const dayRevenue = reservations
-      .filter(r => r.status === 'completed' && startOfDay(new Date(r.date)).getTime() === startOfDay(d).getTime())
-      .reduce((sum, r) => sum + r.totalAmount, 0);
-    return { day: dayName, revenue: dayRevenue, date: d };
-  }).reverse();
+      return isAfter(startOfDay(resDate), startOfDay(startDate));
+    });
+  }, [reservations, range]);
 
-  // Session Duration Distribution
-  const sessionDist = [
-    { 
-      name: 'Open Time', 
-      // Assuming 0 or null represents Open Time sessions in your DB
-      value: reservations.filter(r => r.status === 'completed' && (r.durationHours === 0 || !r.durationHours)).length 
-    },
-    { name: '1 Hour', value: reservations.filter(r => r.status === 'completed' && r.durationHours === 1).length },
-    { name: '2 Hours', value: reservations.filter(r => r.status === 'completed' && r.durationHours === 2).length },
-    { name: '3 Hours', value: reservations.filter(r => r.status === 'completed' && r.durationHours === 3).length },
-    { name: '4+ Hours', value: reservations.filter(r => r.status === 'completed' && r.durationHours >= 4).length },
-  ].filter(d => d.value > 0);
+  // --- 2. KPI CALCULATIONS (Synced to Range) ---
+  const totalRevenue = filteredReservations.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
+  const totalGuests = filteredReservations.reduce((sum, r) => sum + (r.partySize || 0), 0);
+  const completedCount = filteredReservations.length;
 
-  // Table Performance
-  const tablePerformance = tables.map(table => {
-    const tableRes = reservations.filter(r => r.tableId === table.id && r.status === 'completed');
-    const revenue = tableRes.reduce((s, r) => s + r.totalAmount, 0);
-    return {
-      name: table.name,
-      sessions: tableRes.length,
-      revenue: revenue,
-      usage: Math.min(100, Math.round((tableRes.length / (reservations.length || 1)) * 100 * 5)) // Simplified weight
-    };
-  }).sort((a, b) => b.revenue - a.revenue);
+  // --- 3. TREND DATA (Synced to Range) ---
+  const trendData = useMemo(() => {
+    const now = new Date();
+    
+    if (range === 'today') {
+      // Create buckets for every 2 hours for today
+      return [8, 10, 12, 14, 16, 18, 20, 22].map(hour => ({
+        label: `${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'PM' : 'AM'}`,
+        revenue: filteredReservations
+          .filter(r => new Date(r.date).getHours() >= hour && new Date(r.date).getHours() < hour + 2)
+          .reduce((sum, r) => sum + (r.totalAmount || 0), 0)
+      }));
+    }
+
+    if (range === '7d') {
+      return eachDayOfInterval({ start: subDays(now, 6), end: now }).map(date => ({
+        label: format(date, 'EEE'),
+        revenue: filteredReservations
+          .filter(r => isSameDay(new Date(r.date), date))
+          .reduce((sum, r) => sum + (r.totalAmount || 0), 0)
+      }));
+    }
+
+    if (range === 'month') {
+      return eachWeekOfInterval({ start: subMonths(now, 1), end: now }).map(date => ({
+        label: `Week ${format(date, 'w')}`,
+        revenue: filteredReservations
+          .filter(r => isSameWeek(new Date(r.date), date))
+          .reduce((sum, r) => sum + (r.totalAmount || 0), 0)
+      }));
+    }
+
+    return eachMonthOfInterval({ start: subMonths(now, 11), end: now }).map(date => ({
+      label: format(date, 'MMM'),
+      revenue: filteredReservations
+        .filter(r => isSameMonth(new Date(r.date), date))
+        .reduce((sum, r) => sum + (r.totalAmount || 0), 0)
+    }));
+  }, [filteredReservations, range]);
+
+  // --- 4. SESSION DISTRIBUTION (Synced to Range) ---
+  const sessionDist = useMemo(() => {
+    return [
+      { name: 'Open Time', value: filteredReservations.filter(r => !r.durationHours || r.durationHours === 0).length },
+      { name: '1 Hour', value: filteredReservations.filter(r => r.durationHours === 1).length },
+      { name: '2 Hours', value: filteredReservations.filter(r => r.durationHours === 2).length },
+      { name: '3 Hours', value: filteredReservations.filter(r => r.durationHours === 3).length },
+      { name: '4+ Hours', value: filteredReservations.filter(r => r.durationHours >= 4).length },
+    ].filter(d => d.value > 0);
+  }, [filteredReservations]);
+
+  // --- 5. TABLE PERFORMANCE (Synced to Range) ---
+  const tablePerformance = useMemo(() => {
+    return tables.map(table => {
+      const tableRes = filteredReservations.filter(r => r.tableId === table.id);
+      const revenue = tableRes.reduce((s, r) => s + (r.totalAmount || 0), 0);
+      return {
+        name: table.name,
+        sessions: tableRes.length,
+        revenue: revenue,
+        usage: Math.min(100, Math.round((tableRes.length / (filteredReservations.length || 1)) * 100 * 5))
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+  }, [tables, filteredReservations]);
 
   const exportReport = () => {
     const headers = "Metric,Value\n";
-    const rows = `Total Revenue,${totalRevenue}\nTotal Completed Bookings,${completed.length}\nTotal Guests Served,${totalGuests}\n`;
+    const rows = `Range,${range}\nTotal Revenue,${totalRevenue}\nCompleted Bookings,${completedCount}\nGuests Served,${totalGuests}\n`;
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `OneShot_Financial_Report_${filter}.csv`; a.click();
+    a.href = url; a.download = `OneShot_Analytics_${range}.csv`; a.click();
   };
 
   return (
-    <div className="space-y-6">
-      {/* SECTION: FINANCIAL REPORTS (Merged) */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-neutral-900 border border-neutral-800 p-5 rounded-2xl shadow-sm">
+    <div className="space-y-6 relative">
+      {/* GLOBAL LOADING OVERLAY */}
+      {isLoading && (
+        <div className="fixed inset-0 z-[100] bg-neutral-950/20 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
+          <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl shadow-2xl flex items-center gap-3">
+            <RefreshCw size={20} className="text-amber-500 animate-spin" />
+            <span className="text-sm font-bold text-white uppercase tracking-widest">Syncing Data...</span>
+          </div>
+        </div>
+      )}
+
+      {/* UNIFIED HEADER & FILTER */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-neutral-900 border border-neutral-800 p-5 rounded-2xl">
         <div>
           <h1 className="text-xl font-black text-white flex items-center gap-2">
-            <PhilippinePeso className="text-amber-500" size={20}/> Reports and Analytics
+            <BarChart3 className="text-amber-500" size={20}/> Business Intelligence
           </h1>
-          <p className="text-xs text-neutral-400 mt-1">Real-time revenue and booking analytics.</p>
+          <p className="text-xs text-neutral-400 mt-1">Unified analytics for the selected period.</p>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <select 
-            value={filter} 
-            onChange={e => setFilter(e.target.value as DateFilter)} 
-            className="flex-1 sm:flex-none bg-neutral-950 border border-neutral-800 text-sm text-neutral-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-amber-500/50"
-          >
-            <option value="today">Today</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-            <option value="all">All Time</option>
-          </select>
-          <button onClick={exportReport} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all">
-            <Download size={16} /> Export
-          </button>
-        </div>
+        
+        <div className="flex items-center gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800 w-full sm:w-auto">
+  {(['today', '7d', 'month', 'year'] as GlobalRange[]).map((t) => (
+    <button
+      key={t}
+      onClick={() => setRange(t)}
+      className={`flex-1 sm:flex-none px-4 py-2 text-xs font-bold rounded-lg transition-all ${range === t ? 'bg-amber-600 text-white shadow-lg' : 'text-neutral-500 hover:text-neutral-300'}`}
+    >
+      {t === 'today' ? 'Today' : t === '7d' ? 'Last 7 Days' : t === 'month' ? 'Last Month' : 'Past Year'}
+    </button>
+  ))}
+  <div className="w-px h-4 bg-neutral-800 mx-1" />
+  <button onClick={exportReport} title="Export CSV" className="p-2 text-neutral-400 hover:text-white transition-colors">
+    <Download size={18} />
+  </button>
+</div>
       </div>
 
-      {/* KPI Row */}
-      <div className="relative">
-        {isLoading && (
-          <div className="absolute inset-0 z-10 bg-neutral-900/50 backdrop-blur-[2px] rounded-xl flex items-center justify-center">
-            <RefreshCw size={24} className="text-amber-500 animate-spin" />
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard label="Filter Revenue" value={`₱${totalRevenue.toLocaleString()}`} sub={`Gross from ${filter}`} icon={PhilippinePeso} color="text-emerald-400" />
-          <StatCard label="Bookings" value={completed.length} sub="Completed sessions" icon={CheckCircle} color="text-blue-400" />
-          <StatCard label="Total Guests" value={totalGuests} sub="Pax served" icon={Users} color="text-amber-400" />
-        </div>
+
+      {/* KPI ROW */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard label="Total Revenue" value={`₱${totalRevenue.toLocaleString()}`} sub={`Gross (${range})`} icon={PhilippinePeso} color="text-emerald-400" />
+        <StatCard label="Completed Sessions" value={completedCount} sub="Finalized bookings" icon={CheckCircle} color="text-blue-400" />
+        <StatCard label="Guests Served" value={totalGuests} sub="Total pax" icon={Users} color="text-amber-400" />
       </div>
 
-      {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Real Weekly Revenue Area Chart */}
-        <div className="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-5">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-neutral-300">Revenue Trend (Last 7 Days)</h3>
-            <p className="text-xs text-neutral-600 mt-0.5">Daily table rental income</p>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={last7Days}>
+        {/* REVENUE TREND */}
+        <div className="lg:col-span-2 bg-neutral-950 border border-neutral-800 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-neutral-300 mb-6">Revenue Trajectory</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart data={trendData}>
               <defs>
                 <linearGradient id="analytics-revGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
@@ -175,49 +219,33 @@ export function Analytics() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#737373' }} axisLine={false} tickLine={false} tickFormatter={v => `₱${v}`} />
               <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="revenue" name="Daily Revenue" stroke="#10b981" strokeWidth={3} fill="url(#analytics-revGrad)" dot={{ fill: '#10b981', r: 4 }} />
+              <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#10b981" strokeWidth={3} fill="url(#analytics-revGrad)" dot={{ fill: '#10b981', r: 4 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Real Session Distribution */}
-        <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5">
+        {/* SESSION DISTRIBUTION */}
+        <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-neutral-300 mb-1">Session Distribution</h3>
-          <p className="text-xs text-neutral-600 mb-4">Timed vs Open Time Popularity</p>
-          <ResponsiveContainer width="100%" height={180}>
+          <p className="text-xs text-neutral-600 mb-6">Popular durations</p>
+          <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie 
-                data={sessionDist} 
-                cx="50%" 
-                cy="50%" 
-                innerRadius={55} 
-                outerRadius={80} 
-                dataKey="value" 
-                paddingAngle={5}
-              >
+              <Pie data={sessionDist} cx="50%" cy="50%" innerRadius={60} outerRadius={85} dataKey="value" paddingAngle={5}>
                 {sessionDist.map((entry, i) => (
-                  <Cell 
-                    key={i} 
-                    // Use a specific blue for Open Time if it matches the name
-                    fill={entry.name === 'Open Time' ? '#3b82f6' : COLORS[i % COLORS.length]} 
-                    stroke="none" 
-                  />
+                  <Cell key={i} fill={entry.name === 'Open Time' ? '#3b82f6' : COLORS[i % COLORS.length]} stroke="none" />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip />
             </PieChart>
           </ResponsiveContainer>
-          <div className="space-y-2 mt-2">
+          <div className="space-y-2.5 mt-4">
             {sessionDist.map((item, i) => (
               <div key={i} className="flex items-center justify-between text-[11px]">
                 <div className="flex items-center gap-2">
-                  <span 
-                    className="w-2.5 h-2.5 rounded-sm" 
-                    style={{ backgroundColor: item.name === 'Open Time' ? '#3b82f6' : COLORS[i % COLORS.length] }} 
-                  />
+                  <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.name === 'Open Time' ? '#3b82f6' : COLORS[i % COLORS.length] }} />
                   <span className="text-neutral-400">{item.name}</span>
                 </div>
                 <span className="text-neutral-200 font-bold">{item.value} sessions</span>
@@ -227,23 +255,17 @@ export function Analytics() {
         </div>
       </div>
 
-
-      {/* Table Performance Table */}
-      <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-neutral-300">Table Utilization Performance</h3>
-            <p className="text-xs text-neutral-600 mt-0.5">Which tables are generating the most value?</p>
-          </div>
-        </div>
+      {/* TABLE PERFORMANCE */}
+      <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-neutral-300 mb-4">Table Performance Metrics</h3>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-neutral-800 text-left">
-                <th className="text-[10px] text-neutral-500 uppercase tracking-wider py-3 pr-4">Table</th>
-                <th className="text-[10px] text-neutral-500 uppercase tracking-wider py-3 pr-4">Total Sessions</th>
-                <th className="text-[10px] text-neutral-500 uppercase tracking-wider py-3 pr-4">Revenue Contribution</th>
-                <th className="text-[10px] text-neutral-500 uppercase tracking-wider py-3">Popularity</th>
+              <tr className="border-b border-neutral-800 text-[10px] text-neutral-500 uppercase tracking-wider">
+                <th className="py-3 pr-4">Table</th>
+                <th className="py-3 pr-4">Sessions</th>
+                <th className="py-3 pr-4">Total Revenue</th>
+                <th className="py-3">Utilization</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800/40">
@@ -255,10 +277,7 @@ export function Analytics() {
                   <td className="py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-1.5 bg-neutral-800 rounded-full max-w-[100px]">
-                        <div 
-                          className="h-full rounded-full bg-amber-500" 
-                          style={{ width: `${t.usage}%` }} 
-                        />
+                        <div className="h-full rounded-full bg-amber-500" style={{ width: `${t.usage}%` }} />
                       </div>
                       <span className="text-[10px] text-neutral-500 font-bold">{t.usage}%</span>
                     </div>
