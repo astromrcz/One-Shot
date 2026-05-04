@@ -2,31 +2,30 @@ import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard, Users, Table2, Tag, BarChart3,
-  DollarSign, FileText, Megaphone, CalendarX2, LayoutTemplate,
+  Banknote, // 👈 Replaced DollarSign with Banknote
+  FileText, Megaphone, CalendarX2, LayoutTemplate,
   Palette, Menu, X, LogOut, ChevronRight,
-  ShieldCheck, Bell, Circle, Activity, Settings as SettingsIcon, FileSpreadsheet
+  ShieldCheck, Bell, Circle, Activity, MessageSquare, Settings as SettingsIcon, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppContext } from './context/AppContext';
 import logoImg from '@/app/assets/40eb82831843e17a3c48a360fd80f0aaaa58ddc8.png';
 import OneSignal from 'react-onesignal';
 
-// 🚨 ADDED "Reports" to the Navigation Array
 const navItems = [
-  { to: '/admin',               icon: LayoutDashboard, label: 'Dashboard',           exact: true },
+  { to: '/admin',                icon: LayoutDashboard, label: 'Dashboard',           exact: true },
   { to: '/admin/customization', icon: LayoutTemplate,  label: 'Site Customization' },
   { to: '/admin/users',         icon: Users,           label: 'User Management' },
   { to: '/admin/tables',        icon: Table2,          label: 'Table Management' },
   { to: '/admin/tattoo-artists',icon: Palette,         label: 'Tattoo Artists' },
   { to: '/admin/promo-codes',   icon: Tag,             label: 'Promo Codes' },
-  { to: '/admin/rates',         icon: DollarSign,      label: 'Rates Editor' },
+  { to: '/admin/rates',         icon: Banknote,        label: 'Rates Editor' }, // 👈 Updated icon here
   { to: '/admin/reservation-terms', icon: FileText,    label: 'Reservation Terms' },
-  { to: '/admin/announcements', icon: Megaphone,       label: 'Announcements' },
   { to: '/admin/calendar',      icon: CalendarX2,      label: 'Closing Calendar' },
   { to: '/admin/analytics',     icon: BarChart3,       label: 'Analytics' },
-  { to: '/admin/reports',       icon: FileSpreadsheet, label: 'Reports' }, // 👈 Added
+  { to: '/admin/reports',       icon: FileSpreadsheet, label: 'Reports' }, 
   { to: '/admin/activity',      icon: Activity,        label: 'Activity Log' },
-  { to: '/admin/tattoo-reservations', icon: Palette, label: 'Tattoo Bookings' },
+  { to: '/admin/feedback',      icon: MessageSquare,   label: 'Customer Feedback' },
   { to: '/admin/settings',      icon: SettingsIcon,    label: 'Account Settings' },
 ];
 
@@ -39,7 +38,6 @@ const pageTitles: Record<string, string> = {
   '/admin/promo-codes': 'Promo Codes',
   '/admin/rates': 'Rates Editor',
   '/admin/reservation-terms': 'Reservation Terms',
-  '/admin/announcements': 'Announcements',
   '/admin/calendar': 'Closing Calendar',
   '/admin/analytics': 'Analytics',
   '/admin/reports': 'Reports', // 👈 Added

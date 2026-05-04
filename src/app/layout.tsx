@@ -19,7 +19,6 @@ const navItems = [
   { to: '/staff/queue',             icon: UserPlus,    label: 'Queue' },
   { to: '/staff/history',           icon: History,     label: 'History' }, 
   { to: '/staff/promo-codes',       icon: Tag,         label: 'Promo Codes' },
-  { to: '/staff/feedback',          icon: Star,        label: 'Feedback' },
   { to: '/staff/settings',          icon: Settings,    label: 'Settings' },
 ];
 
@@ -31,7 +30,6 @@ const pageTitles: Record<string, string> = {
   '/staff/tattoo-reservations': 'Tattoo Reservations',
   '/staff/history': 'History Log', // 👈 Added
   '/staff/promo-codes': 'Promo Codes',
-  '/staff/feedback': 'Customer Feedback',
   '/staff/settings': 'Settings',
 };
 

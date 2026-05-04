@@ -1,5 +1,5 @@
 import { useAppContext } from '../context/AppContext';
-import { Users, Table2, Tag, Megaphone, CalendarX2, DollarSign, TrendingUp, Activity } from 'lucide-react';
+import { Users, Table2, Tag, Megaphone, CalendarX2, Banknote, TrendingUp, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 export function AdminDashboard() {
@@ -32,7 +32,7 @@ export function AdminDashboard() {
             <p className="text-sm text-neutral-400">Full control over One Shot Bar & Billiards operations.</p>
           </div>
           <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl flex-shrink-0">
-            <DollarSign size={15} className="text-amber-400" />
+            <Banknote size={15} className="text-amber-400" />
             <div>
               <p className="text-xs font-black text-amber-400">₱{totalRevenue.toLocaleString()}</p>
               <p className="text-[10px] text-amber-700">Total Revenue</p>

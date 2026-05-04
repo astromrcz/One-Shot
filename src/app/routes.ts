@@ -11,7 +11,6 @@ import { Tables } from './pages/Tables';
 import { ReservationsPage } from './pages/Reservations'; // 🚨 Updated import
 import { Queue } from './pages/Queue';
 import { ActivityLog } from './pages/ActivityLog';
-import { FeedbackPage } from './pages/Feedback';
 import { PromoCodesPage } from './pages/PromoCodes';
 import { SettingsPage } from './pages/Settings';
 import { HistoryPage } from './pages/History'; 
@@ -26,6 +25,7 @@ import { AdminReservationTerms } from './pages/AdminReservationTerms';
 import { AdminAnnouncements } from './pages/AdminAnnouncements';
 import { AdminCalendar } from './pages/AdminCalendar';
 import { Analytics } from './pages/Analytics';
+import { FeedbackPage } from './pages/Feedback';
 import { ReportsPage } from './pages/Reports'; 
 import { SiteCustomization } from './pages/SiteCustomization';
 // Artist portal
@@ -48,7 +48,6 @@ export const router = createBrowserRouter([
           { path: 'tables',               Component: Tables },
           { path: 'reservations',         Component: ReservationsPage }, // 🚨 Updated component
           { path: 'queue',                Component: Queue },
-          { path: 'feedback',             Component: FeedbackPage },
           { path: 'promo-codes',          Component: PromoCodesPage },
           { path: 'history',              Component: HistoryPage }, 
           { path: 'settings',             Component: SettingsPage },
@@ -71,9 +70,10 @@ export const router = createBrowserRouter([
           { path: 'announcements',          Component: AdminAnnouncements },
           { path: 'calendar',               Component: AdminCalendar },
           { path: 'analytics',              Component: Analytics },
+          { path: 'feedback',             Component: FeedbackPage },
           { path: 'reports',                Component: ReportsPage }, 
           { path: 'settings',               Component: SettingsPage },
-          { path: 'reservations',           Component: ReservationsPage }, // 🚨 Used single Reservations page for admin too
+          { path: 'reservations',           Component: ReservationsPage }, 
         ],
       },
       // ── Artist Portal ─────────────────────────────────────
