@@ -5,7 +5,7 @@ import { addMinutes, differenceInSeconds, format, isToday } from 'date-fns';
 import { supabase } from '../../utils/supabase/client';
 import {
   ChevronLeft, ChevronRight, X, Star, Phone, MapPin,
-  Clock, LogIn, UserPlus, Eye, EyeOff,
+  Clock, LogIn, UserPlus, Eye, EyeOff, ChevronDown,
   Calendar, CheckCircle, ArrowRight,
   Megaphone, Info, Shield, Award, Mail, Tag, AlertTriangle, CalendarDays, Check, LogOut, Package, Table2, Palette, Copy
 } from 'lucide-react';
@@ -49,6 +49,168 @@ const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 type Section = 'home' | 'reservations' | 'rates' | 'about' | 'contacts' | 'reviews' | 'feedback' | 'tattoo';
+
+// ─── FLOATING LIVE STATUS WIDGET ─────────────────────────────────────────────
+// You can export and use this exact component inside Reservations.tsx as well!
+export function LiveStatusWidget() {
+  const { tables, queue, reservations } = useAppContext();
+  const [isOpen, setIsOpen] = useState(false);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getTableTimerInfo = (tableId: string) => {
+    const t = tables.find(tb => tb.id === tableId);
+    if (!t || t.status !== 'occupied' || !t.session) return null;
+
+    if (t.session.durationMinutes === 0) {
+      const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(t.session.startTime)));
+      const mins = Math.floor(elapsedSecs / 60);
+      const secs = elapsedSecs % 60;
+      return { 
+        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
+        isOvertime: false, 
+        isOpenTime: true,
+      };
+    }
+
+    const endTime = addMinutes(new Date(t.session.startTime), t.session.durationMinutes);
+    const secsLeft = differenceInSeconds(endTime, now);
+    const isOvertime = secsLeft < 0;
+    const absSecs = Math.abs(secsLeft);
+    const mins = Math.floor(absSecs / 60);
+    const secs = absSecs % 60;
+    return { 
+      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
+      isOvertime, 
+      isOpenTime: false,
+    };
+  };
+
+  const getNextResForTable = (tableId: string) => {
+    return reservations.filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && isToday(new Date(r.date)) && new Date(r.date) >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null;
+  };
+
+  const formatDurationHHMMSS = (mmSS: string) => {
+    if (!mmSS || !mmSS.includes(':')) return mmSS;
+    const [mStr, sStr] = mmSS.split(':');
+    const totalMins = parseInt(mStr, 10);
+    if (isNaN(totalMins)) return mmSS;
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${sStr}`;
+  };
+
+  const format12HourWithSeconds = (time24: string) => {
+    if (!time24) return '';
+    const [h, m, s = '00'] = time24.split(':');
+    const hour = parseInt(h, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const formattedHour = hour % 12 || 12;
+    return `${formattedHour.toString().padStart(2, '0')}:${m}:${s} ${ampm}`;
+  };
+
+  if (!isOpen) {
+    return (
+      <button 
+        onClick={() => setIsOpen(true)} 
+        className="fixed bottom-6 right-6 z-[100] bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-2xl transition-all flex items-center justify-center gap-2 border border-emerald-400/30 group"
+      >
+        <Eye size={24} className="group-hover:scale-110 transition-transform" />
+        <span className="font-bold text-sm tracking-wide pr-1">View Status</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[100] w-[350px] bg-neutral-950 border border-neutral-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[80vh] animate-in slide-in-from-bottom-5 fade-in duration-200">
+      <div className="bg-neutral-900 border-b border-neutral-800 p-4 flex justify-between items-center flex-shrink-0">
+        <h3 className="font-bold text-white flex items-center gap-2">
+          <Eye size={16} className="text-emerald-500"/> Live Status
+        </h3>
+        <button onClick={() => setIsOpen(false)} className="text-neutral-500 hover:text-white bg-neutral-800 hover:bg-neutral-700 p-1.5 rounded-lg transition-colors">
+          <X size={16}/>
+        </button>
+      </div>
+      
+      <div className="overflow-y-auto p-4 space-y-6 custom-scrollbar">
+        {/* Table Status */}
+        <div>
+          <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2"><Table2 size={12} /> Tables</h4>
+          <div className="space-y-1">
+            {tables.map(t => {
+              if (!t.isActive) {
+                return (
+                  <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs bg-neutral-950/40 border-neutral-800/30 opacity-60">
+                    <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
+                    <span className="font-semibold text-neutral-500 w-12 flex-none line-through">{t.name}</span>
+                    <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
+                  </div>
+                );
+              }
+              const timerInfo = getTableTimerInfo(t.id);
+              const nextRes = getNextResForTable(t.id);
+              
+              let dotColor = 'bg-emerald-500';
+              if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
+              else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
+              else if (t.status === 'occupied') dotColor = 'bg-amber-500';
+              else if (t.status === 'reserved') dotColor = 'bg-blue-500';
+
+              return (
+                <div key={t.id} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
+                  <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
+                  <span className="font-semibold text-neutral-300 w-10 flex-none">{t.name}</span>
+                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                    {timerInfo ? (
+                      <>
+                        <span className={`font-semibold uppercase text-[9px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
+                          {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN' : 'IN USE'}
+                        </span>
+                        <span className={`font-mono font-black text-[10px] ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
+                          {formatDurationHHMMSS(timerInfo.formatted)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className={`font-semibold uppercase text-[9px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
+                    )}
+                  </div>
+                  {nextRes && <span className="text-[9px] text-neutral-500 flex-none truncate max-w-[80px]">→ {nextRes.customerName.split(' ')[0]} @ {format12HourWithSeconds(nextRes.timeSlot)}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Walk-in Queue */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2"><Clock size={12} /> Walk-in Queue</h4>
+            <span className="bg-neutral-800 text-neutral-300 text-[9px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
+          </div>
+          {queue.filter(q => q.status === 'waiting').length === 0 ? (
+            <div className="flex items-center justify-center py-4 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers waiting.</p></div>
+          ) : (
+            <div className="space-y-1.5">
+              {queue.filter(q => q.status === 'waiting').slice(0, 5).map((q, i) => (
+                <div key={q.id} className="flex items-center gap-2 text-sm bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5">
+                  <span className="w-4 h-4 rounded-full bg-neutral-800 flex items-center justify-center text-[9px] font-bold text-neutral-400">{i + 1}</span>
+                  <span className="text-neutral-300 font-medium flex-1 truncate text-xs">{q.customerName}</span>
+                  <span className="text-[10px] text-neutral-500">{q.partySize} pax</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function MiniCalendar({
   selectedDate, onSelect, reservedDates, closedDates
@@ -231,43 +393,9 @@ export function HomePage() {
   const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState('');
   const [createdReservationId, setCreatedReservationId] = useState('');
   const [copiedId, setCopiedId] = useState(false);
-
-  const getTableTimerInfo = (tableId: string) => {
-    const t = tables.find(tb => tb.id === tableId);
-    if (!t || t.status !== 'occupied' || !t.session) return null;
-
-    if (t.session.durationMinutes === 0) {
-      const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(t.session.startTime)));
-      const mins = Math.floor(elapsedSecs / 60);
-      const secs = elapsedSecs % 60;
-      return { 
-        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
-        isOvertime: false, 
-        isAlert: false, 
-        isOpenTime: true,
-        customerName: t.session.customerName 
-      };
-    }
-
-    const endTime = addMinutes(new Date(t.session.startTime), t.session.durationMinutes);
-    const secsLeft = differenceInSeconds(endTime, now);
-    const isOvertime = secsLeft < 0;
-    const absSecs = Math.abs(secsLeft);
-    const mins = Math.floor(absSecs / 60);
-    const secs = absSecs % 60;
-    return { 
-      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
-      isOvertime, 
-      isAlert: !isOvertime && secsLeft <= 900, 
-      isOpenTime: false,
-      customerName: t.session.customerName 
-    };
-  };
-
-  const getNextResForTable = (tableId: string) => {
-    return reservations.filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && isToday(new Date(r.date)) && new Date(r.date) >= now)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null;
-  };
+  
+  // My Bookings Collapsible State
+  const [isMyBookingsOpen, setIsMyBookingsOpen] = useState(false);
 
   const handleCustomerCancel = async () => {
     if (!cancelModal.reason.trim()) {
@@ -961,100 +1089,6 @@ export function HomePage() {
                     {/* Main Content Area */}
                     <div className="flex-1 min-w-0 space-y-10">
                       
-                      {/* Live Status Overview */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-    <div className="flex items-center justify-between mb-3">
-      <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Clock size={14} className="text-neutral-500" /> Live Table Status</h2>
-    </div>
-    <div className="space-y-1 max-h-56 overflow-y-auto">
-      {tables.map(t => {
-        if (!t.isActive) {
-          return (
-            <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all bg-neutral-950/40 border-neutral-800/30 opacity-60">
-              <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
-              <span className="font-semibold text-neutral-500 w-14 flex-none line-through">{t.name}</span>
-              <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
-            </div>
-          );
-        }
-        
-        const timerInfo = getTableTimerInfo(t.id);
-        const nextRes = getNextResForTable(t.id);
-        
-        let dotColor = 'bg-emerald-500';
-        if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
-        else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
-        else if (t.status === 'occupied') dotColor = 'bg-amber-500';
-        else if (t.status === 'reserved') dotColor = 'bg-blue-500';
-
-        // 🚨 HELPER 1: Convert MM:SS duration to HH:MM:SS
-        const formatDurationHHMMSS = (mmSS: string) => {
-          if (!mmSS || !mmSS.includes(':')) return mmSS;
-          const [mStr, sStr] = mmSS.split(':');
-          const totalMins = parseInt(mStr, 10);
-          if (isNaN(totalMins)) return mmSS;
-          const hrs = Math.floor(totalMins / 60);
-          const mins = totalMins % 60;
-          return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${sStr}`;
-        };
-
-        // 🚨 HELPER 2: Convert Military Time to 12-Hour AM/PM with Seconds
-        const format12HourWithSeconds = (time24: string) => {
-          if (!time24) return '';
-          const [h, m, s = '00'] = time24.split(':');
-          const hour = parseInt(h, 10);
-          const ampm = hour >= 12 ? 'PM' : 'AM';
-          const formattedHour = hour % 12 || 12;
-          return `${formattedHour.toString().padStart(2, '0')}:${m}:${s} ${ampm}`;
-        };
-        
-        return (
-          <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-2 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
-            <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
-            <span className="font-semibold text-neutral-300 w-14 flex-none">{t.name}</span>
-            <div className="flex-1 min-w-0 flex items-center gap-2">
-              {timerInfo ? (
-                <>
-                  <span className={`font-semibold uppercase text-[10px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
-                    {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN TIME' : 'IN USE'}
-                  </span>
-                  <span className={`font-mono font-black ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
-                    {formatDurationHHMMSS(timerInfo.formatted)}
-                  </span>
-                </>
-              ) : (
-                <span className={`font-semibold uppercase text-[10px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
-              )}
-            </div>
-            {nextRes && <span className="text-[10px] text-neutral-500 flex-none truncate max-w-[105px]">→ {nextRes.customerName.split(' ')[0]} @ {format12HourWithSeconds(nextRes.timeSlot)}</span>}
-          </div>
-        );
-      })}
-    </div>
-  </div>
-
-  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-    <div className="flex items-center justify-between mb-1">
-      <h2 className="text-sm font-semibold text-neutral-300">Walk-in Queue Snapshot</h2>
-      <span className="bg-neutral-800 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
-    </div>
-    {queue.filter(q => q.status === 'waiting').length === 0 ? (
-      <div className="flex items-center justify-center h-24 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers currently waiting.</p></div>
-    ) : (
-      <div className="space-y-2">
-        {queue.filter(q => q.status === 'waiting').slice(0, 4).map((q, i) => (
-          <div key={q.id} className="flex items-center gap-2.5 text-sm bg-neutral-950 border border-neutral-800/50 rounded-lg px-3 py-2">
-            <span className="w-5 h-5 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold text-neutral-400">{i + 1}</span>
-            <span className="text-neutral-300 font-medium flex-1 truncate">{q.customerName}</span>
-            <span className="text-xs text-neutral-500">{q.partySize} pax</span>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-</div>
-
                       {/* Booking Steps */}
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                         {/* Step 1 */}
@@ -1253,277 +1287,287 @@ export function HomePage() {
                         {(() => {
                           const myReservations = currentUser ? allMyBookings.filter(r => r.email === currentUser.email).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) : [];
                           
-                          // 🚨 RESCHEDULE FORM INJECTION 🚨
-                          if (rescheduleTargetId) {
-                            return (
-                              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-                                <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
-                                  <button onClick={() => setRescheduleTargetId(null)} className="p-1.5 bg-neutral-950 rounded-lg text-neutral-400 hover:text-white transition-colors">
-                                    <ChevronLeft size={14}/>
-                                  </button>
-                                  <div>
-                                    <h3 className="text-sm font-bold text-white">Reschedule Booking</h3>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">1. Choose New Date</p>
-                                  <MiniCalendar selectedDate={rescheduleDate} onSelect={setRescheduleDate} reservedDates={reservedDates} closedDates={closedDates} />
-                                </div>
-
-                                <div className="space-y-3">
-                                  <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">2. Choose New Time</p>
-                                  {!rescheduleDate ? (
-                                    <div className="bg-neutral-950 border border-dashed border-neutral-800 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
-                                      <Calendar size={20} className="text-neutral-600" />
-                                      <p className="text-neutral-500 text-xs">Select a date first.</p>
-                                    </div>
-                                  ) : selectedClosedDate ? (
-                                     <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
-                                      <AlertTriangle size={20} className="text-rose-500" />
-                                      <p className="text-rose-400 text-xs font-bold">Store Closed</p>
-                                    </div>
-                                  ) : (
-                                    <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
-                                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                                        {TIME_SLOTS.map(t => {
-                                          const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
-                                          const isPastTime = isToday(rescheduleDate) && parseInt(t.split(':')[0]) <= new Date().getHours() + 1;
-                                          if (isHappyHour || isPastTime) return null; 
-                                          
-                                          const count = slotCounts[t] || 0;
-                                          const isFull = count >= 5;
-
-                                          return (
-                                            <button 
-                                              key={t} 
-                                              disabled={isFull} 
-                                              onClick={() => setRescheduleTimeSlot(t)} 
-                                              className={`relative py-1.5 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
-                                                isFull
-                                                  ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
-                                                  : rescheduleTimeSlot === t 
-                                                  ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40' 
-                                                  : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
-                                              }`}
-                                            >
-                                              {formatTime(t)}
-                                              {isFull && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <button 
-                                  onClick={handleSubmitReschedule}
-                                  disabled={!rescheduleDate || !rescheduleTimeSlot || !!selectedClosedDate}
-                                  className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2"
-                                >
-                                  Submit Request <ArrowRight size={12}/>
-                                </button>
-                              </div>
-                            );
-                          }
-
-                          // 🚨 NORMAL BOOKINGS VIEW 🚨
                           return (
                             <>
-                              <div className="flex items-center justify-between mb-3 border-b border-neutral-800 pb-3">
-                                <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2"><Calendar size={14} className="text-blue-500" /> My Bookings</h2>
+                              <div 
+                                className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-3 cursor-pointer select-none"
+                                onClick={() => setIsMyBookingsOpen(!isMyBookingsOpen)}
+                              >
+                                <h2 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                                  <Calendar size={14} className="text-blue-500" /> My Bookings
+                                </h2>
+                                <ChevronRight size={16} className={`text-neutral-500 transition-transform ${isMyBookingsOpen ? 'rotate-90' : ''}`} />
                               </div>
                               
-                              {!currentUser ? (
-                                <div className="flex-1 flex flex-col items-center border border-dashed border-neutral-800 rounded-lg p-5 text-center mt-2 space-y-4">
-                                  <div>
-                                    <h3 className="text-sm font-bold text-white">Track Reservation</h3>
-                                    <p className="text-xs text-neutral-500 mt-1">Enter your Reference ID to view or reschedule.</p>
-                                  </div>
-                                  <div className="w-full flex gap-2">
-                                    <input 
-                                      type="text" 
-                                      value={trackerId} 
-                                      onChange={(e) => { setTrackerId(e.target.value); setTrackerError(''); }} 
-                                      placeholder="Reservation ID" 
-                                      className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
-                                    />
-                                    <button 
-                                      onClick={() => {
-                                        const r = allMyBookings.find(x => x.id.toLowerCase() === trackerId.toLowerCase().trim() || x.paymentReference === trackerId.trim());
-                                        if (r) { setTrackedRes(r); setTrackerError(''); }
-                                        else { setTrackedRes(null); setTrackerError('Not found'); }
-                                      }}
-                                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
-                                    >
-                                      Track
-                                    </button>
-                                  </div>
-                                  {trackerError && <p className="text-xs text-rose-400">{trackerError}</p>}
-
-                                  {trackedRes && (
-                                    <div className="w-full bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs text-left mt-2">
-                                      <div className="flex items-center justify-between mb-2">
-                                        <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${trackedRes.bookingType === 'tattoo' ? 'bg-violet-900/30 text-violet-400 border border-violet-800/50' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50'}`}>
-                                          {trackedRes.bookingType === 'tattoo' ? 'Tattoo Studio' : 'Billiards'}
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between items-start mb-1.5">
-                                        <div className="flex flex-col gap-1">
-                                          <span className="font-semibold text-neutral-200">{format(new Date(trackedRes.date), 'MMM d, yyyy')}</span>
-                                          <span className="font-mono text-[9px] text-neutral-500">ID: {trackedRes.id}</span>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1">
-                                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                            trackedRes.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
-                                            trackedRes.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
-                                            trackedRes.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
-                                            'bg-rose-500/10 text-rose-400'
-                                          }`}>{trackedRes.status}</span>
-                                          <button 
-                                            onClick={() => { navigator.clipboard.writeText(trackedRes.id); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
-                                            className="flex items-center gap-1 text-[9px] text-neutral-400 hover:text-white transition-colors bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-700"
-                                          >
-                                            {copiedId ? <Check size={10} className="text-emerald-400"/> : <Copy size={10}/>} Copy ID
-                                          </button>
+                              {/* Collapsible Content */}
+                              {isMyBookingsOpen && (
+                                <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+                                  {/* 🚨 RESCHEDULE FORM INJECTION 🚨 */}
+                                  {rescheduleTargetId ? (
+                                    <div className="space-y-4">
+                                      <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
+                                        <button onClick={() => setRescheduleTargetId(null)} className="p-1.5 bg-neutral-950 rounded-lg text-neutral-400 hover:text-white transition-colors">
+                                          <ChevronLeft size={14}/>
+                                        </button>
+                                        <div>
+                                          <h3 className="text-sm font-bold text-white">Reschedule Booking</h3>
                                         </div>
                                       </div>
-                                      <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
-                                        <span>
-                                          {formatTime(trackedRes.timeSlot || '00:00')} 
-                                          {trackedRes.bookingType === 'tattoo' ? ` (${trackedRes.placement})` : ` (${trackedRes.durationHours} hrs)`}
-                                        </span>
+
+                                      <div className="space-y-3">
+                                        <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">1. Choose New Date</p>
+                                        <MiniCalendar selectedDate={rescheduleDate} onSelect={setRescheduleDate} reservedDates={reservedDates} closedDates={closedDates} />
                                       </div>
-                                      
-                                      {trackedRes.status !== 'cancelled' && trackedRes.status !== 'completed' && new Date(trackedRes.date).getTime() > new Date().setHours(0,0,0,0) && !trackedRes.rescheduleRequested && (
-                                        <div className="flex gap-2">
-                                          <button 
-                                            onClick={() => {
-                                              setRescheduleTargetId(trackedRes.id);
-                                              setRescheduleDate(null);
-                                              setRescheduleTimeSlot('');
-                                              setTrackedRes(null);
-                                            }} 
-                                            className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
-                                          >
-                                            <CalendarDays size={12}/> Reschedule
-                                          </button>
-                                          <button
-                                            onClick={() => setCancelModal({ isOpen: true, id: trackedRes.id, category: 'Standard Cancellation', reason: '', loading: false })}
-                                            className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
-                                          >
-                                            Cancel
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
 
-                                  <div className="w-full h-px bg-neutral-800 my-2" />
-                                  <p className="text-xs text-neutral-500">Or log in to see all your bookings.</p>
-                                  <div className="flex items-center gap-2">
-                                    <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
-                                      Login
-                                    </button>
-                                    <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
-                                      Register
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : myReservations.length === 0 ? (
-                                <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>
-                              ) : (
-                                <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
-                                  {myReservations.map(r => {
-                                    const rDate = new Date(r.date);
-                                    rDate.setHours(0,0,0,0);
-                                    const today = new Date();
-                                    today.setHours(0,0,0,0);
-                                    
-                                    const isPastDate = rDate.getTime() < today.getTime();
-                                    const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
-                                    const isActiveStatus = displayStatus === 'pending' || displayStatus === 'confirmed';
-                                    const isTattoo = r.bookingType === 'tattoo';
-
-                                    return (
-                                      <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
-                                        <div className="flex items-center justify-between mb-2">
-                                          <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${isTattoo ? 'bg-violet-900/30 text-violet-400 border border-violet-800/50' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50'}`}>
-                                            {isTattoo ? 'Tattoo Studio' : 'Billiards'}
-                                          </span>
-                                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                            displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
-                                            displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
-                                            displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
-                                            'bg-rose-500/10 text-rose-400'
-                                          }`}>{displayStatus}</span>
-                                        </div>
-
-                                        <div className="flex justify-between items-start mb-1.5">
-                                          <div className="flex flex-col gap-1">
-                                            <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
-                                            <span className="font-mono text-[9px] text-neutral-500">ID: {r.id}</span>
+                                      <div className="space-y-3">
+                                        <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold">2. Choose New Time</p>
+                                        {!rescheduleDate ? (
+                                          <div className="bg-neutral-950 border border-dashed border-neutral-800 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
+                                            <Calendar size={20} className="text-neutral-600" />
+                                            <p className="text-neutral-500 text-xs">Select a date first.</p>
                                           </div>
-                                          <div className="flex flex-col items-end gap-1">
-                                            <button 
-                                              onClick={() => { navigator.clipboard.writeText(r.id); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
-                                              className="flex items-center gap-1 text-[9px] text-neutral-400 hover:text-white transition-colors bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-700"
-                                            >
-                                              {copiedId ? <Check size={10} className="text-emerald-400"/> : <Copy size={10}/>} Copy ID
-                                            </button>
+                                        ) : selectedClosedDate ? (
+                                           <div className="bg-rose-950/20 border border-rose-800/30 rounded-2xl p-6 text-center flex flex-col items-center gap-2 justify-center">
+                                            <AlertTriangle size={20} className="text-rose-500" />
+                                            <p className="text-rose-400 text-xs font-bold">Store Closed</p>
                                           </div>
-                                        </div>
-                                        <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
-                                          <span>{formatTime(r.timeSlot || '00:00')} {isTattoo ? `(${r.placement})` : `(${r.durationHours} hrs)`}</span>
-                                          <span>₱{isTattoo ? r.depositAmount : r.totalAmount}</span>
-                                        </div>
-                                        
-                                        {/* Action Required: Staff Proposed Reschedule */}
-                                        {r.rescheduleRequested && r.proposedDate && (
-                                          <div className="mt-3 bg-amber-950/30 border border-amber-800/50 rounded-xl p-3 animate-pulse-slow">
-                                            <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1.5 mb-1.5"><AlertTriangle size={12}/> Reschedule Proposed</p>
-                                            <p className="text-[10px] text-neutral-300 mb-3 leading-relaxed">Management proposed moving to <strong className="text-amber-300 font-black">{format(new Date(r.proposedDate), 'MMM d')} at {r.proposedTimeSlot}</strong>.</p>
-                                            <div className="flex gap-2">
-                                              <button onClick={() => confirmReschedule(r.id, true)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
-                                                <Check size={12}/> Accept
-                                              </button>
-                                              <button onClick={() => confirmReschedule(r.id, false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
-                                                <X size={12}/> Decline
-                                              </button>
+                                        ) : (
+                                          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4">
+                                            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                              {TIME_SLOTS.map(t => {
+                                                const isHappyHour = t >= (rates?.happyHourStart || '18:00') && t < (rates?.happyHourEnd || '19:00');
+                                                const isPastTime = isToday(rescheduleDate) && parseInt(t.split(':')[0]) <= new Date().getHours() + 1;
+                                                if (isHappyHour || isPastTime) return null; 
+                                                
+                                                const count = slotCounts[t] || 0;
+                                                const isFull = count >= 5;
+
+                                                return (
+                                                  <button 
+                                                    key={t} 
+                                                    disabled={isFull} 
+                                                    onClick={() => setRescheduleTimeSlot(t)} 
+                                                    className={`relative py-1.5 rounded-lg text-xs font-semibold transition-all overflow-hidden ${
+                                                      isFull
+                                                        ? 'bg-rose-950/30 text-rose-500/50 border border-rose-900/30 cursor-not-allowed'
+                                                        : rescheduleTimeSlot === t 
+                                                        ? 'bg-amber-600 text-white shadow-md shadow-amber-900/40' 
+                                                        : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+                                                    }`}
+                                                  >
+                                                    {formatTime(t)}
+                                                    {isFull && <span className="absolute inset-0 flex items-center justify-center bg-rose-950/80 text-rose-500 text-[9px] uppercase tracking-widest backdrop-blur-[1px]">Full</span>}
+                                                  </button>
+                                                );
+                                              })}
                                             </div>
                                           </div>
                                         )}
+                                      </div>
 
-                                        {/* Action Buttons Container */}
-                                        <div className="flex gap-2 mt-2.5">
-                                          {/* Reschedule Button */}
-                                          {!isPastDate && isActiveStatus && !r.rescheduleRequested && (
+                                      <button 
+                                        onClick={handleSubmitReschedule}
+                                        disabled={!rescheduleDate || !rescheduleTimeSlot || !!selectedClosedDate}
+                                        className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2"
+                                      >
+                                        Submit Request <ArrowRight size={12}/>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {!currentUser ? (
+                                        <div className="flex-1 flex flex-col items-center border border-dashed border-neutral-800 rounded-lg p-5 text-center space-y-4">
+                                          <div>
+                                            <h3 className="text-sm font-bold text-white">Track Reservation</h3>
+                                            <p className="text-xs text-neutral-500 mt-1">Enter your Reference ID to view or reschedule.</p>
+                                          </div>
+                                          <div className="w-full flex gap-2">
+                                            <input 
+                                              type="text" 
+                                              value={trackerId} 
+                                              onChange={(e) => { setTrackerId(e.target.value); setTrackerError(''); }} 
+                                              placeholder="Reservation ID" 
+                                              className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                                            />
                                             <button 
                                               onClick={() => {
-                                                setRescheduleTargetId(r.id);
-                                                setRescheduleDate(null);
-                                                setRescheduleTimeSlot('');
-                                              }} 
-                                              className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                                const r = allMyBookings.find(x => x.id.toLowerCase() === trackerId.toLowerCase().trim() || x.paymentReference === trackerId.trim());
+                                                if (r) { setTrackedRes(r); setTrackerError(''); }
+                                                else { setTrackedRes(null); setTrackerError('Not found'); }
+                                              }}
+                                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors"
                                             >
-                                              <CalendarDays size={12}/> Reschedule
+                                              Track
                                             </button>
+                                          </div>
+                                          {trackerError && <p className="text-xs text-rose-400">{trackerError}</p>}
+
+                                          {trackedRes && (
+                                            <div className="w-full bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs text-left mt-2">
+                                              <div className="flex items-center justify-between mb-2">
+                                                <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${trackedRes.bookingType === 'tattoo' ? 'bg-violet-900/30 text-violet-400 border border-violet-800/50' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50'}`}>
+                                                  {trackedRes.bookingType === 'tattoo' ? 'Tattoo Studio' : 'Billiards'}
+                                                </span>
+                                              </div>
+                                              <div className="flex justify-between items-start mb-1.5">
+                                                <div className="flex flex-col gap-1">
+                                                  <span className="font-semibold text-neutral-200">{format(new Date(trackedRes.date), 'MMM d, yyyy')}</span>
+                                                  <span className="font-mono text-[9px] text-neutral-500">ID: {trackedRes.id}</span>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-1">
+                                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                                    trackedRes.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    trackedRes.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                                    trackedRes.status === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                                    'bg-rose-500/10 text-rose-400'
+                                                  }`}>{trackedRes.status}</span>
+                                                  <button 
+                                                    onClick={() => { navigator.clipboard.writeText(trackedRes.id); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
+                                                    className="flex items-center gap-1 text-[9px] text-neutral-400 hover:text-white transition-colors bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-700"
+                                                  >
+                                                    {copiedId ? <Check size={10} className="text-emerald-400"/> : <Copy size={10}/>} Copy ID
+                                                  </button>
+                                                </div>
+                                              </div>
+                                              <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
+                                                <span>
+                                                  {formatTime(trackedRes.timeSlot || '00:00')} 
+                                                  {trackedRes.bookingType === 'tattoo' ? ` (${trackedRes.placement})` : ` (${trackedRes.durationHours} hrs)`}
+                                                </span>
+                                              </div>
+                                              
+                                              {trackedRes.status !== 'cancelled' && trackedRes.status !== 'completed' && new Date(trackedRes.date).getTime() > new Date().setHours(0,0,0,0) && !trackedRes.rescheduleRequested && (
+                                                <div className="flex gap-2">
+                                                  <button 
+                                                    onClick={() => {
+                                                      setRescheduleTargetId(trackedRes.id);
+                                                      setRescheduleDate(null);
+                                                      setRescheduleTimeSlot('');
+                                                      setTrackedRes(null);
+                                                    }} 
+                                                    className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                                  >
+                                                    <CalendarDays size={12}/> Reschedule
+                                                  </button>
+                                                  <button
+                                                    onClick={() => setCancelModal({ isOpen: true, id: trackedRes.id, category: 'Standard Cancellation', reason: '', loading: false })}
+                                                    className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
                                           )}
-                                          
-                                          {/* Cancel Button */}
-                                          {!isPastDate && isActiveStatus && (
-                                            <button
-                                              onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
-                                              className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
-                                            >
-                                              Cancel
+
+                                          <div className="w-full h-px bg-neutral-800 my-2" />
+                                          <p className="text-xs text-neutral-500">Or log in to see all your bookings.</p>
+                                          <div className="flex items-center gap-2">
+                                            <button onClick={() => setShowLoginModal(true)} className="text-xs bg-neutral-800 text-neutral-300 hover:text-white px-4 py-2 rounded-lg font-semibold hover:bg-neutral-700 transition-colors">
+                                              Login
                                             </button>
-                                          )}
+                                            <button onClick={() => setShowRegisterModal(true)} className="text-xs bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-lg font-semibold hover:bg-emerald-600/30 transition-colors">
+                                              Register
+                                            </button>
+                                          </div>
                                         </div>
-                                      </div>
-                                    );
-                                  })}
+                                      ) : myReservations.length === 0 ? (
+                                        <div className="flex-1 flex items-center justify-center border border-dashed border-neutral-800 rounded-lg h-24 mt-2"><p className="text-xs text-neutral-500">No recent reservations.</p></div>
+                                      ) : (
+                                        <div className="space-y-2 overflow-y-auto max-h-[60vh] pr-1 mt-2">
+                                          {myReservations.map(r => {
+                                            const rDate = new Date(r.date);
+                                            rDate.setHours(0,0,0,0);
+                                            const today = new Date();
+                                            today.setHours(0,0,0,0);
+                                            
+                                            const isPastDate = rDate.getTime() < today.getTime();
+                                            const displayStatus = (isPastDate && r.status !== 'cancelled') ? 'completed' : r.status;
+                                            const isActiveStatus = displayStatus === 'pending' || displayStatus === 'confirmed';
+                                            const isTattoo = r.bookingType === 'tattoo';
+
+                                            return (
+                                              <div key={r.id} className="bg-neutral-950 border border-neutral-800/50 rounded-lg p-3 text-xs">
+                                                <div className="flex items-center justify-between mb-2">
+                                                  <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold ${isTattoo ? 'bg-violet-900/30 text-violet-400 border border-violet-800/50' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50'}`}>
+                                                    {isTattoo ? 'Tattoo Studio' : 'Billiards'}
+                                                  </span>
+                                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                                    displayStatus === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    displayStatus === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                                                    displayStatus === 'completed' ? 'bg-neutral-800 text-neutral-400' :
+                                                    'bg-rose-500/10 text-rose-400'
+                                                  }`}>{displayStatus}</span>
+                                                </div>
+
+                                                <div className="flex justify-between items-start mb-1.5">
+                                                  <div className="flex flex-col gap-1">
+                                                    <span className="font-semibold text-neutral-200">{format(new Date(r.date), 'MMM d, yyyy')}</span>
+                                                    <span className="font-mono text-[9px] text-neutral-500">ID: {r.id}</span>
+                                                  </div>
+                                                  <div className="flex flex-col items-end gap-1">
+                                                    <button 
+                                                      onClick={() => { navigator.clipboard.writeText(r.id); setCopiedId(true); setTimeout(() => setCopiedId(false), 2000); }} 
+                                                      className="flex items-center gap-1 text-[9px] text-neutral-400 hover:text-white transition-colors bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-700"
+                                                    >
+                                                      {copiedId ? <Check size={10} className="text-emerald-400"/> : <Copy size={10}/>} Copy ID
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                                <div className="flex justify-between text-neutral-500 text-[11px] mb-3">
+                                                  <span>{formatTime(r.timeSlot || '00:00')} {isTattoo ? `(${r.placement})` : `(${r.durationHours} hrs)`}</span>
+                                                  <span>₱{isTattoo ? r.depositAmount : r.totalAmount}</span>
+                                                </div>
+                                                
+                                                {/* Action Required: Staff Proposed Reschedule */}
+                                                {r.rescheduleRequested && r.proposedDate && (
+                                                  <div className="mt-3 bg-amber-950/30 border border-amber-800/50 rounded-xl p-3 animate-pulse-slow">
+                                                    <p className="text-[10px] text-amber-400 font-bold flex items-center gap-1.5 mb-1.5"><AlertTriangle size={12}/> Reschedule Proposed</p>
+                                                    <p className="text-[10px] text-neutral-300 mb-3 leading-relaxed">Management proposed moving to <strong className="text-amber-300 font-black">{format(new Date(r.proposedDate), 'MMM d')} at {r.proposedTimeSlot}</strong>.</p>
+                                                    <div className="flex gap-2">
+                                                      <button onClick={() => confirmReschedule(r.id, true)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
+                                                        <Check size={12}/> Accept
+                                                      </button>
+                                                      <button onClick={() => confirmReschedule(r.id, false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 text-[10px] font-bold py-1.5 rounded transition-colors flex justify-center items-center gap-1.5">
+                                                        <X size={12}/> Decline
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {/* Action Buttons Container */}
+                                                <div className="flex gap-2 mt-2.5">
+                                                  {/* Reschedule Button */}
+                                                  {!isPastDate && isActiveStatus && !r.rescheduleRequested && (
+                                                    <button 
+                                                      onClick={() => {
+                                                        setRescheduleTargetId(r.id);
+                                                        setRescheduleDate(null);
+                                                        setRescheduleTimeSlot('');
+                                                      }} 
+                                                      className="flex-1 py-1.5 text-[10px] bg-neutral-900 border border-neutral-800 hover:border-amber-600/50 hover:bg-amber-950/20 text-neutral-400 hover:text-amber-400 rounded-md font-semibold transition-all flex items-center justify-center gap-1.5"
+                                                    >
+                                                      <CalendarDays size={12}/> Reschedule
+                                                    </button>
+                                                  )}
+                                                  
+                                                  {/* Cancel Button */}
+                                                  {!isPastDate && isActiveStatus && (
+                                                    <button
+                                                      onClick={() => setCancelModal({ isOpen: true, id: r.id, category: 'Standard Cancellation', reason: '', loading: false })}
+                                                      className="flex-1 py-1.5 rounded-md bg-rose-950/20 text-rose-400 hover:bg-rose-900/40 border border-rose-900/30 hover:border-rose-700/50 text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center"
+                                                    >
+                                                      Cancel
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </>
@@ -1739,27 +1783,7 @@ export function HomePage() {
                 </div>
               </div>
 
-              <div className="mb-12">
-                <h3 className="text-center text-xl font-bold text-white mb-6">Our Facilities</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { icon: '🎱', title: '10 Tables', desc: 'Tournament-grade billiard tables' },
-                    { icon: '🍺', title: 'Bar Counter', desc: 'Drinks & light snacks available' },
-                    { icon: '📡', title: 'Free WiFi', desc: 'High-speed internet connection' },
-                    { icon: '🎵', title: 'Music System', desc: 'Great ambiance & sound system' },
-                    { icon: '📷', title: 'CCTV', desc: '24/7 security surveillance' },
-                    { icon: '🚗', title: 'Parking', desc: 'Limited parking available' },
-                    { icon: '🏆', title: 'Tournament', desc: 'Monthly pool tournaments' },
-                    { icon: '👟', title: 'Lounge Area', desc: 'Comfortable waiting & spectator zone' },
-                  ].map(({ icon, title, desc }) => (
-                    <div key={title} className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center hover:border-neutral-700 transition-colors">
-                      <div className="text-2xl mb-2">{icon}</div>
-                      <p className="text-white text-xs font-semibold mb-1">{title}</p>
-                      <p className="text-neutral-600 text-[10px] leading-tight">{desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Our Facilities block REMOVED successfully here! */}
 
               <div className="border-t border-neutral-800 pt-10">
                 <div className="text-center mb-8">
@@ -2470,6 +2494,11 @@ export function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 🚨 FLOATING WIDGET ONLY ON HOME OR RESERVATION TAB */}
+      {(activeSection === 'home' || activeSection === 'reservations') && (
+        <LiveStatusWidget />
+      )}
 
     </div>
   );
