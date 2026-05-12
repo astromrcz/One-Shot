@@ -594,7 +594,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (user) {
       await updateStaffUser(user.id, {
         ...(profile.username && { username: profile.username }),
-        ...(profile.fullName && { full_name: profile.fullName }),
+        ...(profile.fullName && { fullName: profile.fullName }), // Use camelCase here now
         ...(profile.email && { email: profile.email }),
         ...(profile.phone && { phone: profile.phone }),
       });
@@ -850,22 +850,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTattooArtist = async (artist: Omit<TattooArtist, 'id'>) => {
     const id = `ta${Date.now()}`;
-    await supabase.from('tattoo_artists').insert([{ 
-      id, 
-      name: artist.name, 
-      specialty: artist.specialty, 
+    const dbArtist = {
+      id,
+      name: artist.name,
+      specialty: artist.specialty,
       contact_number: artist.contactNumber,
       email: artist.email || null,
       bio: artist.bio || null,
-      is_available_today: artist.isAvailableToday,
-      is_active: artist.isActive,
-      unavailable_dates: artist.unavailableDates || [],
-    }]);
+      is_active: artist.isActive !== undefined ? artist.isActive : true,
+      is_available_today: artist.isAvailableToday !== undefined ? artist.isAvailableToday : true
+    };
+    const { error } = await supabase.from('tattoo_artists').insert([dbArtist]);
+    if (error) throw error;
     setTattooArtists(prev => [...prev, { ...artist, id }]);
   };
 
   const updateTattooArtist = async (id: string, updates: Partial<TattooArtist>) => {
-    await supabase.from('tattoo_artists').update(updates).eq('id', id);
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.specialty !== undefined) dbUpdates.specialty = updates.specialty;
+    if (updates.contactNumber !== undefined) dbUpdates.contact_number = updates.contactNumber;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
+    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+    if (updates.isAvailableToday !== undefined) dbUpdates.is_available_today = updates.isAvailableToday;
+
+    const { error } = await supabase.from('tattoo_artists').update(dbUpdates).eq('id', id);
+    if (error) throw error;
     setTattooArtists(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
   };
 
@@ -881,23 +892,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addStaffUser = async (user: Omit<StaffUser, 'id' | 'createdAt'>) => {
     const id = `u${Date.now()}`;
-    await supabase.from('staff_users').insert([{ 
-      id, 
-      username: user.username, 
-      password: user.password, 
+    // 🚨 Map to snake_case and include missing NOT NULL fields
+    const dbUser = {
+      id,
+      username: user.username,
+      password: user.password,
       full_name: user.fullName,
       email: user.email,
       role: user.role,
-      is_admin: user.isAdmin || false,
       artist_id: user.artistId || null,
       phone: user.phone,
-      is_active: user.isActive,
-    }]);
+      is_active: user.isActive !== undefined ? user.isActive : true
+    };
+    
+    const { error } = await supabase.from('staff_users').insert([dbUser]);
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to add user");
+    }
     setStaffUsers(prev => [...prev, { ...user, id, createdAt: new Date() }]);
   };
 
   const updateStaffUser = async (id: string, updates: Partial<StaffUser>) => {
-    await supabase.from('staff_users').update(updates).eq('id', id);
+    // 🚨 Map to snake_case for updates
+    const dbUpdates: any = {};
+    if (updates.username !== undefined) dbUpdates.username = updates.username;
+    if (updates.password !== undefined) dbUpdates.password = updates.password;
+    if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.role !== undefined) dbUpdates.role = updates.role;
+    if (updates.artistId !== undefined) dbUpdates.artist_id = updates.artistId;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+
+    const { error } = await supabase.from('staff_users').update(dbUpdates).eq('id', id);
+    if (error) throw error;
     setStaffUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
   };
 
@@ -913,12 +942,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateRates = async (r: Partial<RatesConfig>) => {
-    await supabase.from('rates_config').upsert({ id: '1', ...r });
+    const dbRates: any = {}; 
+    if (r.hourlyRate !== undefined) dbRates.hourly_rate = r.hourlyRate;
+    if (r.happyHourRate !== undefined) dbRates.happy_hour_rate = r.happyHourRate;
+    if (r.happyHourStart !== undefined) dbRates.happy_hour_start = r.happyHourStart;
+    if (r.happyHourEnd !== undefined) dbRates.happy_hour_end = r.happyHourEnd;
+    if (r.overtimeRate !== undefined) dbRates.overtime_rate = r.overtimeRate;
+    if (r.tattooDeposit !== undefined) dbRates.tattoo_deposit = r.tattooDeposit;
+    if (r.downPaymentPercent !== undefined) dbRates.down_payment_percent = r.downPaymentPercent;
+
+    const { error } = await supabase.from('rates_config').update(dbRates).eq('id', 1);
+    if (error) throw error;
     setRates(prev => ({ ...prev, ...r }));
   };
 
   const updateReservationTerms = async (t: Partial<ReservationTerms>) => {
-    await supabase.from('reservation_terms').update(t).eq('id', '1');
+    const dbTerms: any = {};
+    if (t.minHours !== undefined) dbTerms.min_hours = t.minHours;
+    if (t.maxHours !== undefined) dbTerms.max_hours = t.maxHours;
+    if (t.minPartySize !== undefined) dbTerms.min_party_size = t.minPartySize;
+    if (t.maxPartySize !== undefined) dbTerms.max_party_size = t.maxPartySize;
+    if (t.cancellationHours !== undefined) dbTerms.cancellation_hours = t.cancellationHours;
+    if (t.cancellationPolicy !== undefined) dbTerms.cancellation_policy = t.cancellationPolicy;
+    if (t.termsAndConditions !== undefined) dbTerms.terms_and_conditions = t.termsAndConditions;
+
+    const { error } = await supabase.from('reservation_terms').update(dbTerms).eq('id', 1);
+    if (error) throw error;
     setReservationTermsState(prev => ({ ...prev, ...t }));
   };
 

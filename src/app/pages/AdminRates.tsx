@@ -1,22 +1,41 @@
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { PhilippinePeso, Save, CheckCircle, Info, RefreshCw } from 'lucide-react'; 
+import { toast } from 'sonner'; // 🚨 IMPORTED TOAST
 
 export function AdminRates() {
   const { rates, updateRates } = useAppContext();
-  const [form, setForm] = useState({ ...rates });
+  
+  const [form, setForm] = useState({ 
+    ...rates,
+    downPaymentPercent: rates.downPaymentPercent <= 1 ? Math.round(rates.downPaymentPercent * 100) : rates.downPaymentPercent
+  });
+  
   const [saved, setSaved] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 🚨 REMOVED form event parameter
+  const handleSave = async () => {
     setIsSaving(true);
-    await updateRates(form);
-    setSaved(true);
-    setConfirmSave(false);
-    setIsSaving(false);
-    setTimeout(() => setSaved(false), 2500);
+    
+    const payload = {
+      ...form,
+      downPaymentPercent: form.downPaymentPercent > 1 ? form.downPaymentPercent / 100 : form.downPaymentPercent
+    };
+
+    try {
+      await updateRates(payload);
+      setSaved(true);
+      setConfirmSave(false);
+      toast.success("Rates updated successfully!"); // 🚨 ADDED TOAST SUCCESS
+    } catch (error) {
+      console.error("Failed to save rates:", error);
+      toast.error("Failed to save rate changes.");
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaved(false), 2500);
+    }
   };
 
   const NumField = ({ label, field, unit, hint }: {
@@ -75,7 +94,9 @@ export function AdminRates() {
         </p>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-5">
+      {/* 🚨 CHANGED <form> TO <div> to prevent auto-submitting on Enter key */}
+      <div className="space-y-5">
+        
         {/* Table Rates */}
         <div>
           <h3 className="text-xs text-neutral-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-2">
@@ -138,18 +159,23 @@ export function AdminRates() {
             </button>
           )}
           {confirmSave ? (
-            <button type="submit" disabled={isSaving}
+            <button 
+              type="button" 
+              onClick={handleSave} // 🚨 MOVED SAVE FUNCTION DIRECTLY TO BUTTON CLICK
+              disabled={isSaving}
               className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-rose-900/30 animate-pulse">
               {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <><CheckCircle size={15} /> Confirm Rate Changes?</>}
             </button>
           ) : (
-            <button type="button" onClick={() => setConfirmSave(true)}
+            <button 
+              type="button" 
+              onClick={() => setConfirmSave(true)}
               className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-amber-900/30">
               <Save size={15} /> Save Rate Changes
             </button>
           )}
         </div>
-      </form>
+      </div>
     </div>
   );
 }
