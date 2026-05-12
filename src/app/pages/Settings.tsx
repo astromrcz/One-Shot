@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import {
   User, Lock, Mail, Phone, Eye, EyeOff,
-  Save, CheckCircle, Pencil, X, Calendar, Tag, LogOut, ShieldCheck
+  Save, CheckCircle, Pencil, X, Calendar, ShieldCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -57,19 +57,43 @@ export function SettingsPage() {
 
   const handleSaveSecurity = async () => {
     setSecError('');
-    if (secForm.newPassword && secForm.newPassword.length < 6) { setSecError('New password must be at least 6 characters.'); return; }
-    if (secForm.newPassword && secForm.newPassword !== secForm.confirmPassword) { setSecError('New passwords do not match.'); return; }
+    
+    // 🚨 1. Check if current password is provided
+    if (!secForm.currentPassword) {
+      setSecError('Current password is required to verify changes.');
+      return;
+    }
+
+    if (secForm.newPassword && secForm.newPassword.length < 6) { 
+      setSecError('New password must be at least 6 characters.'); 
+      return; 
+    }
+    if (secForm.newPassword && secForm.newPassword !== secForm.confirmPassword) { 
+      setSecError('New passwords do not match.'); 
+      return; 
+    }
     
     try {
-      updateStaffProfile({
-        username: secForm.username || staffProfile.username,
+      // 🚨 2. Verify current password via database RPC
+      const { data: verifiedUser, error: verifyError } = await supabase.rpc('verify_staff_login', {
+        p_username: staffProfile.username, // check against their active username
+        p_password: secForm.currentPassword
       });
 
+      if (verifyError || !verifiedUser || verifiedUser.length === 0) {
+        setSecError('Incorrect current password.');
+        return;
+      }
+
+      // 🚨 3. If verified, save new username and/or new password
+      updateStaffProfile({
+        username: secForm.username || staffProfile.username,
+        ...(secForm.newPassword ? { password: secForm.newPassword } : {}) // Safely inject new password to staff_users table
+      });
+
+      // Update Supabase Auth in the background (if applicable for your setup)
       if (secForm.newPassword) {
-        const { error } = await supabase.auth.updateUser({
-          password: secForm.newPassword
-        });
-        if (error) throw error;
+        await supabase.auth.updateUser({ password: secForm.newPassword });
       }
       
       setSecEdit(false);
@@ -78,12 +102,6 @@ export function SettingsPage() {
     } catch (error: any) {
       setSecError(error.message || 'Failed to update security settings.');
     }
-  };
-
-  const handleLogout = async () => {
-    await staffLogout();
-    navigate('/');
-    toast.info("Signed out", { description: "You have been securely signed out." });
   };
 
   const tabs: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -113,8 +131,6 @@ export function SettingsPage() {
             <p className="text-sm text-neutral-400 mt-1 capitalize">{staffProfile.role} · @{staffProfile.username}</p>
           </div>
         </div>
-        
-        
 
         {/* Decorative Background */}
         <div className="absolute right-0 top-0 bottom-0 w-64 bg-gradient-to-l from-emerald-900/10 to-transparent pointer-events-none" />
@@ -166,7 +182,8 @@ export function SettingsPage() {
                   className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 px-3 py-1.5 rounded-lg transition-colors">
                   <X size={12} /> Cancel
                 </button>
-                <button onClick={handleProfileSave} className="flex items-center gap-1.5 text-xs text-neutral-950 bg-emerald-400 hover:bg-emerald-300 px-4 py-1.5 rounded-lg font-bold transition-colors">
+                {/* 🚨 FIXED typo here (handleProfileSave -> handleSaveProfile) */}
+                <button onClick={handleSaveProfile} className="flex items-center gap-1.5 text-xs text-neutral-950 bg-emerald-400 hover:bg-emerald-300 px-4 py-1.5 rounded-lg font-bold transition-colors">
                   <Save size={12} /> Save
                 </button>
               </div>
@@ -244,8 +261,14 @@ export function SettingsPage() {
               editing={secEdit}
               input={
                 <div className="max-w-md space-y-3 bg-neutral-900 border border-neutral-800 rounded-xl p-4">
+                  {/* 🚨 ADDED CURRENT PASSWORD FIELD */}
+                  <div className="mb-4 pb-4 border-b border-neutral-800">
+                    <PasswordField label="Current Password *" value={secForm.currentPassword} show={showPw.current} onChange={v => setSecForm(f => ({ ...f, currentPassword: v }))} onToggle={() => setShowPw(s => ({ ...s, current: !s.current }))} placeholder="Required to save changes" />
+                  </div>
+                  
                   <PasswordField label="New Password" value={secForm.newPassword} show={showPw.new} onChange={v => setSecForm(f => ({ ...f, newPassword: v }))} onToggle={() => setShowPw(s => ({ ...s, new: !s.new }))} placeholder="Leave blank to keep current" />
                   <PasswordField label="Confirm Password" value={secForm.confirmPassword} show={showPw.confirm} onChange={v => setSecForm(f => ({ ...f, confirmPassword: v }))} onToggle={() => setShowPw(s => ({ ...s, confirm: !s.confirm }))} placeholder="Re-enter to confirm" />
+                  
                   {secError && <p className="text-[11px] text-rose-400 pt-1">{secError}</p>}
                 </div>
               }

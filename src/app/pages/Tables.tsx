@@ -71,17 +71,16 @@ export function Tables() {
   const [extendPayMethod,     setExtendPayMethod]     = useState<PaymentMethod>('cash');
   const [extendPartialAmount, setExtendPartialAmount] = useState('');
 
-  const [endPayStatus,     setEndPayStatus]     = useState<PaymentStatus>('paid');
+  // 🚨 END SESSION / CHECKOUT STATES
   const [endPayMethod,     setEndPayMethod]     = useState<PaymentMethod>('cash');
-  const [endPartialAmount, setEndPartialAmount] = useState('');
+  const [endCashReceived,  setEndCashReceived]  = useState<string>('');
   const [endGcashRef,      setEndGcashRef]      = useState('');
-  
   const [endAdminPassword, setEndAdminPassword] = useState('');
   const [endAdminError,    setEndAdminError]    = useState('');
 
   const activeTables = tables.filter(t => t.isActive);
   const available = activeTables.filter(t => t.status === 'available').length;
-  const occupied   = activeTables.filter(t => t.status === 'occupied').length;
+  const occupied  = activeTables.filter(t => t.status === 'occupied').length;
   const reserved  = activeTables.filter(t => t.status === 'reserved').length;
 
   const filtered = activeTables.filter(t => {
@@ -102,55 +101,6 @@ export function Tables() {
     .map(r => ({ kind: 'reservation', id: r.id, name: r.customerName, partySize: r.partySize, contact: r.contactNumber, durationHours: r.durationHours, timeSlot: r.timeSlot, date: r.date }));
 
   const allCustomers: CustomerSource[] = [...waitingCustomers, ...todayReservations];
-
-  const checkCapacityConflict = (targetTableId: string, proposedEnd: Date, isAssigningResId?: string) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const pendingRes = reservations.filter(r => 
-      (r.status === 'pending' || r.status === 'confirmed') && 
-      r.id !== isAssigningResId && 
-      new Date(r.date).toISOString().split('T')[0] === todayStr
-    );
-
-    const specificConflict = pendingRes.find(r => r.tableId === targetTableId);
-    if (specificConflict) {
-      const specStart = new Date(specificConflict.date);
-      const [sh, sm] = specificConflict.timeSlot.split(':').map(Number);
-      specStart.setHours(sh, sm, 0, 0);
-      if (proposedEnd > specStart) {
-        return { safe: false, conflictTime: specificConflict.timeSlot, reason: 'Specific Table Reserved' };
-      }
-    }
-
-    for (const res of pendingRes) {
-      const resStart = new Date(res.date);
-      const [h, m] = res.timeSlot.split(':').map(Number);
-      resStart.setHours(h, m, 0, 0);
-      const checkTime = resStart < now ? now : resStart;
-      let occupiedCount = 0;
-      for (const t of activeTables) {
-        if (t.id === targetTableId) {
-          if (proposedEnd > checkTime) occupiedCount++;
-        } else if (t.session) {
-          const tEnd = t.session.durationMinutes <= 0 
-            ? addMinutes(new Date(t.session.startTime), 12 * 60) 
-            : addMinutes(new Date(t.session.startTime), Math.abs(t.session.durationMinutes));
-          if (tEnd > checkTime) occupiedCount++;
-        }
-      }
-      const overlappingRes = pendingRes.filter(other => {
-        const oStart = new Date(other.date);
-        const [oh, om] = other.timeSlot.split(':').map(Number);
-        oStart.setHours(oh, om, 0, 0);
-        const oEnd = addMinutes(oStart, other.durationHours * 60);
-        const targetTime = oStart < now ? now : oStart;
-        return targetTime <= checkTime && oEnd > checkTime;
-      }).length;
-      if ((activeTables.length - occupiedCount) < overlappingRes) {
-        return { safe: false, conflictTime: res.timeSlot, reason: 'Global Capacity Reached' };
-      }
-    }
-    return { safe: true };
-  };
 
   useEffect(() => {
     const assignTableId = searchParams.get('assignTable');
@@ -180,6 +130,7 @@ export function Tables() {
     }
   }, [searchParams, navigate, queue, reservations, rates.hourlyRate]);
 
+  // CALCULATION LOGIC FOR ENDING TABLE
   const endInfo = (() => {
     const endingTable = tables.find(t => t.id === endingTableId);
     if (!endingTable?.session) return null;
@@ -211,11 +162,26 @@ export function Tables() {
     const linkedRes = reservations.find(r => r.customerName === endingTable.session!.customerName && r.status === 'checked-in');
     const resFee = (linkedRes && linkedRes.downPaymentPaid) ? linkedRes.downPaymentAmount : 0;
     const totalAlreadyPaid = Math.max(alreadyPaid, resFee);
-    return { elapsedMins, elapsedSecs, alreadyPaid: totalAlreadyPaid, bookedCharge, overtimeCharge, totalDue, balance: Math.max(0, totalDue - totalAlreadyPaid), isOvertime, overtimeMins, overtimeSecs, hasResFee: resFee > 0 };
+    
+    const balance = Math.max(0, totalDue - totalAlreadyPaid);
+    return { elapsedMins, elapsedSecs, alreadyPaid: totalAlreadyPaid, bookedCharge, overtimeCharge, totalDue, balance, isOvertime, overtimeMins, overtimeSecs, hasResFee: resFee > 0 };
   })();
 
+  const changeDue = endInfo ? (parseFloat(endCashReceived || '0') - endInfo.balance) : 0;
+  const isReadyToEnd = endInfo && (
+    endInfo.balance <= 0 || 
+    (endPayMethod === 'cash' ? parseFloat(endCashReceived || '0') >= endInfo.balance : endGcashRef.trim().length >= 8)
+  );
+
   const openAssign = (tableId: string) => { setAssigningTableId(tableId); setSelectedCustomer(null); setCustomerName(''); setDurationMinutes(60); setAmountPaid(''); };
-  const openEnd = (tableId: string) => { setEndingTableId(tableId); setEndPayStatus('paid'); setEndPayMethod('cash'); setEndPartialAmount(''); setEndGcashRef(''); setEndAdminPassword(''); setEndAdminError(''); };
+  const openEnd = (tableId: string) => { 
+    setEndingTableId(tableId); 
+    setEndPayMethod('cash'); 
+    setEndCashReceived(''); 
+    setEndGcashRef(''); 
+    setEndAdminPassword(''); 
+    setEndAdminError(''); 
+  };
   const openExtend = (tableId: string) => { setExtendingTableId(tableId); setExtendMinutes(60); setExtendPayStatus('paid'); setExtendPayMethod('cash'); setExtendPartialAmount(''); };
 
   const pickCustomer = (c: CustomerSource) => {
@@ -238,14 +204,29 @@ export function Tables() {
   const handleConfirmEnd = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!endingTableId || !endInfo) return;
+    
+    // Check Admin Password for early endings
     if (endInfo.elapsedMins < 30) {
       if (!staffUsers.some(u => (u.isAdmin || u.role?.toLowerCase() === 'admin') && u.password === endAdminPassword)) {
         setEndAdminError('Invalid admin password.');
         return;
       }
     }
-    if (endPayMethod === 'gcash' && endPayStatus !== 'unpaid' && endInfo.balance > 0 && !endGcashRef) return;
+    
+    // Prevent ending if balance isn't resolved properly
+    if (endInfo.balance > 0) {
+      if (endPayMethod === 'cash' && changeDue < 0) {
+        toast.error("Insufficient cash received.");
+        return;
+      }
+      if (endPayMethod === 'gcash' && endGcashRef.trim().length < 8) {
+        toast.error("Please enter a valid GCash Reference Number.");
+        return;
+      }
+    }
+
     freeTable(endingTableId);
+    toast.success("Table session completed and settled!");
     setEndingTableId(null);
   };
 
@@ -266,12 +247,8 @@ export function Tables() {
     return upcoming.length ? { date: new Date(upcoming[0].date), customerName: upcoming[0].customerName, timeSlot: upcoming[0].timeSlot } : null;
   };
 
-  const PayStatusBtn = ({ value, current, label, onChange }: { value: PaymentStatus; current: PaymentStatus; label: string; onChange: (v: PaymentStatus) => void }) => (
-    <button type="button" onClick={() => onChange(value)} className={`flex-1 py-2 rounded-xl border text-xs font-semibold transition-all ${current === value ? (value === 'paid' ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : value === 'partial' ? 'bg-amber-600/15 border-amber-600 text-amber-400' : 'bg-rose-600/15 border-rose-600 text-rose-400') : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'}`}>{label}</button>
-  );
-
   const PayMethodBtn = ({ value, current, icon: Icon, label, onChange }: { value: PaymentMethod; current: PaymentMethod; icon: any; label: string; onChange: (v: PaymentMethod) => void }) => (
-    <button type="button" onClick={() => onChange(value)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-semibold transition-all ${current === value ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'}`}><Icon size={13} />{label}</button>
+    <button type="button" onClick={() => onChange(value)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-semibold transition-all ${current === value ? (value === 'cash' ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-blue-600/15 border-blue-600 text-blue-400') : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'}`}><Icon size={13} />{label}</button>
   );
 
   return (
@@ -344,23 +321,83 @@ export function Tables() {
         </div>
       )}
 
+      {/* 🚨 REVISED END SESSION / CHECKOUT MODAL 🚨 */}
       {endingTableId && endInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-5">
-            <h2 className="text-base font-bold text-neutral-100">Settlement Summary</h2>
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 space-y-3">
-              <div className="flex justify-between text-sm"><span className="text-neutral-400">Total Due</span><span className="text-white font-black">{formatPHP(endInfo.totalDue)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-neutral-400">Paid Balance</span><span className="text-emerald-400 font-bold">{formatPHP(endInfo.alreadyPaid)}</span></div>
-              <div className={`flex justify-between text-sm p-2 rounded-lg ${endInfo.balance > 0 ? 'bg-rose-950/30' : 'bg-emerald-950/20'}`}><span className="font-bold">{endInfo.balance > 0 ? 'Balance' : 'Settled'}</span><span className="font-black">{formatPHP(endInfo.balance)}</span></div>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50 flex-none">
+              <div>
+                <h2 className="text-base font-bold text-neutral-100">End Session</h2>
+                <p className="text-xs text-neutral-500">Checkout & Receipt Summary</p>
+              </div>
+              <button onClick={() => setEndingTableId(null)} className="p-2 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded-lg"><X size={16} /></button>
             </div>
-            {endInfo.elapsedMins < 30 && (
-              <div className="bg-rose-950/20 border border-rose-900/50 p-3 rounded-lg"><p className="text-[10px] text-rose-400">Admin password required for sessions under 30 mins.</p><input type="password" value={endAdminPassword} onChange={e => setEndAdminPassword(e.target.value)} className="w-full mt-2 bg-neutral-900 border border-rose-900/50 rounded-lg px-3 py-1.5 text-sm text-white" placeholder="Admin Password" /></div>
-            )}
-            <div className="flex gap-2">
-              <PayMethodBtn value="cash" current={endPayMethod} icon={Banknote} label="Cash" onChange={setEndPayMethod} />
-              <PayMethodBtn value="gcash" current={endPayMethod} icon={CreditCard} label="GCash" onChange={setEndPayMethod} />
+            
+            <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+              
+              {/* Summary Box */}
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-3">
+                 <div className="flex justify-between text-sm"><span className="text-neutral-400">Total Due</span><span className="text-white font-semibold">{formatPHP(endInfo.totalDue)}</span></div>
+                 <div className="flex justify-between text-sm"><span className="text-neutral-400">Paid Balance</span><span className="text-emerald-400 font-semibold">- {formatPHP(endInfo.alreadyPaid)}</span></div>
+                 <div className="w-full h-px bg-neutral-800 my-2" />
+                 <div className="flex justify-between text-lg font-black"><span className="text-neutral-200">Balance Due</span><span className="text-amber-400">{formatPHP(endInfo.balance)}</span></div>
+              </div>
+
+              {/* Admin Check for early ending */}
+              {endInfo.elapsedMins < 30 && (
+                <div className="bg-rose-950/20 border border-rose-900/50 p-4 rounded-xl">
+                  <p className="text-xs text-rose-400 font-bold mb-2 flex items-center gap-1.5"><AlertTriangle size={14}/> Admin Authorization Required</p>
+                  <p className="text-[10px] text-rose-400/80 mb-3">Sessions under 30 minutes require an admin password to end early.</p>
+                  <input type="password" value={endAdminPassword} onChange={e => setEndAdminPassword(e.target.value)} className="w-full bg-neutral-900 border border-rose-900/50 focus:border-rose-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none" placeholder="Enter Admin Password" />
+                  {endAdminError && <p className="text-[10px] text-rose-500 mt-1.5">{endAdminError}</p>}
+                </div>
+              )}
+
+              {/* Payment Section (only if they owe money) */}
+              {endInfo.balance > 0 && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">Payment Method</label>
+                    <div className="flex gap-2">
+                      <PayMethodBtn value="cash" current={endPayMethod} icon={Banknote} label="Cash" onChange={setEndPayMethod} />
+                      <PayMethodBtn value="gcash" current={endPayMethod} icon={CreditCard} label="GCash" onChange={setEndPayMethod} />
+                    </div>
+                  </div>
+
+                  {endPayMethod === 'cash' ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Cash Received</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">₱</span>
+                          <input type="number" min={endInfo.balance} value={endCashReceived} onChange={e => setEndCashReceived(e.target.value)} className="w-full bg-neutral-900 border border-neutral-700 rounded-lg pl-7 pr-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none" placeholder="0.00" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">Change Due</label>
+                        <div className="w-full bg-neutral-900/50 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-400 font-mono flex items-center h-[38px]">
+                          ₱{changeDue >= 0 ? changeDue.toLocaleString('en-PH', { minimumFractionDigits: 2 }) : '0.00'}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                     <div>
+                        <label className="block text-xs text-neutral-400 mb-1.5">GCash Reference No.</label>
+                        <input type="text" value={endGcashRef} onChange={e => setEndGcashRef(e.target.value)} className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none" placeholder="Enter Reference Number" />
+                     </div>
+                  )}
+                </div>
+              )}
+
             </div>
-            <div className="flex gap-3"><button onClick={() => setEndingTableId(null)} className="flex-1 py-2.5 bg-neutral-800 text-neutral-300 rounded-xl">Cancel</button><button onClick={handleConfirmEnd} disabled={endInfo.elapsedMins < 30 && !endAdminPassword} className="flex-1 py-2.5 bg-rose-700 text-white rounded-xl font-bold">End Session</button></div>
+            <div className="p-4 border-t border-neutral-800 bg-neutral-900/30 flex gap-3 flex-none">
+              <button type="button" onClick={() => setEndingTableId(null)} className="px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm rounded-xl transition-colors">Cancel</button>
+              <button type="button" onClick={() => handleConfirmEnd()}
+                disabled={(endInfo.elapsedMins < 30 && !endAdminPassword) || !isReadyToEnd}
+                className="flex-1 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:bg-neutral-800 disabled:text-neutral-500 text-white text-sm rounded-xl font-semibold transition-all shadow-lg shadow-rose-900/30 flex items-center justify-center gap-2">
+                <CheckCircle size={15} /> Finalize & End
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -40,8 +40,8 @@ const AI_PROMPTS = [
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// ── Mini Calendar ──────────────────────────────────────────────
-export function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | null; onSelect: (d: Date) => void }) {
+// ── 🚨 FIXED: Mini Calendar now accepts closedDates ────────────────────────────
+export function MiniCalendar({ selectedDate, onSelect, closedDates }: { selectedDate: Date | null; onSelect: (d: Date) => void; closedDates: { date: string; reason: string }[] }) {
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
 
@@ -78,16 +78,26 @@ export function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | 
         {cells.map(({ day, current, date }, idx) => {
           const past = isPast(date), sel = isSelected(date), tod = isToday(date);
           const clickable = current && !past;
+          
+          // 🚨 CHECK IF CLOSED
+          const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          const closedInfo = current ? closedDates.find(cd => cd.date === dateStr) : null;
+
           return (
             <button key={idx} type="button" disabled={!clickable} onClick={() => clickable && onSelect(date)}
-              className={`aspect-square flex items-center justify-center rounded-md text-[11px] transition-all
+              className={`relative aspect-square flex flex-col items-center justify-center rounded-md text-[11px] transition-all
                 ${!current ? 'opacity-20 cursor-default' : ''}
                 ${past && current ? 'opacity-30 cursor-default text-neutral-600' : ''}
-                ${sel ? 'bg-violet-600 text-white' : ''}
-                ${!sel && tod ? 'border border-violet-500 text-violet-400' : ''}
-                ${!sel && clickable && !tod ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
+                ${sel && !closedInfo ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/50' : ''}
+                ${sel && closedInfo ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50' : ''}
+                ${!sel && closedInfo && clickable ? 'bg-rose-950/30 border border-rose-800/50 text-rose-400 hover:bg-rose-900/40' : ''}
+                ${!sel && !closedInfo && tod ? 'border border-violet-500 text-violet-400' : ''}
+                ${!sel && !closedInfo && clickable && !tod ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
               `}>
-              {day}
+              <span>{day}</span>
+              {closedInfo && current && !past && (
+                <span className="text-[7px] font-bold uppercase tracking-wider mt-0.5 leading-none">Closed</span>
+              )}
             </button>
           );
         })}
@@ -100,11 +110,11 @@ export function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date | 
 const AGREEMENT_TEXT = `SERVICE AGREEMENT — One Shot Bar & Billiards Tattoo Studio\n\n1. All tattoo services are final. No refunds once the service has begun.\n2. The ₱500 deposit is non-refundable but may be transferred to a rescheduled appointment within 7 days with prior notice.\n3. Clients must be at least 18 years of age. Valid ID may be required on the day of the appointment.\n4. One Shot Bar & Billiards reserves the right to decline service at management's discretion.\n5. Final pricing may vary based on design complexity, size, and session duration.\n6. Free touch-ups are included within 30 days for minor corrections at the artist's discretion.\n7. Please arrive 15 minutes before your scheduled appointment. A grace period of 15 minutes applies; late arrivals may result in rescheduling.\n8. One Shot Bar & Billiards is not liable for allergic reactions or complications arising from improper aftercare.`;
 const CONSENT_TEXT = `INFORMED CONSENT — Tattoo Services\n\nBy checking this box, I confirm the following:\n\n1. I am at least 18 years of age and of sound mind.\n2. I am NOT currently pregnant or breastfeeding.\n3. I do not have any known blood-borne diseases, keloid-prone skin, or conditions that impair healing.\n4. I am NOT currently on blood-thinning medications (e.g., aspirin, warfarin) unless cleared by a physician.\n5. I am NOT intoxicated or under the influence of any substances.\n6. I understand that tattooing involves needles and permanent body modification, and carries inherent risks including (but not limited to) infection, scarring, and allergic reactions.\n7. I acknowledge that healing results vary per individual and proper aftercare is my responsibility.\n8. I release One Shot Bar & Billiards, its staff, and its tattoo artists from liability for complications resulting from failure to follow aftercare instructions.`;
 
-// ── 🚨 NEW: Extracting the Booking Flow so HomePage can use it inline ─────────────────
 export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel }: { currentUserName?: string, currentUserEmail?: string, onCancel: () => void }) {
-  const { addTattooReservation, tattooArtists } = useAppContext();
+  // 🚨 ADDED closedDates from context
+  const { addTattooReservation, tattooArtists, closedDates } = useAppContext();
   
-  const [modalStep, setModalStep] = useState(1); // Start directly at step 1
+  const [modalStep, setModalStep] = useState(1);
   const [tattooDate, setTattooDate] = useState<Date | null>(null);
   const [referenceNumber, setReferenceNumber] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -131,7 +141,13 @@ export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel 
 
   const selectedArtist = tattooArtists.find(a => a.id === form.artistId);
 
-  const canProceedStep1 = !!tattooDate && !!form.artistId && !!form.name && !!form.phone && !!form.email;
+  // 🚨 Check if selected date is closed
+  const selectedDateStr = tattooDate 
+    ? `${tattooDate.getFullYear()}-${String(tattooDate.getMonth() + 1).padStart(2, '0')}-${String(tattooDate.getDate()).padStart(2, '0')}` 
+    : null;
+  const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
+
+  const canProceedStep1 = !!tattooDate && !selectedClosedDate && !!form.artistId && !!form.name && !!form.phone && !!form.email;
   const canProceedStep2 = !!form.placement && !!form.estimatedSize && !!form.colorStyle && !!form.designDescription;
   const canProceedStep3 = agreementChecked && consentChecked;
 
@@ -298,11 +314,19 @@ export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel 
 
             <div>
               <label className="block text-xs text-neutral-400 mb-2">Preferred Date <span className="text-rose-500">*</span></label>
-              <MiniCalendar selectedDate={tattooDate} onSelect={setTattooDate} />
-              {tattooDate && (
+              <MiniCalendar selectedDate={tattooDate} onSelect={setTattooDate} closedDates={closedDates} />
+              
+              {tattooDate && !selectedClosedDate && (
                 <div className="mt-2 flex items-center gap-2 bg-violet-600/10 border border-violet-600/25 rounded-lg px-3 py-2">
                   <CheckCircle size={13} className="text-violet-400" />
                   <span className="text-xs text-violet-300">{tattooDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              )}
+              {tattooDate && selectedClosedDate && (
+                <div className="mt-2 bg-rose-950/20 border border-rose-800/30 rounded-lg p-3 text-center flex flex-col items-center gap-2">
+                   <AlertCircle size={16} className="text-rose-500" />
+                   <p className="text-rose-400 text-xs font-bold">Store Closed</p>
+                   <p className="text-neutral-300 text-[10px]">{selectedClosedDate.reason}</p>
                 </div>
               )}
             </div>

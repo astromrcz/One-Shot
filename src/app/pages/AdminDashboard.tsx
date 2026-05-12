@@ -13,6 +13,9 @@ export function AdminDashboard() {
   const totalRevenue    = reservations.filter(r => r.status === 'completed').reduce((s, r) => s + r.totalAmount, 0);
   const activeArtists   = tattooArtists.filter(a => a.isActive).length;
 
+  // 🚨 FIXED: Interpret DB decimals (0.25) as whole numbers (25) for the UI
+  const displayDpPercent = rates.downPaymentPercent <= 1 ? Math.round(rates.downPaymentPercent * 100) : rates.downPaymentPercent;
+
   const cards = [
     { label: 'Staff Users',       value: activeUsers,       total: staffUsers.length,       color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    icon: Users,        link: '/admin/users' },
     { label: 'Tables',            value: tables.filter(t=>t.status==='available').length, total: tables.length, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', icon: Table2, link: '/admin/tables', subLabel: 'available' },
@@ -43,7 +46,7 @@ export function AdminDashboard() {
           {[
             { label: 'Hourly Rate', value: `₱${rates.hourlyRate}/hr`, link: '/admin/rates' },
             { label: 'Happy Hour', value: `₱${rates.happyHourRate}/hr`, link: '/admin/rates' },
-            { label: 'Down Payment', value: `${rates.downPaymentPercent}%`, link: '/admin/rates' },
+            { label: 'Down Payment', value: `${displayDpPercent}%`, link: '/admin/rates' }, // 🚨 Applied the math variable here
           ].map(r => (
             <button key={r.label} onClick={() => navigate(r.link)}
               className="bg-amber-950/20 border border-amber-900/20 rounded-xl p-3 text-left hover:border-amber-700/30 transition-colors">

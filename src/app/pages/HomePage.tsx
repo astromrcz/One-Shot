@@ -50,168 +50,6 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 
 type Section = 'home' | 'reservations' | 'rates' | 'about' | 'contacts' | 'reviews' | 'feedback' | 'tattoo';
 
-// ─── FLOATING LIVE STATUS WIDGET ─────────────────────────────────────────────
-// You can export and use this exact component inside Reservations.tsx as well!
-export function LiveStatusWidget() {
-  const { tables, queue, reservations } = useAppContext();
-  const [isOpen, setIsOpen] = useState(false);
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const getTableTimerInfo = (tableId: string) => {
-    const t = tables.find(tb => tb.id === tableId);
-    if (!t || t.status !== 'occupied' || !t.session) return null;
-
-    if (t.session.durationMinutes === 0) {
-      const elapsedSecs = Math.max(0, differenceInSeconds(now, new Date(t.session.startTime)));
-      const mins = Math.floor(elapsedSecs / 60);
-      const secs = elapsedSecs % 60;
-      return { 
-        formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
-        isOvertime: false, 
-        isOpenTime: true,
-      };
-    }
-
-    const endTime = addMinutes(new Date(t.session.startTime), t.session.durationMinutes);
-    const secsLeft = differenceInSeconds(endTime, now);
-    const isOvertime = secsLeft < 0;
-    const absSecs = Math.abs(secsLeft);
-    const mins = Math.floor(absSecs / 60);
-    const secs = absSecs % 60;
-    return { 
-      formatted: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`, 
-      isOvertime, 
-      isOpenTime: false,
-    };
-  };
-
-  const getNextResForTable = (tableId: string) => {
-    return reservations.filter(r => r.tableId === tableId && (r.status === 'pending' || r.status === 'confirmed') && isToday(new Date(r.date)) && new Date(r.date) >= now)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null;
-  };
-
-  const formatDurationHHMMSS = (mmSS: string) => {
-    if (!mmSS || !mmSS.includes(':')) return mmSS;
-    const [mStr, sStr] = mmSS.split(':');
-    const totalMins = parseInt(mStr, 10);
-    if (isNaN(totalMins)) return mmSS;
-    const hrs = Math.floor(totalMins / 60);
-    const mins = totalMins % 60;
-    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${sStr}`;
-  };
-
-  const format12HourWithSeconds = (time24: string) => {
-    if (!time24) return '';
-    const [h, m, s = '00'] = time24.split(':');
-    const hour = parseInt(h, 10);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const formattedHour = hour % 12 || 12;
-    return `${formattedHour.toString().padStart(2, '0')}:${m}:${s} ${ampm}`;
-  };
-
-  if (!isOpen) {
-    return (
-      <button 
-        onClick={() => setIsOpen(true)} 
-        className="fixed bottom-6 right-6 z-[100] bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-full shadow-2xl transition-all flex items-center justify-center gap-2 border border-emerald-400/30 group"
-      >
-        <Eye size={24} className="group-hover:scale-110 transition-transform" />
-        <span className="font-bold text-sm tracking-wide pr-1">View Status</span>
-      </button>
-    );
-  }
-
-  return (
-    <div className="fixed bottom-6 right-6 z-[100] w-[350px] bg-neutral-950 border border-neutral-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[80vh] animate-in slide-in-from-bottom-5 fade-in duration-200">
-      <div className="bg-neutral-900 border-b border-neutral-800 p-4 flex justify-between items-center flex-shrink-0">
-        <h3 className="font-bold text-white flex items-center gap-2">
-          <Eye size={16} className="text-emerald-500"/> Live Status
-        </h3>
-        <button onClick={() => setIsOpen(false)} className="text-neutral-500 hover:text-white bg-neutral-800 hover:bg-neutral-700 p-1.5 rounded-lg transition-colors">
-          <X size={16}/>
-        </button>
-      </div>
-      
-      <div className="overflow-y-auto p-4 space-y-6 custom-scrollbar">
-        {/* Table Status */}
-        <div>
-          <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3 flex items-center gap-2"><Table2 size={12} /> Tables</h4>
-          <div className="space-y-1">
-            {tables.map(t => {
-              if (!t.isActive) {
-                return (
-                  <div key={t.id} className="flex items-center gap-2 rounded-lg px-3 py-2 border text-xs bg-neutral-950/40 border-neutral-800/30 opacity-60">
-                    <span className="w-2 h-2 rounded-full flex-none bg-neutral-600" />
-                    <span className="font-semibold text-neutral-500 w-12 flex-none line-through">{t.name}</span>
-                    <span className="font-semibold uppercase text-[10px] tracking-wider text-neutral-500">Unavailable</span>
-                  </div>
-                );
-              }
-              const timerInfo = getTableTimerInfo(t.id);
-              const nextRes = getNextResForTable(t.id);
-              
-              let dotColor = 'bg-emerald-500';
-              if (timerInfo?.isOvertime) dotColor = 'bg-rose-500 animate-pulse';
-              else if (timerInfo?.isOpenTime) dotColor = 'bg-blue-500';
-              else if (t.status === 'occupied') dotColor = 'bg-amber-500';
-              else if (t.status === 'reserved') dotColor = 'bg-blue-500';
-
-              return (
-                <div key={t.id} className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 border text-xs transition-all ${timerInfo?.isOvertime ? 'bg-rose-950/30 border-rose-800/40' : timerInfo?.isOpenTime ? 'bg-blue-950/20 border-blue-800/30' : t.status === 'available' ? 'bg-neutral-950/50 border-neutral-800/30' : 'bg-neutral-950 border-neutral-800/50'}`}>
-                  <span className={`w-2 h-2 rounded-full flex-none ${dotColor}`} />
-                  <span className="font-semibold text-neutral-300 w-10 flex-none">{t.name}</span>
-                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                    {timerInfo ? (
-                      <>
-                        <span className={`font-semibold uppercase text-[9px] tracking-wider ${timerInfo.isOvertime ? 'text-rose-500' : timerInfo.isOpenTime ? 'text-blue-500' : 'text-amber-500'}`}>
-                          {timerInfo.isOvertime ? 'OVERTIME' : timerInfo.isOpenTime ? 'OPEN' : 'IN USE'}
-                        </span>
-                        <span className={`font-mono font-black text-[10px] ${timerInfo.isOvertime ? 'text-rose-400' : timerInfo.isOpenTime ? 'text-blue-400' : 'text-amber-500'}`}>
-                          {formatDurationHHMMSS(timerInfo.formatted)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className={`font-semibold uppercase text-[9px] tracking-wider ${t.status === 'available' ? 'text-emerald-500' : t.status === 'reserved' ? 'text-blue-400' : 'text-amber-500'}`}>{t.status}</span>
-                    )}
-                  </div>
-                  {nextRes && <span className="text-[9px] text-neutral-500 flex-none truncate max-w-[80px]">→ {nextRes.customerName.split(' ')[0]} @ {format12HourWithSeconds(nextRes.timeSlot)}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Walk-in Queue */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2"><Clock size={12} /> Walk-in Queue</h4>
-            <span className="bg-neutral-800 text-neutral-300 text-[9px] font-bold px-2 py-0.5 rounded-full">{queue.filter(q => q.status === 'waiting').length} Waiting</span>
-          </div>
-          {queue.filter(q => q.status === 'waiting').length === 0 ? (
-            <div className="flex items-center justify-center py-4 border border-dashed border-neutral-800 rounded-lg"><p className="text-xs text-neutral-500">No customers waiting.</p></div>
-          ) : (
-            <div className="space-y-1.5">
-              {queue.filter(q => q.status === 'waiting').slice(0, 5).map((q, i) => (
-                <div key={q.id} className="flex items-center gap-2 text-sm bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5">
-                  <span className="w-4 h-4 rounded-full bg-neutral-800 flex items-center justify-center text-[9px] font-bold text-neutral-400">{i + 1}</span>
-                  <span className="text-neutral-300 font-medium flex-1 truncate text-xs">{q.customerName}</span>
-                  <span className="text-[10px] text-neutral-500">{q.partySize} pax</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 function MiniCalendar({
   selectedDate, onSelect, reservedDates, closedDates
 }: {
@@ -306,6 +144,9 @@ function MiniCalendar({
             >
               <span>{day}</span>
               {reserved && !selected && !closedInfo && <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />}
+              {closedInfo && currentMonth && !past && (
+                <span className="text-[8px] font-bold uppercase tracking-wider mt-0.5 leading-none">Closed</span>
+              )}
             </button>
           );
         })}
@@ -321,7 +162,7 @@ function MiniCalendar({
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { tables, queue, reservations, tattooReservations, addReservation, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, siteSettings, announcements, cancelReservation, proposeReschedule, confirmReschedule } = useAppContext(); 
+  const { tables, queue, reservations, tattooReservations, addReservation, applyPromoCode, rates, closedDates, staffUsers, adminLogin, staffLogin, artistLogin, siteSettings, announcements, cancelReservation, proposeReschedule, confirmReschedule, addFeedback } = useAppContext();  
   
   const activeAnnouncements = announcements && announcements.filter(a => a.isActive).length > 0
     ? announcements.filter(a => a.isActive).map(a => ({ content: a.content, type: a.type }))
@@ -469,10 +310,15 @@ export function HomePage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const baseAmount = resForm.duration * (rates?.hourlyRate || 250);
-  const discountAmount = appliedPromo ? Math.floor(baseAmount * appliedPromo.discountPercent / 100) : 0;
+  // 🚨 FIXED: Bulletproof math for the booking summary to prevent ₱1.00 bugs
+  const currentHourlyRate = rates?.hourlyRate || 150; // Use your DB value, fallback to 150
+  const rawDpPercent = rates?.downPaymentPercent || 25;
+  const currentDpPercent = rawDpPercent <= 1 ? rawDpPercent * 100 : rawDpPercent;
+
+  const baseAmount = resForm.duration * currentHourlyRate;
+  const discountAmount = appliedPromo ? Math.floor(baseAmount * (appliedPromo.discountPercent / 100)) : 0;
   const totalAmount = baseAmount - discountAmount;
-  const downPayment = Math.ceil(totalAmount * ((rates?.downPaymentPercent || 25) / 100));
+  const downPayment = Math.ceil(totalAmount * (currentDpPercent / 100));
 
   const allMyBookings = [
     ...(reservations || []).map(r => ({ ...r, bookingType: 'billiards' })),
@@ -837,6 +683,15 @@ export function HomePage() {
     if (!simpleFeedbackForm.name || !simpleFeedbackForm.type || !simpleFeedbackForm.contact) return;
     
     try {
+      await addFeedback({
+        customerName: simpleFeedbackForm.name,
+        contactInfo: simpleFeedbackForm.contact,
+        feedbackType: simpleFeedbackForm.type as any,
+        comment: simpleFeedbackForm.message || '',
+        rating: 5, 
+        tags: []
+      });
+
       toast.success("Message Sent! Our team will review it shortly.");
       setSimpleFeedbackSent(true);
       setTimeout(() => { 
@@ -844,6 +699,7 @@ export function HomePage() {
         setSimpleFeedbackForm({ name: '', type: '', contact: '', message: '' }); 
       }, 3000);
     } catch (error) {
+      console.error(error);
       toast.error("Failed to send message. Please try again.");
     }
   };
@@ -970,7 +826,8 @@ export function HomePage() {
               <div className="bg-neutral-900 border-y border-neutral-800">
                 <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-neutral-800">
                   {[
-                    { value: '10', label: 'Billiard Tables', color: 'text-emerald-400' },
+                    // 🚨 FIXED: Now dynamically counts active tables from the database (falls back to 10 while loading)
+                    { value: `${tables.length > 0 ? tables.filter(t => t.isActive).length : 10}`, label: 'Billiard Tables', color: 'text-emerald-400' },
                     { value: `₱${rates?.hourlyRate || 250}`, label: 'Per Hour', color: 'text-amber-400' },
                     { value: '15+', label: 'Hours Open Daily', color: 'text-sky-400' },
                     { value: 'A+', label: 'Top Tier Facility', color: 'text-rose-400' },
@@ -1082,7 +939,7 @@ export function HomePage() {
                   
                   <div className="text-center mb-10">
                     <h2 className="text-3xl font-black text-white mb-2">Reserve a Table</h2>
-                    <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {rates?.downPaymentPercent || 25}% down payment.</p>
+                    <p className="text-neutral-400 text-sm">Select your preferred date on the calendar, fill in your details, and secure your spot with a {currentDpPercent}% down payment.</p>
                   </div>
 
                   <div className="flex flex-col lg:flex-row gap-8 items-start">
@@ -1254,8 +1111,8 @@ export function HomePage() {
                               <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50 mt-4">
                                 <p className="text-xs text-neutral-500 mb-2 uppercase tracking-wider font-semibold">Booking Summary</p>
                                 <div className="space-y-1.5 text-xs">
-                                  <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount}.00</span></div>
-                                  <div className="flex justify-between"><span className="text-amber-400">Down Payment ({rates?.downPaymentPercent || 25}%)</span><span className="text-amber-300 font-semibold">₱{downPayment}.00</span></div>
+                                  <div className="flex justify-between"><span className="text-neutral-400">Total Amount</span><span className="text-white font-semibold">₱{totalAmount.toLocaleString()}.00</span></div>
+                                  <div className="flex justify-between"><span className="text-amber-400">Down Payment ({currentDpPercent}%)</span><span className="text-amber-300 font-semibold">₱{downPayment.toLocaleString()}.00</span></div>
                                 </div>
                                 <div className="mt-3 pt-3 border-t border-neutral-700/50 flex gap-2 items-start">
                                   <AlertTriangle size={12} className="text-rose-400 mt-0.5 flex-none" />
@@ -1624,7 +1481,7 @@ export function HomePage() {
                     rate: `₱${rates?.hourlyRate || 250}`,
                     unit: '/ hour',
                     desc: 'Book a specific time slot and table in advance.',
-                    features: ['Guaranteed table slot', `${rates?.downPaymentPercent || 25}% down payment`, 'Priority seating', 'Advance booking'],
+                    features: ['Guaranteed table slot', `${currentDpPercent}% down payment`, 'Priority seating', 'Advance booking'],
                     badge: 'Popular',
                     color: 'emerald',
                   },
@@ -1697,7 +1554,7 @@ export function HomePage() {
                   <div>
                     <p className="text-emerald-300 text-xs font-semibold mb-1">Reservation Redemption Policy</p>
                     <p className="text-neutral-400 text-xs leading-relaxed">
-                      After completing your reservation and {rates?.downPaymentPercent || 25}% down payment, the <span className="text-white font-medium">remaining balance must be settled in full upon arrival</span> before your table time begins — payable via <span className="text-white font-medium">Cash or GCash</span>.
+                      After completing your reservation and {currentDpPercent}% down payment, the <span className="text-white font-medium">remaining balance must be settled in full upon arrival</span> before your table time begins — payable via <span className="text-white font-medium">Cash or GCash</span>.
                     </p>
                   </div>
                 </div>
@@ -1705,7 +1562,7 @@ export function HomePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   {[
                     { label: 'Minimum booking time', value: '1 hour' },
-                    { label: 'Down payment required', value: `${rates?.downPaymentPercent || 25}% of total` },
+                    { label: 'Down payment required', value: `${currentDpPercent}% of total` },
                     { label: 'Remaining balance', value: 'Paid on-site After Session' },
                     { label: 'Cancellation policy', value: '24 hours before reservation' },
                     { label: 'Payment methods', value: 'GCash, Cash' },
@@ -1782,8 +1639,6 @@ export function HomePage() {
                   </div>
                 </div>
               </div>
-
-              {/* Our Facilities block REMOVED successfully here! */}
 
               <div className="border-t border-neutral-800 pt-10">
                 <div className="text-center mb-8">
@@ -2290,7 +2145,7 @@ export function HomePage() {
               <div className="p-6">
                 <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4 mb-5 text-center">
                   <p className="text-xs text-amber-500 mb-1">Amount Due</p>
-                  <p className="text-4xl font-black text-amber-400">₱{downPayment}.00</p>
+                  <p className="text-4xl font-black text-amber-400">₱{downPayment.toLocaleString()}.00</p>
                 </div>
 
                 <div className="flex flex-col items-center gap-4">
@@ -2306,7 +2161,7 @@ export function HomePage() {
                   </div>
                   <div className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-3 text-center">
                     <p className="text-xs text-neutral-500">Scan the QR code using your GCash app</p>
-                    <p className="text-xs text-neutral-600 mt-0.5">Send exactly <span className="text-amber-400 font-semibold">₱{downPayment}.00</span></p>
+                    <p className="text-xs text-neutral-600 mt-0.5">Send exactly <span className="text-amber-400 font-semibold">₱{downPayment.toLocaleString()}.00</span></p>
                   </div>
                 </div>
 
@@ -2367,7 +2222,7 @@ export function HomePage() {
               <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 mb-5 text-xs space-y-1.5 text-left">
                 <div className="flex justify-between"><span className="text-neutral-500">Name</span><span className="text-neutral-200">{resForm.name}</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Email</span><span className="text-neutral-200">{resForm.email}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold">₱{downPayment}.00 ✓</span></div>
+                <div className="flex justify-between"><span className="text-neutral-500">Down Payment</span><span className="text-emerald-400 font-semibold">₱{downPayment.toLocaleString()}.00 ✓</span></div>
                 <div className="flex justify-between"><span className="text-neutral-500">Status</span><span className="text-amber-400">Pending Verification</span></div>
                 <div className="w-full h-px bg-neutral-800 my-2" />
                 <div className="flex flex-col items-center pt-2">
@@ -2494,11 +2349,6 @@ export function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* 🚨 FLOATING WIDGET ONLY ON HOME OR RESERVATION TAB */}
-      {(activeSection === 'home' || activeSection === 'reservations') && (
-        <LiveStatusWidget />
-      )}
 
     </div>
   );

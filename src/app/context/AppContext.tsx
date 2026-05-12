@@ -742,16 +742,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addFeedback = async (item: Omit<Feedback, 'id' | 'date'>) => {
     const id = `f${Date.now()}`;
-    await supabase.from('feedback').insert([{ 
+    
+    // 🚨 FIXED: Map camelCase to snake_case for Supabase
+    const dbFeedback = {
       id, 
       customer_name: item.customerName, 
       contact_info: item.contactInfo || null,
       rating: item.rating, 
       feedback_type: item.feedbackType || null, 
       comment: item.comment, 
-      tags: item.tags,
       reservation_id: item.reservationId || null,
-    }]);
+      tags: item.tags || []
+    };
+
+    const { error } = await supabase.from('feedback').insert([dbFeedback]);
+    if (error) throw error;
+    
     setFeedback(prev => [{ ...item, id, date: new Date() }, ...prev]);
   };
 
@@ -783,7 +789,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTattooReservation = async (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => {
     const id = item.id || `tr${Date.now()}`;
-    await supabase.from('tattoo_reservations').insert([{ 
+    
+    // 🚨 FIXED: Explicitly map ALL fields to snake_case for the database
+    const dbPayload = { 
       id, 
       customer_name: item.customerName, 
       contact_number: item.contactNumber, 
@@ -809,18 +817,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customer_reschedule_confirmed: item.customerRescheduleConfirmed || null,
       payment_reference: item.paymentReference || null,
       receipt_url: item.receiptUrl || null,
-    }]);
+    };
+
+    // 🚨 FIXED: Now catches the error and throws it so the UI can show the warning
+    const { error } = await supabase.from('tattoo_reservations').insert([dbPayload]);
+    if (error) {
+      console.error("Tattoo DB Error:", error);
+      throw new Error(error.message);
+    }
+    
     setTattooReservations(prev => [{ ...item, id, createdAt: new Date() }, ...prev]);
     return id;
   };
 
   const updateTattooReservationStatus = async (id: string, status: TattooReservationStatus) => {
-    await supabase.from('tattoo_reservations').update({ status }).eq('id', id);
+    const { error } = await supabase.from('tattoo_reservations').update({ status }).eq('id', id);
+    if (error) throw error;
     setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, status } : r));
   };
 
   const updateTattooDepositPaid = async (id: string, paid: boolean) => {
-    await supabase.from('tattoo_reservations').update({ deposit_paid: paid }).eq('id', id);
+    const { error } = await supabase.from('tattoo_reservations').update({ deposit_paid: paid }).eq('id', id);
+    if (error) throw error;
     setTattooReservations(prev => prev.map(r => r.id === id ? { ...r, depositPaid: paid } : r));
   };
 
@@ -850,17 +868,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTattooArtist = async (artist: Omit<TattooArtist, 'id'>) => {
     const id = `ta${Date.now()}`;
-    const dbArtist = {
-      id,
-      name: artist.name,
-      specialty: artist.specialty,
+    const dbPayload = { 
+      id, 
+      name: artist.name, 
+      specialty: artist.specialty, 
       contact_number: artist.contactNumber,
       email: artist.email || null,
       bio: artist.bio || null,
-      is_active: artist.isActive !== undefined ? artist.isActive : true,
-      is_available_today: artist.isAvailableToday !== undefined ? artist.isAvailableToday : true
+      is_available_today: artist.isAvailableToday,
+      is_active: artist.isActive,
+      unavailable_dates: artist.unavailableDates || [],
     };
-    const { error } = await supabase.from('tattoo_artists').insert([dbArtist]);
+    const { error } = await supabase.from('tattoo_artists').insert([dbPayload]);
     if (error) throw error;
     setTattooArtists(prev => [...prev, { ...artist, id }]);
   };
@@ -872,9 +891,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (updates.contactNumber !== undefined) dbUpdates.contact_number = updates.contactNumber;
     if (updates.email !== undefined) dbUpdates.email = updates.email;
     if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
-    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
     if (updates.isAvailableToday !== undefined) dbUpdates.is_available_today = updates.isAvailableToday;
-
+    if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+    
     const { error } = await supabase.from('tattoo_artists').update(dbUpdates).eq('id', id);
     if (error) throw error;
     setTattooArtists(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
@@ -1028,17 +1047,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addClosedDate = async (item: Omit<ClosedDate, 'id'>) => {
     const id = `cd${Date.now()}`;
-    await supabase.from('closed_dates').insert([{ id, ...item }]);
+    const dbPayload = {
+      id,
+      date: item.date,
+      reason: item.reason,
+      is_full_day: item.isFullDay,
+      open_time: item.openTime || null,
+      close_time: item.closeTime || null
+    };
+
+    const { error } = await supabase.from('closed_dates').insert([dbPayload]);
+    if (error) throw error;
+    
     setClosedDates(prev => [...prev, { ...item, id }]);
   };
 
   const removeClosedDate = async (id: string) => {
-    await supabase.from('closed_dates').delete().eq('id', id);
+    const { error } = await supabase.from('closed_dates').delete().eq('id', id);
+    if (error) throw error;
     setClosedDates(prev => prev.filter(c => c.id !== id));
   };
 
   const updateClosedDate = async (id: string, updates: Partial<ClosedDate>) => {
-    await supabase.from('closed_dates').update(updates).eq('id', id);
+    const dbPayload: any = {};
+    if (updates.date !== undefined) dbPayload.date = updates.date;
+    if (updates.reason !== undefined) dbPayload.reason = updates.reason;
+    if (updates.isFullDay !== undefined) dbPayload.is_full_day = updates.isFullDay;
+    if (updates.openTime !== undefined) dbPayload.open_time = updates.openTime;
+    if (updates.closeTime !== undefined) dbPayload.close_time = updates.closeTime;
+
+    const { error } = await supabase.from('closed_dates').update(dbPayload).eq('id', id);
+    if (error) throw error;
+    
     setClosedDates(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 

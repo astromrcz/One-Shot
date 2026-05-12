@@ -121,12 +121,20 @@ function TableReservationsView() {
   };
 
   const handleCheckInClick = (r: any) => {
-    if (!isToday(new Date(r.date))) {
+    // 🚨 FIXED: Prevent checking in if the reservation is not for today
+    const resDate = new Date(r.date);
+    resDate.setHours(0, 0, 0, 0); // Normalize time to start of day
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize time to start of day
+
+    if (resDate.getTime() !== today.getTime()) {
       toast.error("Invalid Check-In Date", { 
         description: "Customers can only be checked in on the exact date of their reservation. If they are arriving on a different day, please accommodate them as a regular Walk-In." 
       });
       return;
     }
+    
     executeCheckIn(r);
   };
 
