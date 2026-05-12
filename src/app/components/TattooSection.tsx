@@ -5,9 +5,10 @@ import {
   Phone, Calendar, Clock, User, AlertCircle, FileText, Shield,
   ImagePlus, Trash2, Wand2, Sparkles
 } from 'lucide-react';
-import { useAppContext, TATTOO_DEPOSIT } from '../context/AppContext';
+import { useAppContext, TATTOO_DEPOSIT, TattooArtist } from '../context/AppContext';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { supabase } from '../../utils/supabase/client';
+import { isToday } from 'date-fns';
 
 import tattooImg1 from '@/app/assets/4ecf05cd3c60cfbf6be0fc00794d2398915a7b40.png';
 import tattooImg2 from '@/app/assets/afb5043a13bb3505979bbbad912e2d572ebed207.png';
@@ -40,8 +41,18 @@ const AI_PROMPTS = [
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// ── 🚨 FIXED: Mini Calendar now accepts closedDates ────────────────────────────
-export function MiniCalendar({ selectedDate, onSelect, closedDates }: { selectedDate: Date | null; onSelect: (d: Date) => void; closedDates: { date: string; reason: string }[] }) {
+// ── 🚨 FIXED: Mini Calendar now accepts both closedDates AND artistBlockedDates ──
+export function MiniCalendar({ 
+  selectedDate, 
+  onSelect, 
+  closedDates,
+  artistBlockedDates = []
+}: { 
+  selectedDate: Date | null; 
+  onSelect: (d: Date) => void; 
+  closedDates: { date: string; reason: string }[];
+  artistBlockedDates?: string[];
+}) {
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
 
@@ -57,7 +68,7 @@ export function MiniCalendar({ selectedDate, onSelect, closedDates }: { selected
   for (let d = 1; d <= rem; d++) cells.push({ day: d, current: false, date: new Date(year, month + 1, d) });
 
   const isSelected = (d: Date) => selectedDate ? (() => { const s = new Date(selectedDate); s.setHours(0,0,0,0); return s.getTime() === d.getTime(); })() : false;
-  const isToday = (d: Date) => d.getTime() === today.getTime();
+  const isTodayDate = (d: Date) => d.getTime() === today.getTime();
   const isPast = (d: Date) => d < today;
 
   return (
@@ -76,27 +87,33 @@ export function MiniCalendar({ selectedDate, onSelect, closedDates }: { selected
       </div>
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map(({ day, current, date }, idx) => {
-          const past = isPast(date), sel = isSelected(date), tod = isToday(date);
+          const past = isPast(date), sel = isSelected(date), tod = isTodayDate(date);
           const clickable = current && !past;
           
-          // 🚨 CHECK IF CLOSED
           const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          
+          // 🚨 Check closures and artist blocks
           const closedInfo = current ? closedDates.find(cd => cd.date === dateStr) : null;
+          const isArtistBlocked = current ? artistBlockedDates.includes(dateStr) : false;
 
           return (
             <button key={idx} type="button" disabled={!clickable} onClick={() => clickable && onSelect(date)}
               className={`relative aspect-square flex flex-col items-center justify-center rounded-md text-[11px] transition-all
                 ${!current ? 'opacity-20 cursor-default' : ''}
                 ${past && current ? 'opacity-30 cursor-default text-neutral-600' : ''}
-                ${sel && !closedInfo ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/50' : ''}
-                ${sel && closedInfo ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50' : ''}
+                ${sel && !closedInfo && !isArtistBlocked ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/50' : ''}
+                ${sel && (closedInfo || isArtistBlocked) ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/50' : ''}
                 ${!sel && closedInfo && clickable ? 'bg-rose-950/30 border border-rose-800/50 text-rose-400 hover:bg-rose-900/40' : ''}
-                ${!sel && !closedInfo && tod ? 'border border-violet-500 text-violet-400' : ''}
-                ${!sel && !closedInfo && clickable && !tod ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
+                ${!sel && isArtistBlocked && clickable ? 'bg-amber-950/30 border border-amber-800/50 text-amber-400 hover:bg-amber-900/40' : ''}
+                ${!sel && !closedInfo && !isArtistBlocked && tod ? 'border border-violet-500 text-violet-400' : ''}
+                ${!sel && !closedInfo && !isArtistBlocked && clickable && !tod ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white' : ''}
               `}>
               <span>{day}</span>
               {closedInfo && current && !past && (
                 <span className="text-[7px] font-bold uppercase tracking-wider mt-0.5 leading-none">Closed</span>
+              )}
+              {isArtistBlocked && !closedInfo && current && !past && (
+                <span className="text-[7px] font-bold uppercase tracking-wider mt-0.5 leading-none text-amber-500">Blocked</span>
               )}
             </button>
           );
@@ -111,7 +128,6 @@ const AGREEMENT_TEXT = `SERVICE AGREEMENT — One Shot Bar & Billiards Tattoo St
 const CONSENT_TEXT = `INFORMED CONSENT — Tattoo Services\n\nBy checking this box, I confirm the following:\n\n1. I am at least 18 years of age and of sound mind.\n2. I am NOT currently pregnant or breastfeeding.\n3. I do not have any known blood-borne diseases, keloid-prone skin, or conditions that impair healing.\n4. I am NOT currently on blood-thinning medications (e.g., aspirin, warfarin) unless cleared by a physician.\n5. I am NOT intoxicated or under the influence of any substances.\n6. I understand that tattooing involves needles and permanent body modification, and carries inherent risks including (but not limited to) infection, scarring, and allergic reactions.\n7. I acknowledge that healing results vary per individual and proper aftercare is my responsibility.\n8. I release One Shot Bar & Billiards, its staff, and its tattoo artists from liability for complications resulting from failure to follow aftercare instructions.`;
 
 export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel }: { currentUserName?: string, currentUserEmail?: string, onCancel: () => void }) {
-  // 🚨 ADDED closedDates from context
   const { addTattooReservation, tattooArtists, closedDates } = useAppContext();
   
   const [modalStep, setModalStep] = useState(1);
@@ -141,13 +157,17 @@ export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel 
 
   const selectedArtist = tattooArtists.find(a => a.id === form.artistId);
 
-  // 🚨 Check if selected date is closed
   const selectedDateStr = tattooDate 
     ? `${tattooDate.getFullYear()}-${String(tattooDate.getMonth() + 1).padStart(2, '0')}-${String(tattooDate.getDate()).padStart(2, '0')}` 
     : null;
-  const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
+  const isTodaySelected = tattooDate ? isToday(tattooDate) : false;
 
-  const canProceedStep1 = !!tattooDate && !selectedClosedDate && !!form.artistId && !!form.name && !!form.phone && !!form.email;
+  // 🚨 Validation checks for disabled state
+  const selectedClosedDate = closedDates.find(cd => cd.date === selectedDateStr);
+  const selectedArtistUnavailable = selectedArtist?.unavailableDates?.includes(selectedDateStr || '') || false;
+  const selectedArtistCannotBookToday = isTodaySelected && selectedArtist && !selectedArtist.isAvailableToday;
+
+  const canProceedStep1 = !!tattooDate && !selectedClosedDate && !selectedArtistUnavailable && !selectedArtistCannotBookToday && !!form.artistId && !!form.name && !!form.phone && !!form.email;
   const canProceedStep2 = !!form.placement && !!form.estimatedSize && !!form.colorStyle && !!form.designDescription;
   const canProceedStep3 = agreementChecked && consentChecked;
 
@@ -314,9 +334,14 @@ export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel 
 
             <div>
               <label className="block text-xs text-neutral-400 mb-2">Preferred Date <span className="text-rose-500">*</span></label>
-              <MiniCalendar selectedDate={tattooDate} onSelect={setTattooDate} closedDates={closedDates} />
+              <MiniCalendar 
+                selectedDate={tattooDate} 
+                onSelect={setTattooDate} 
+                closedDates={closedDates} 
+                artistBlockedDates={selectedArtist?.unavailableDates} // 🚨 Wires the calendar to the artist
+              />
               
-              {tattooDate && !selectedClosedDate && (
+              {tattooDate && !selectedClosedDate && !selectedArtistUnavailable && (
                 <div className="mt-2 flex items-center gap-2 bg-violet-600/10 border border-violet-600/25 rounded-lg px-3 py-2">
                   <CheckCircle size={13} className="text-violet-400" />
                   <span className="text-xs text-violet-300">{tattooDate.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
@@ -327,6 +352,13 @@ export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel 
                    <AlertCircle size={16} className="text-rose-500" />
                    <p className="text-rose-400 text-xs font-bold">Store Closed</p>
                    <p className="text-neutral-300 text-[10px]">{selectedClosedDate.reason}</p>
+                </div>
+              )}
+              {tattooDate && !selectedClosedDate && selectedArtistUnavailable && (
+                <div className="mt-2 bg-amber-950/20 border border-amber-800/30 rounded-lg p-3 text-center flex flex-col items-center gap-2">
+                   <AlertCircle size={16} className="text-amber-500" />
+                   <p className="text-amber-400 text-xs font-bold">Artist Unavailable</p>
+                   <p className="text-neutral-300 text-[10px]">{selectedArtist?.name} is not available on this date.</p>
                 </div>
               )}
             </div>
@@ -346,29 +378,37 @@ export function TattooBookingFlow({ currentUserName, currentUserEmail, onCancel 
             <div>
               <label className="block text-xs text-neutral-400 mb-1.5">Select Tattoo Artist <span className="text-rose-500">*</span></label>
               <div className="space-y-2">
-                {tattooArtists.map(artist => (
-                  <button type="button" key={artist.id} disabled={!artist.isAvailableToday}
-                    onClick={() => artist.isAvailableToday && setForm(f => ({ ...f, artistId: artist.id }))}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
-                      !artist.isAvailableToday ? 'opacity-40 cursor-not-allowed border-neutral-800 bg-neutral-900/40' :
-                      form.artistId === artist.id ? 'border-violet-500 bg-violet-600/10' :
-                      'border-neutral-800 bg-neutral-900/60 hover:border-neutral-600'
-                    }`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${form.artistId === artist.id ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}>
-                      {artist.name[0]}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-neutral-200">{artist.name}
-                        {!artist.isAvailableToday && <span className="ml-2 text-[10px] text-neutral-600 font-normal">(Not available today)</span>}
-                      </p>
-                      <p className="text-[10px] text-neutral-500">{artist.specialty}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-neutral-500 flex items-center gap-1"><Phone size={9} />{artist.contactNumber}</p>
-                      {form.artistId === artist.id && <CheckCircle size={14} className="text-violet-400 ml-auto mt-1" />}
-                    </div>
-                  </button>
-                ))}
+                {tattooArtists.map(artist => {
+                  // 🚨 FIXED: Logic dynamically prevents picking an artist if the selected date conflicts
+                  const isBlockedDate = selectedDateStr ? artist.unavailableDates?.includes(selectedDateStr) : false;
+                  const cannotBook = isBlockedDate || (isTodaySelected && !artist.isAvailableToday);
+
+                  return (
+                    <button type="button" key={artist.id} disabled={cannotBook}
+                      onClick={() => !cannotBook && setForm(f => ({ ...f, artistId: artist.id }))}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                        cannotBook ? 'opacity-40 cursor-not-allowed border-neutral-800 bg-neutral-900/40' :
+                        form.artistId === artist.id ? 'border-violet-500 bg-violet-600/10' :
+                        'border-neutral-800 bg-neutral-900/60 hover:border-neutral-600'
+                      }`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${form.artistId === artist.id ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}>
+                        {artist.name[0]}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-neutral-200">{artist.name}
+                          {cannotBook && <span className="ml-2 text-[10px] text-rose-500 font-normal">
+                            ({isBlockedDate ? 'Unavailable on selected date' : 'Not available today'})
+                          </span>}
+                        </p>
+                        <p className="text-[10px] text-neutral-500">{artist.specialty}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-neutral-500 flex items-center gap-1"><Phone size={9} />{artist.contactNumber}</p>
+                        {form.artistId === artist.id && <CheckCircle size={14} className="text-violet-400 ml-auto mt-1" />}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
