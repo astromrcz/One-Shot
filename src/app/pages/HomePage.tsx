@@ -1673,7 +1673,7 @@ export function HomePage() {
                         {[
                           { platform: 'Facebook', handle: '@One Shot', icon: '📘', url: 'https://www.facebook.com/oneshotcainta' },
                           { platform: 'Instagram', handle: '@oneshotbarandbilliardsph', icon: '📸', url: 'https://www.instagram.com/Oneshotbarandbilliardsph' },
-                          { platform: 'TikTok', handle: '@oneshotbarandbilliards', icon: '🎵', url: 'https://tiktok.com/@oneshotbilliards' },
+                          { platform: 'TikTok', handle: '@One shot bar and billiards', icon: '🎵', url: 'https://www.tiktok.com/@one.shot.bar.and' },
                         ].map(({ platform, handle, icon, url }) => (
                           <a key={platform} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 bg-neutral-800/60 hover:bg-neutral-800 rounded-lg p-3 transition-colors group">
                             <span className="text-lg group-hover:scale-110 transition-transform">{icon}</span>
