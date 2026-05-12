@@ -468,6 +468,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } : undefined,
   });
 
+  // 🚨 FIXED: Bulletproof data fetching to prevent cascading failures
+  const safeFetch = async (promise: Promise<any>) => {
+    try {
+      const { data, error } = await promise;
+      if (error) {
+        console.warn('Supabase fetch error:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.warn('Network error during fetch:', err);
+      return null;
+    }
+  };
+
   const refreshData = async (silent = false) => {
     if (!silent) setLoading(true);
 
@@ -481,53 +496,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Fetch each table independently so one missing table doesn't crash the whole app!
       const [
-        { data: tablesData }, { data: queueData }, { data: resData }, { data: feedbackData },
-        { data: actData }, { data: promoData }, { data: artistsData }, { data: tattooResData },
-        { data: staffData }, { data: ratesData }, { data: termsData }, { data: annData },
-        { data: closedData }, { data: settingsData }
+        tablesData, queueData, resData, feedbackData, actData, promoData,
+        artistsData, tattooResData, staffData, ratesData, termsData, annData, 
+        closedData, settingsData
       ] = await Promise.all([
-        supabase.from('tables').select('*').order('name'),
-        supabase.from('queue_items').select('*').order('arrival_time'),
-        supabase.from('reservations').select('*').order('date', { ascending: false }).limit(500), 
-        supabase.from('feedback').select('*').order('created_at', { ascending: false }),
-        supabase.from('activities').select('*').order('timestamp', { ascending: false }).limit(200),
-        supabase.from('promo_codes').select('*').order('created_at', { ascending: false }),
-        supabase.from('tattoo_artists').select('*').order('name'),
-        supabase.from('tattoo_reservations').select('*').order('date', { ascending: false }),
-        supabase.from('staff_users').select('*').order('full_name'),
-        supabase.from('rates_config').select('*').eq('id', '1').maybeSingle(),
-        supabase.from('reservation_terms').select('*').eq('id', '1').maybeSingle(),
-        supabase.from('announcements').select('*').order('created_at', { ascending: false }),
-        supabase.from('closed_dates').select('*').order('date'),
-        // 🚨 FIXED: Bypassing site_settings fetch to prevent 400 Bad Request error since the table isn't in your DB yet
-        Promise.resolve({ data: null })
+        safeFetch(supabase.from('tables').select('*').order('name')),
+        safeFetch(supabase.from('queue_items').select('*').order('arrival_time')),
+        safeFetch(supabase.from('reservations').select('*').order('date', { ascending: false }).limit(500)), 
+        safeFetch(supabase.from('feedback').select('*').order('created_at', { ascending: false })),
+        safeFetch(supabase.from('activities').select('*').order('timestamp', { ascending: false }).limit(200)),
+        safeFetch(supabase.from('promo_codes').select('*').order('created_at', { ascending: false })),
+        safeFetch(supabase.from('tattoo_artists').select('*').order('name')),
+        safeFetch(supabase.from('tattoo_reservations').select('*').order('date', { ascending: false })),
+        safeFetch(supabase.from('staff_users').select('*').order('full_name')),
+        safeFetch(supabase.from('rates_config').select('*').eq('id', '1').maybeSingle()),
+        safeFetch(supabase.from('reservation_terms').select('*').eq('id', '1').maybeSingle()),
+        safeFetch(supabase.from('announcements').select('*').order('created_at', { ascending: false })),
+        safeFetch(supabase.from('closed_dates').select('*').order('date')),
+        safeFetch(supabase.from('site_settings').select('*').eq('id', '1').maybeSingle())
       ]);
 
-      if (tablesData) setTables(tablesData.map(row => ({ id: row.id, name: row.name, status: row.status, isActive: row.is_active, session: row.session_customer_name ? { customerName: row.session_customer_name, startTime: new Date(row.session_start_time), durationMinutes: row.session_duration_minutes || 60, isPaid: row.session_is_paid || false, hourlyRate: row.session_hourly_rate || 250, amountPaid: row.session_amount_paid || 0, orders: row.session_orders || [] } : undefined })));
-      if (queueData) setQueue(queueData.map(row => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, partySize: row.party_size, arrivalTime: new Date(row.arrival_time), notes: row.notes || undefined, status: row.status })));
-      if (resData) setReservations(resData.map(row => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, email: row.email || undefined, date: new Date(row.date), timeSlot: row.time_slot, durationHours: row.duration_hours, partySize: row.party_size, tableId: row.table_id || undefined, status: row.status, totalAmount: row.total_amount, downPaymentAmount: row.down_payment_amount, downPaymentPaid: row.down_payment_paid, balancePaid: row.balance_paid, createdAt: new Date(row.created_at), cancellationReason: row.cancellation_reason || undefined, promoCode: row.promo_code || undefined, discountAmount: row.discount_amount || undefined, paymentReference: row.payment_reference || undefined, receiptUrl: row.receipt_url || undefined, rescheduleRequested: row.reschedule_requested || undefined, proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined, proposedTimeSlot: row.proposed_time_slot || undefined, customerRescheduleConfirmed: row.customer_reschedule_confirmed })));
-      if (feedbackData) setFeedback(feedbackData.map(row => ({ id: row.id, customerName: row.customer_name, contactInfo: row.contact_info || undefined, rating: row.rating, feedbackType: row.feedback_type || undefined, comment: row.comment, date: new Date(row.created_at), reservationId: row.reservation_id || undefined, tags: row.tags || [] })));
-      if (actData) { const mapped = actData.map(row => ({ id: row.id, type: row.type as ActivityType, description: row.description, timestamp: new Date(row.created_at || row.timestamp || Date.now()), metadata: row.metadata || undefined })); mapped.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()); setActivities(mapped); }
-      if (promoData) setPromoCodes(promoData.map(row => ({ id: row.id, code: row.code, discountPercent: row.discount_percent, description: row.description, isActive: row.is_active, maxUsage: row.max_usage, usageCount: row.usage_count, expiresAt: row.expires_at ? new Date(row.expires_at) : undefined, createdAt: new Date(row.created_at) })));
-      if (artistsData) setTattooArtists(artistsData.map(row => ({ id: row.id, name: row.name, specialty: row.specialty, contactNumber: row.contact_number, email: row.email || undefined, bio: row.bio || undefined, isAvailableToday: row.is_available_today, isActive: row.is_active, unavailableDates: row.unavailable_dates || [] })));
-      if (tattooResData) setTattooReservations(tattooResData.map(row => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, email: row.email || undefined, date: new Date(row.date), timeSlot: row.time_slot, artistId: row.artist_id, artistName: row.artist_name, artistContact: row.artist_contact, placement: row.placement, estimatedSize: row.estimated_size, designDescription: row.design_description, colorStyle: row.color_style, agreementSigned: row.agreement_signed, consentSigned: row.consent_signed, status: row.status, depositAmount: row.deposit_amount, depositPaid: row.deposit_paid, inspirationImages: row.inspiration_images || undefined, createdAt: new Date(row.created_at), rescheduleRequested: row.reschedule_requested || undefined, proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined, proposedTimeSlot: row.proposed_time_slot || undefined, customerRescheduleConfirmed: row.customer_reschedule_confirmed, paymentReference: row.payment_reference || undefined, receiptUrl: row.receipt_url || undefined })));
-      if (staffData) setStaffUsers(staffData.map(row => ({ id: row.id, username: row.username, password: row.password, fullName: row.full_name, email: row.email, role: row.role as any, isAdmin: row.is_admin, artistId: row.artist_id || undefined, phone: row.phone, isActive: row.is_active, createdAt: new Date(row.created_at) })));
-      if (ratesData) setRates({ hourlyRate: ratesData.hourly_rate, happyHourRate: ratesData.happy_hour_rate, happyHourStart: ratesData.happy_hour_start, happyHourEnd: ratesData.happy_hour_end, overtimeRate: ratesData.overtime_rate, tattooDeposit: ratesData.tattoo_deposit, downPaymentPercent: ratesData.down_payment_percent });
-      if (termsData) setReservationTermsState({ minHours: termsData.min_hours, maxHours: termsData.max_hours, minPartySize: termsData.min_party_size, maxPartySize: termsData.max_party_size, cancellationHours: termsData.cancellation_hours, cancellationPolicy: termsData.cancellation_policy, termsAndConditions: termsData.terms_and_conditions });
-      if (annData) setAnnouncements(annData.map(row => ({ id: row.id, title: row.title, content: row.content, type: row.type as AnnouncementType, isActive: row.is_active, createdAt: new Date(row.created_at), expiresAt: row.expires_at ? new Date(row.expires_at) : undefined })));
-      if (closedData) setClosedDates(closedData.map(row => ({ id: row.id, date: row.date, reason: row.reason, isFullDay: row.is_full_day, openTime: row.open_time || undefined, closeTime: row.close_time || undefined })));
-      if (settingsData) setSiteSettings({ logoUrl: settingsData.logo_url || '', heroTitle: settingsData.hero_title || '', heroSubtitle: settingsData.hero_subtitle || '', heroDescription: settingsData.hero_description || '', aboutStory: settingsData.about_story || '', contactAddress: settingsData.contact_address || '', contactPhone: settingsData.contact_phone || '', contactEmail: settingsData.contact_email || '', contactHours: settingsData.contact_hours || '', heroImage1: settingsData.hero_image_1 || '', heroImage2: settingsData.hero_image_2 || '', heroImage3: settingsData.hero_image_3 || '', heroSliderImages: settingsData.hero_slider_images || [], promoImage: settingsData.promo_image || '', aboutImage: settingsData.about_image || '' });
-    if (tablesData) {
+      if (tablesData) {
         setTables(tablesData.map(mapTableFromDB));
         localStorage.setItem('oneshot_cache_tables', JSON.stringify(tablesData.map(mapTableFromDB)));
       }
+      
       if (queueData) {
-        const mappedQueue = queueData.map(row => ({ /* mapping */ }));
+        const mappedQueue = queueData.map((row: any) => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, partySize: row.party_size, arrivalTime: new Date(row.arrival_time), notes: row.notes || undefined, status: row.status }));
         setQueue(mappedQueue);
         localStorage.setItem('oneshot_cache_queue', JSON.stringify(mappedQueue));
       }
-    } catch (err) { console.error('Refresh Error:', err); } finally { setLoading(false); }
+
+      if (resData) setReservations(resData.map((row: any) => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, email: row.email || undefined, date: new Date(row.date), timeSlot: row.time_slot, durationHours: row.duration_hours, partySize: row.party_size, tableId: row.table_id || undefined, status: row.status, totalAmount: row.total_amount, downPaymentAmount: row.down_payment_amount, downPaymentPaid: row.down_payment_paid, balancePaid: row.balance_paid, createdAt: new Date(row.created_at), cancellationReason: row.cancellation_reason || undefined, promoCode: row.promo_code || undefined, discountAmount: row.discount_amount || undefined, paymentReference: row.payment_reference || undefined, receiptUrl: row.receipt_url || undefined, rescheduleRequested: row.reschedule_requested || undefined, proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined, proposedTimeSlot: row.proposed_time_slot || undefined, customerRescheduleConfirmed: row.customer_reschedule_confirmed })));
+      if (feedbackData) setFeedback(feedbackData.map((row: any) => ({ id: row.id, customerName: row.customer_name, contactInfo: row.contact_info || undefined, rating: row.rating, feedbackType: row.feedback_type || undefined, comment: row.comment, date: new Date(row.created_at), reservationId: row.reservation_id || undefined, tags: row.tags || [] })));
+      if (actData) { const mapped = actData.map((row: any) => ({ id: row.id, type: row.type as ActivityType, description: row.description, timestamp: new Date(row.created_at || row.timestamp || Date.now()), metadata: row.metadata || undefined })); mapped.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()); setActivities(mapped); }
+      if (promoData) setPromoCodes(promoData.map((row: any) => ({ id: row.id, code: row.code, discountPercent: row.discount_percent, description: row.description, isActive: row.is_active, maxUsage: row.max_usage, usageCount: row.usage_count, expiresAt: row.expires_at ? new Date(row.expires_at) : undefined, createdAt: new Date(row.created_at) })));
+      if (artistsData) setTattooArtists(artistsData.map((row: any) => ({ id: row.id, name: row.name, specialty: row.specialty, contactNumber: row.contact_number, email: row.email || undefined, bio: row.bio || undefined, isAvailableToday: row.is_available_today, isActive: row.is_active, unavailableDates: row.unavailable_dates || [] })));
+      if (tattooResData) setTattooReservations(tattooResData.map((row: any) => ({ id: row.id, customerName: row.customer_name, contactNumber: row.contact_number, email: row.email || undefined, date: new Date(row.date), timeSlot: row.time_slot, artistId: row.artist_id, artistName: row.artist_name, artistContact: row.artist_contact, placement: row.placement, estimatedSize: row.estimated_size, designDescription: row.design_description, colorStyle: row.color_style, agreementSigned: row.agreement_signed, consentSigned: row.consent_signed, status: row.status, depositAmount: row.deposit_amount, depositPaid: row.deposit_paid, inspirationImages: row.inspiration_images || undefined, createdAt: new Date(row.created_at), rescheduleRequested: row.reschedule_requested || undefined, proposedDate: row.proposed_date ? new Date(row.proposed_date) : undefined, proposedTimeSlot: row.proposed_time_slot || undefined, customerRescheduleConfirmed: row.customer_reschedule_confirmed, paymentReference: row.payment_reference || undefined, receiptUrl: row.receipt_url || undefined })));
+      if (staffData) setStaffUsers(staffData.map((row: any) => ({ id: row.id, username: row.username, password: row.password, fullName: row.full_name, email: row.email, role: row.role as any, isAdmin: row.is_admin, artistId: row.artist_id || undefined, phone: row.phone, isActive: row.is_active, createdAt: new Date(row.created_at) })));
+      if (ratesData) setRates({ hourlyRate: ratesData.hourly_rate, happyHourRate: ratesData.happy_hour_rate, happyHourStart: ratesData.happy_hour_start, happyHourEnd: ratesData.happy_hour_end, overtimeRate: ratesData.overtime_rate, tattooDeposit: ratesData.tattoo_deposit, downPaymentPercent: ratesData.down_payment_percent });
+      if (termsData) setReservationTermsState({ minHours: termsData.min_hours, maxHours: termsData.max_hours, minPartySize: termsData.min_party_size, maxPartySize: termsData.max_party_size, cancellationHours: termsData.cancellation_hours, cancellationPolicy: termsData.cancellation_policy, termsAndConditions: termsData.terms_and_conditions });
+      if (annData) setAnnouncements(annData.map((row: any) => ({ id: row.id, title: row.title, content: row.content, type: row.type as AnnouncementType, isActive: row.is_active, createdAt: new Date(row.created_at), expiresAt: row.expires_at ? new Date(row.expires_at) : undefined })));
+      if (closedData) setClosedDates(closedData.map((row: any) => ({ id: row.id, date: row.date, reason: row.reason, isFullDay: row.is_full_day, openTime: row.open_time || undefined, closeTime: row.close_time || undefined })));
+      if (settingsData) setSiteSettings({ logoUrl: settingsData.logo_url || '', heroTitle: settingsData.hero_title || '', heroSubtitle: settingsData.hero_subtitle || '', heroDescription: settingsData.hero_description || '', aboutStory: settingsData.about_story || '', contactAddress: settingsData.contact_address || '', contactPhone: settingsData.contact_phone || '', contactEmail: settingsData.contact_email || '', contactHours: settingsData.contact_hours || '', heroImage1: settingsData.hero_image_1 || '', heroImage2: settingsData.hero_image_2 || '', heroImage3: settingsData.hero_image_3 || '', heroSliderImages: settingsData.hero_slider_images || [], promoImage: settingsData.promo_image || '', aboutImage: settingsData.about_image || '' });
+
+    } catch (err) { 
+      console.error('Refresh Error:', err); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   // ─── 4. AUTH & SESSION ───
@@ -558,7 +577,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('oneshot_staff_session');
     setStaffProfile(DEFAULT_STAFF_PROFILE);
     setStaffLoggedIn(false); setAdminLoggedIn(false); setArtistLoggedIn(false); setCurrentArtistId(null);
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch(e) {} // 🚨 Muffled to avoid the 403 error on logouts
     window.location.href = '/'; 
   };
 
@@ -567,9 +588,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/verify_staff_login`;
       const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ p_username: username, p_password: password }) });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        console.error("RPC Error! Have you run the verify_staff_login SQL script?");
+        return false;
+      }
       const users = await res.json();
-      // RPC that returns TABLE yields an array; extract first result
       if (users && Array.isArray(users) && users.length > 0) {
         const user = users[0];
         setStaffLoggedIn(true); 
@@ -594,7 +617,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (user) {
       await updateStaffUser(user.id, {
         ...(profile.username && { username: profile.username }),
-        ...(profile.fullName && { fullName: profile.fullName }), // Use camelCase here now
+        ...(profile.fullName && { fullName: profile.fullName }), 
         ...(profile.email && { email: profile.email }),
         ...(profile.phone && { phone: profile.phone }),
       });
@@ -719,6 +742,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancellation_reason: item.cancellationReason || null,
       promo_code: item.promoCode || null,
       discount_amount: item.discountAmount || null,
+      payment_reference: item.paymentReference || null,
+      receipt_url: item.receiptUrl || null
     }]);
     if (error) throw new Error(error.message);
     setReservations(prev => [...prev, { ...item, id, createdAt: new Date() }]);
@@ -742,8 +767,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addFeedback = async (item: Omit<Feedback, 'id' | 'date'>) => {
     const id = `f${Date.now()}`;
-    
-    // 🚨 FIXED: Map camelCase to snake_case for Supabase
     const dbFeedback = {
       id, 
       customer_name: item.customerName, 
@@ -790,7 +813,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addTattooReservation = async (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => {
     const id = item.id || `tr${Date.now()}`;
     
-    // 🚨 FIXED: Explicitly map ALL fields to snake_case for the database
     const dbPayload = { 
       id, 
       customer_name: item.customerName, 
@@ -819,7 +841,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       receipt_url: item.receiptUrl || null,
     };
 
-    // 🚨 FIXED: Now catches the error and throws it so the UI can show the warning
     const { error } = await supabase.from('tattoo_reservations').insert([dbPayload]);
     if (error) {
       console.error("Tattoo DB Error:", error);
@@ -911,7 +932,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addStaffUser = async (user: Omit<StaffUser, 'id' | 'createdAt'>) => {
     const id = `u${Date.now()}`;
-    // 🚨 Map to snake_case and include missing NOT NULL fields
     const dbUser = {
       id,
       username: user.username,
@@ -933,7 +953,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateStaffUser = async (id: string, updates: Partial<StaffUser>) => {
-    // 🚨 Map to snake_case for updates
     const dbUpdates: any = {};
     if (updates.username !== undefined) dbUpdates.username = updates.username;
     if (updates.password !== undefined) dbUpdates.password = updates.password;

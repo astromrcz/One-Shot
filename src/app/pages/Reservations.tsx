@@ -455,33 +455,35 @@ function TableReservationsView() {
               </div>
 
               {/* Rescheduling UI */}
-              <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-amber-500 uppercase tracking-wider font-semibold flex items-center gap-1.5"><CalendarDays size={12}/> Reschedule</p>
-                  {selected.rescheduleRequested && (
-                     <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Pending Customer Approval</span>
+              {(selected.status === 'pending' || selected.status === 'confirmed') && (
+                <div className="bg-amber-950/20 border border-amber-900/30 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-amber-500 uppercase tracking-wider font-semibold flex items-center gap-1.5"><CalendarDays size={12}/> Reschedule</p>
+                    {selected.rescheduleRequested && (
+                       <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Pending Customer Approval</span>
+                    )}
+                  </div>
+                  {showRescheduleForm ? (
+                    <div className="space-y-3 mt-3">
+                      <div className="flex gap-2">
+                        <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50" />
+                        <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => setShowRescheduleForm(false)} className="flex-1 py-2 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg font-semibold transition-colors">Cancel</button>
+                        <button onClick={handleProposeReschedule} disabled={!rescheduleDate || !rescheduleTime} className="flex-1 py-2 text-xs bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg font-bold transition-colors">Propose New Time</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-neutral-500 mb-3">Propose a new date/time to the customer. They must accept it via their portal.</p>
+                      <button onClick={() => setShowRescheduleForm(true)} className="w-full py-2 text-xs border border-amber-600/50 text-amber-500 hover:bg-amber-600/10 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+                        <CalendarDays size={14}/> Propose Reschedule
+                      </button>
+                    </div>
                   )}
                 </div>
-                {showRescheduleForm ? (
-                  <div className="space-y-3 mt-3">
-                    <div className="flex gap-2">
-                      <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50" />
-                      <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50" />
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => setShowRescheduleForm(false)} className="flex-1 py-2 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg font-semibold transition-colors">Cancel</button>
-                      <button onClick={handleProposeReschedule} disabled={!rescheduleDate || !rescheduleTime} className="flex-1 py-2 text-xs bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg font-bold transition-colors">Propose New Time</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-xs text-neutral-500 mb-3">Propose a new date/time to the customer. They must accept it via their portal.</p>
-                    <button onClick={() => setShowRescheduleForm(true)} className="w-full py-2 text-xs border border-amber-600/50 text-amber-500 hover:bg-amber-600/10 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
-                      <CalendarDays size={14}/> Propose Reschedule
-                    </button>
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* Status Actions */}
               <div className="flex gap-2 flex-wrap">
@@ -826,31 +828,33 @@ function TattooReservationsView() {
               </select>
             </div>
 
-            <div className="border-t border-neutral-800 pt-4 mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] text-amber-500 uppercase tracking-widest font-semibold flex items-center gap-1.5"><CalendarDays size={10}/> Reschedule</p>
-                {r.rescheduleRequested && (
-                    <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pending Customer</span>
+            {(r.status === 'pending' || r.status === 'confirmed') && (
+              <div className="border-t border-neutral-800 pt-4 mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-amber-500 uppercase tracking-widest font-semibold flex items-center gap-1.5"><CalendarDays size={10}/> Reschedule</p>
+                  {r.rescheduleRequested && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pending Customer</span>
+                  )}
+                </div>
+                
+                {showRescheduleForm === r.id ? (
+                  <div className="space-y-2 mt-2 bg-amber-950/20 border border-amber-900/30 rounded-lg p-3">
+                    <div className="flex gap-2">
+                      <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-500/50" />
+                      <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-500/50" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowRescheduleForm(null)} className="flex-1 py-1.5 text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded font-semibold transition-colors">Cancel</button>
+                      <button onClick={() => handleProposeReschedule(r.id)} disabled={!rescheduleDate || !rescheduleTime} className="flex-1 py-1.5 text-[10px] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded font-bold transition-colors">Propose</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => { setShowRescheduleForm(r.id); setRescheduleDate(''); setRescheduleTime(''); }} className="w-full py-1.5 text-[10px] border border-amber-600/50 text-amber-500 hover:bg-amber-600/10 rounded font-semibold transition-colors flex items-center justify-center gap-1.5">
+                    Propose New Time
+                  </button>
                 )}
               </div>
-              
-              {showRescheduleForm === r.id ? (
-                <div className="space-y-2 mt-2 bg-amber-950/20 border border-amber-900/30 rounded-lg p-3">
-                  <div className="flex gap-2">
-                    <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-500/50" />
-                    <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-500/50" />
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowRescheduleForm(null)} className="flex-1 py-1.5 text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded font-semibold transition-colors">Cancel</button>
-                    <button onClick={() => handleProposeReschedule(r.id)} disabled={!rescheduleDate || !rescheduleTime} className="flex-1 py-1.5 text-[10px] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded font-bold transition-colors">Propose</button>
-                  </div>
-                </div>
-              ) : (
-                <button onClick={() => { setShowRescheduleForm(r.id); setRescheduleDate(''); setRescheduleTime(''); }} className="w-full py-1.5 text-[10px] border border-amber-600/50 text-amber-500 hover:bg-amber-600/10 rounded font-semibold transition-colors flex items-center justify-center gap-1.5">
-                  Propose New Time
-                </button>
-              )}
-            </div>
+            )}
 
             {/* Status Quick Actions */}
             <div className="flex gap-2 mt-3 pt-3 border-t border-neutral-800">
