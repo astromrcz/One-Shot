@@ -72,6 +72,8 @@ function TableReservationsView() {
   const [completeTarget, setCompleteTarget] = useState<string | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // 🚨 GCASH PHOTO VERIFICATION STATES 
   const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
   const [imgStatus, setImgStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -118,7 +120,6 @@ function TableReservationsView() {
     setShowRescheduleForm(false);
   };
 
-  // 🚨 STRICT CHECK-IN INTERCEPTOR: Blocks future/past reservations from checking in
   const handleCheckInClick = (r: any) => {
     if (!isToday(new Date(r.date))) {
       toast.error("Invalid Check-In Date", { 
@@ -136,7 +137,6 @@ function TableReservationsView() {
 
     let targetTableId = null;
 
-    // 1. Try to honor their assigned table if it's currently free
     if (r.tableId) {
       const assignedTable = tables.find(t => t.id === r.tableId);
       if (assignedTable && assignedTable.status === 'available') {
@@ -153,7 +153,6 @@ function TableReservationsView() {
       }
     }
 
-    // 2. If no table assigned, or the assigned one is occupied, sweep ALL available tables
     if (!targetTableId) {
       for (const table of tables) {
         if (!table.isActive || table.status !== 'available') continue;
@@ -583,43 +582,52 @@ function TableReservationsView() {
         </div>
       )}
 
-      {/* Receipt Viewer Modal */}
+      {/* 📸 PERFECTED ZOOMABLE GCASH RECEIPT VIEWER */}
       <AnimatePresence>
         {receiptViewer && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setReceiptViewer(null); setIsZoomed(false); }}>
-            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} onClick={e => e.stopPropagation()}
-              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6 w-full max-w-xl shadow-2xl flex flex-col max-h-[95vh]">
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setReceiptViewer(null); setIsZoomed(false); }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()}
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 sm:p-6 w-full max-w-2xl shadow-2xl flex flex-col max-h-[95vh]">
+              
               <div className="flex items-center justify-between mb-4 flex-none">
                 <div>
-                  <h3 className="text-lg font-bold text-white">GCash Receipt</h3>
-                  <p className="text-xs text-neutral-500">{receiptViewer.name}</p>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Receipt className="text-blue-500" size={20}/> GCash Receipt
+                  </h3>
+                  <p className="text-sm text-neutral-400">{receiptViewer.name}</p>
                 </div>
-                <button onClick={() => { setReceiptViewer(null); setIsZoomed(false); }} className="text-neutral-600 hover:text-neutral-300"><X size={18} /></button>
+                <button onClick={() => { setReceiptViewer(null); setIsZoomed(false); }} className="p-2 text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-xl transition-colors">
+                  <X size={20} />
+                </button>
               </div>
-              <div className={`relative w-full h-[70vh] min-h-[400px] max-h-[800px] bg-black rounded-lg border border-neutral-800 mb-4 flex ${isZoomed ? 'overflow-auto items-start p-0' : 'overflow-hidden items-center justify-center p-2'}`}>
+              
+              <div className={`relative w-full rounded-xl border border-neutral-800 mb-4 bg-black/50 ${isZoomed ? 'overflow-auto h-[65vh]' : 'overflow-hidden h-[50vh] flex items-center justify-center'}`}>
                 {imgStatus === 'loading' && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-500 gap-3">
-                    <Loader2 size={32} className="animate-spin text-blue-500" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-blue-500 gap-3">
+                    <Loader2 size={32} className="animate-spin" />
                     <p className="text-xs font-semibold uppercase tracking-wider">Loading receipt...</p>
                   </div>
                 )}
                 {imgStatus === 'error' && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-rose-500 gap-3">
                     <ImageOff size={48} className="opacity-50" />
-                    <div className="text-center">
-                      <p className="text-sm font-bold">Image Failed to Load</p>
-                      <p className="text-xs text-rose-500/70 mt-1">The receipt file might be corrupted or unavailable.</p>
-                    </div>
+                    <p className="text-sm font-bold">Image Failed to Load</p>
                   </div>
                 )}
-                <img src={receiptViewer.url} alt="Receipt" onLoad={() => setImgStatus('loaded')} onError={() => setImgStatus('error')}
+                <img 
+                  src={receiptViewer.url} 
+                  alt="Receipt" 
+                  onLoad={() => setImgStatus('loaded')} 
+                  onError={() => setImgStatus('error')}
                   onClick={() => { if(imgStatus === 'loaded') setIsZoomed(!isZoomed) }}
-                  className={`transition-all duration-300 rounded mx-auto ${imgStatus !== 'loaded' ? 'hidden' : ''} ${isZoomed ? 'w-[200%] h-auto max-w-none cursor-zoom-out' : 'w-full h-full object-contain cursor-zoom-in'}`} />
+                  className={`transition-all duration-300 rounded-lg ${imgStatus !== 'loaded' ? 'hidden' : ''} ${isZoomed ? 'w-[200%] sm:w-[150%] h-auto max-w-none cursor-zoom-out origin-top-left' : 'w-full h-full object-contain cursor-zoom-in'}`} 
+                />
               </div>
+              
               <div className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-4 text-center flex-none">
-                <p className="text-[10px] text-blue-500 uppercase tracking-widest font-semibold mb-1">Reference Number</p>
-                <p className="text-lg font-mono font-bold text-blue-400">{receiptViewer.ref || 'N/A'}</p>
+                <p className="text-[11px] text-blue-500 uppercase tracking-widest font-bold mb-1">Reference Number</p>
+                <p className="text-xl font-mono font-black text-blue-400 tracking-wider">{receiptViewer.ref || 'N/A'}</p>
               </div>
             </motion.div>
           </motion.div>
@@ -646,6 +654,11 @@ function TattooReservationsView() {
   const [completeTarget, setCompleteTarget] = useState<string | null>(null);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+
+  // 🚨 GCASH PHOTO VERIFICATION STATES (Added for Tattoo)
+  const [receiptViewer, setReceiptViewer] = useState<{ url: string, ref: string, name: string } | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [imgStatus, setImgStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
 
   const filtered = tattooReservations.filter(r => {
     const matchSearch = !search || 
@@ -753,11 +766,21 @@ function TattooReservationsView() {
                   <p className="text-xs text-neutral-400 italic line-clamp-2">"{r.description}"</p>
                 </div>
               )}
-              {r.referenceImage && (
-                <a href={r.referenceImage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 transition-colors">
-                  <FileText size={10} /> View Reference Image
-                </a>
-              )}
+              
+              <div className="flex items-center gap-3">
+                {r.referenceImage && (
+                  <a href={r.referenceImage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 transition-colors">
+                    <FileText size={10} /> View Reference Image
+                  </a>
+                )}
+                {/* 🚨 TATTOO GCASH RECEIPT BUTTON */}
+                {(r as any).receiptUrl && (
+                  <button onClick={(e) => { e.stopPropagation(); setImgStatus('loading'); setReceiptViewer({ url: (r as any).receiptUrl, ref: (r as any).paymentReference || '', name: r.customerName }); }}
+                    className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors">
+                    <Receipt size={10} /> View GCash Receipt
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="border-t border-neutral-800 pt-4 mt-4 flex items-center justify-between gap-3">
@@ -924,6 +947,18 @@ function TattooReservationsView() {
                   <p className="text-xs text-neutral-300 leading-relaxed">"{selected.description}"</p>
                 </div>
               )}
+              
+              {/* 🚨 GCASH RECEIPT FOR TATTOO DETAIL PANEL */}
+              {(selected as any).receiptUrl && (
+                <div className="flex justify-between items-center text-sm border-t border-neutral-800 pt-3">
+                  <span className="text-neutral-400">Payment Verification</span>
+                  <button onClick={() => { setImgStatus('loading'); setReceiptViewer({ url: (selected as any).receiptUrl, ref: (selected as any).paymentReference || '', name: selected.customerName }); }}
+                    className="px-2 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-xs font-bold rounded border border-blue-700/30 transition-colors flex items-center gap-1">
+                    <Receipt size={12} /> View GCash Receipt
+                  </button>
+                </div>
+              )}
+              
             </div>
           </div>
         </div>
@@ -992,6 +1027,58 @@ function TattooReservationsView() {
           </div>
         </div>
       )}
+
+      {/* 📸 PERFECTED ZOOMABLE GCASH RECEIPT VIEWER FOR TATTOOS */}
+      <AnimatePresence>
+        {receiptViewer && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setReceiptViewer(null); setIsZoomed(false); }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()}
+              className="bg-neutral-950 border border-neutral-800 rounded-2xl p-4 sm:p-6 w-full max-w-2xl shadow-2xl flex flex-col max-h-[95vh]">
+              
+              <div className="flex items-center justify-between mb-4 flex-none">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Receipt className="text-blue-500" size={20}/> GCash Receipt
+                  </h3>
+                  <p className="text-sm text-neutral-400">{receiptViewer.name}</p>
+                </div>
+                <button onClick={() => { setReceiptViewer(null); setIsZoomed(false); }} className="p-2 text-neutral-500 hover:text-white hover:bg-neutral-800 rounded-xl transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className={`relative w-full rounded-xl border border-neutral-800 mb-4 bg-black/50 ${isZoomed ? 'overflow-auto h-[65vh]' : 'overflow-hidden h-[50vh] flex items-center justify-center'}`}>
+                {imgStatus === 'loading' && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-blue-500 gap-3">
+                    <Loader2 size={32} className="animate-spin" />
+                    <p className="text-xs font-semibold uppercase tracking-wider">Loading receipt...</p>
+                  </div>
+                )}
+                {imgStatus === 'error' && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-rose-500 gap-3">
+                    <ImageOff size={48} className="opacity-50" />
+                    <p className="text-sm font-bold">Image Failed to Load</p>
+                  </div>
+                )}
+                <img 
+                  src={receiptViewer.url} 
+                  alt="Receipt" 
+                  onLoad={() => setImgStatus('loaded')} 
+                  onError={() => setImgStatus('error')}
+                  onClick={() => { if(imgStatus === 'loaded') setIsZoomed(!isZoomed) }}
+                  className={`transition-all duration-300 rounded-lg ${imgStatus !== 'loaded' ? 'hidden' : ''} ${isZoomed ? 'w-[200%] sm:w-[150%] h-auto max-w-none cursor-zoom-out origin-top-left' : 'w-full h-full object-contain cursor-zoom-in'}`} 
+                />
+              </div>
+              
+              <div className="bg-blue-950/20 border border-blue-900/30 rounded-xl p-4 text-center flex-none">
+                <p className="text-[11px] text-blue-500 uppercase tracking-widest font-bold mb-1">Reference Number</p>
+                <p className="text-xl font-mono font-black text-blue-400 tracking-wider">{receiptViewer.ref || 'N/A'}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

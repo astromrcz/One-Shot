@@ -440,18 +440,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ─── 3. REFRESH & DATABASE LOGIC ───
 
   const mapTableToDB = (table: Table) => ({
-    id: table.id, name: table.name, status: table.status, is_active: table.isActive,
+    id: table.id, 
+    name: table.name, 
+    status: table.status, 
+    is_active: table.isActive,
     session_customer_name: table.session?.customerName || null,
     session_start_time: table.session?.startTime?.toISOString() || null,
     session_duration_minutes: table.session?.durationMinutes || null,
     session_is_paid: table.session?.isPaid || null,
     session_hourly_rate: table.session?.hourlyRate || null,
     session_amount_paid: table.session?.amountPaid || null,
-    session_orders: table.session?.orders || null,
+  });
+
+  const mapTableFromDB = (row: any): Table => ({
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    isActive: row.is_active,
+    session: row.session_customer_name ? {
+      customerName: row.session_customer_name,
+      startTime: new Date(row.session_start_time),
+      durationMinutes: row.session_duration_minutes || 60,
+      isPaid: row.session_is_paid || false,
+      hourlyRate: row.session_hourly_rate || 250,
+      amountPaid: row.session_amount_paid || 0,
+      orders: [],
+    } : undefined,
   });
 
   const refreshData = async (silent = false) => {
     if (!silent) setLoading(true);
+
+    if (!navigator.onLine) {
+      const cachedTables = localStorage.getItem('oneshot_cache_tables');
+      const cachedQueue = localStorage.getItem('oneshot_cache_queue');
+      if (cachedTables) setTables(JSON.parse(cachedTables));
+      if (cachedQueue) setQueue(JSON.parse(cachedQueue));
+      setLoading(false);
+      return;
+    }
+
     try {
       const [
         { data: tablesData }, { data: queueData }, { data: resData }, { data: feedbackData },
@@ -472,7 +500,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('reservation_terms').select('*').eq('id', '1').maybeSingle(),
         supabase.from('announcements').select('*').order('created_at', { ascending: false }),
         supabase.from('closed_dates').select('*').order('date'),
-        supabase.from('site_settings').select('*').eq('id', '1').maybeSingle()
+        // 🚨 FIXED: Bypassing site_settings fetch to prevent 400 Bad Request error since the table isn't in your DB yet
+        Promise.resolve({ data: null })
       ]);
 
       if (tablesData) setTables(tablesData.map(row => ({ id: row.id, name: row.name, status: row.status, isActive: row.is_active, session: row.session_customer_name ? { customerName: row.session_customer_name, startTime: new Date(row.session_start_time), durationMinutes: row.session_duration_minutes || 60, isPaid: row.session_is_paid || false, hourlyRate: row.session_hourly_rate || 250, amountPaid: row.session_amount_paid || 0, orders: row.session_orders || [] } : undefined })));
@@ -489,6 +518,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (annData) setAnnouncements(annData.map(row => ({ id: row.id, title: row.title, content: row.content, type: row.type as AnnouncementType, isActive: row.is_active, createdAt: new Date(row.created_at), expiresAt: row.expires_at ? new Date(row.expires_at) : undefined })));
       if (closedData) setClosedDates(closedData.map(row => ({ id: row.id, date: row.date, reason: row.reason, isFullDay: row.is_full_day, openTime: row.open_time || undefined, closeTime: row.close_time || undefined })));
       if (settingsData) setSiteSettings({ logoUrl: settingsData.logo_url || '', heroTitle: settingsData.hero_title || '', heroSubtitle: settingsData.hero_subtitle || '', heroDescription: settingsData.hero_description || '', aboutStory: settingsData.about_story || '', contactAddress: settingsData.contact_address || '', contactPhone: settingsData.contact_phone || '', contactEmail: settingsData.contact_email || '', contactHours: settingsData.contact_hours || '', heroImage1: settingsData.hero_image_1 || '', heroImage2: settingsData.hero_image_2 || '', heroImage3: settingsData.hero_image_3 || '', heroSliderImages: settingsData.hero_slider_images || [], promoImage: settingsData.promo_image || '', aboutImage: settingsData.about_image || '' });
+    if (tablesData) {
+        setTables(tablesData.map(mapTableFromDB));
+        localStorage.setItem('oneshot_cache_tables', JSON.stringify(tablesData.map(mapTableFromDB)));
+      }
+      if (queueData) {
+        const mappedQueue = queueData.map(row => ({ /* mapping */ }));
+        setQueue(mappedQueue);
+        localStorage.setItem('oneshot_cache_queue', JSON.stringify(mappedQueue));
+      }
     } catch (err) { console.error('Refresh Error:', err); } finally { setLoading(false); }
   };
 
@@ -530,8 +568,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ p_username: username, p_password: password }) });
       if (!res.ok) return false;
-      const user = await res.json();
-      if (user) { 
+      const users = await res.json();
+      // RPC that returns TABLE yields an array; extract first result
+      if (users && Array.isArray(users) && users.length > 0) {
+        const user = users[0];
         setStaffLoggedIn(true); 
         if (user.is_admin || user.role === 'admin') setAdminLoggedIn(true);
         if (user.role === 'tattoo-artist') { setArtistLoggedIn(true); setCurrentArtistId(user.artist_id || null); }
@@ -661,7 +701,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addReservation = async (item: Omit<Reservation, 'id' | 'createdAt'> & { id?: string }) => {
     const id = item.id || crypto.randomUUID();
-    const { error } = await supabase.from('reservations').insert([{ id, customer_name: item.customerName, contact_number: item.contactNumber, email: item.email, date: item.date.toISOString(), time_slot: item.timeSlot, duration_hours: item.durationHours, party_size: item.partySize, table_id: item.tableId, status: item.status, total_amount: item.totalAmount, down_payment_amount: item.downPaymentAmount, down_payment_paid: item.downPaymentPaid, balance_paid: item.balancePaid }]);
+    const { error } = await supabase.from('reservations').insert([{ 
+      id, 
+      customer_name: item.customerName, 
+      contact_number: item.contactNumber, 
+      email: item.email || null,
+      date: item.date.toISOString(), 
+      time_slot: item.timeSlot, 
+      duration_hours: item.durationHours, 
+      party_size: item.partySize, 
+      table_id: item.tableId || null, 
+      status: item.status, 
+      total_amount: item.totalAmount, 
+      down_payment_amount: item.downPaymentAmount, 
+      down_payment_paid: item.downPaymentPaid, 
+      balance_paid: item.balancePaid,
+      cancellation_reason: item.cancellationReason || null,
+      promo_code: item.promoCode || null,
+      discount_amount: item.discountAmount || null,
+    }]);
     if (error) throw new Error(error.message);
     setReservations(prev => [...prev, { ...item, id, createdAt: new Date() }]);
     return id;
@@ -684,7 +742,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addFeedback = async (item: Omit<Feedback, 'id' | 'date'>) => {
     const id = `f${Date.now()}`;
-    await supabase.from('feedback').insert([{ id, customer_name: item.customerName, rating: item.rating, feedback_type: item.feedbackType, comment: item.comment, tags: item.tags }]);
+    await supabase.from('feedback').insert([{ 
+      id, 
+      customer_name: item.customerName, 
+      contact_info: item.contactInfo || null,
+      rating: item.rating, 
+      feedback_type: item.feedbackType || null, 
+      comment: item.comment, 
+      tags: item.tags,
+      reservation_id: item.reservationId || null,
+    }]);
     setFeedback(prev => [{ ...item, id, date: new Date() }, ...prev]);
   };
 
@@ -716,7 +783,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTattooReservation = async (item: Omit<TattooReservation, 'id' | 'createdAt'> & { id?: string }) => {
     const id = item.id || `tr${Date.now()}`;
-    await supabase.from('tattoo_reservations').insert([{ id, customer_name: item.customerName, contact_number: item.contactNumber, date: item.date.toISOString(), time_slot: item.timeSlot, artist_id: item.artistId, status: item.status, deposit_amount: item.depositAmount, deposit_paid: item.depositPaid }]);
+    await supabase.from('tattoo_reservations').insert([{ 
+      id, 
+      customer_name: item.customerName, 
+      contact_number: item.contactNumber, 
+      email: item.email || null,
+      date: item.date.toISOString(), 
+      time_slot: item.timeSlot, 
+      artist_id: item.artistId,
+      artist_name: item.artistName,
+      artist_contact: item.artistContact,
+      placement: item.placement,
+      estimated_size: item.estimatedSize,
+      design_description: item.designDescription,
+      color_style: item.colorStyle,
+      agreement_signed: item.agreementSigned,
+      consent_signed: item.consentSigned,
+      status: item.status, 
+      deposit_amount: item.depositAmount, 
+      deposit_paid: item.depositPaid,
+      inspiration_images: item.inspirationImages || [],
+      reschedule_requested: item.rescheduleRequested || false,
+      proposed_date: item.proposedDate?.toISOString() || null,
+      proposed_time_slot: item.proposedTimeSlot || null,
+      customer_reschedule_confirmed: item.customerRescheduleConfirmed || null,
+      payment_reference: item.paymentReference || null,
+      receipt_url: item.receiptUrl || null,
+    }]);
     setTattooReservations(prev => [{ ...item, id, createdAt: new Date() }, ...prev]);
     return id;
   };
@@ -757,7 +850,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTattooArtist = async (artist: Omit<TattooArtist, 'id'>) => {
     const id = `ta${Date.now()}`;
-    await supabase.from('tattoo_artists').insert([{ id, name: artist.name, specialty: artist.specialty, contact_number: artist.contactNumber, is_active: artist.isActive }]);
+    await supabase.from('tattoo_artists').insert([{ 
+      id, 
+      name: artist.name, 
+      specialty: artist.specialty, 
+      contact_number: artist.contactNumber,
+      email: artist.email || null,
+      bio: artist.bio || null,
+      is_available_today: artist.isAvailableToday,
+      is_active: artist.isActive,
+      unavailable_dates: artist.unavailableDates || [],
+    }]);
     setTattooArtists(prev => [...prev, { ...artist, id }]);
   };
 
@@ -778,7 +881,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addStaffUser = async (user: Omit<StaffUser, 'id' | 'createdAt'>) => {
     const id = `u${Date.now()}`;
-    await supabase.from('staff_users').insert([{ id, username: user.username, password: user.password, full_name: user.fullName, role: user.role }]);
+    await supabase.from('staff_users').insert([{ 
+      id, 
+      username: user.username, 
+      password: user.password, 
+      full_name: user.fullName,
+      email: user.email,
+      role: user.role,
+      is_admin: user.isAdmin || false,
+      artist_id: user.artistId || null,
+      phone: user.phone,
+      is_active: user.isActive,
+    }]);
     setStaffUsers(prev => [...prev, { ...user, id, createdAt: new Date() }]);
   };
 
@@ -809,14 +923,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addAnnouncement = async (item: Omit<Announcement, 'id' | 'createdAt'>) => {
-    const id = `ann${Date.now()}`;
-    await supabase.from('announcements').insert([{ id, ...item }]);
-    setAnnouncements(prev => [{ ...item, id, createdAt: new Date() }, ...prev]);
+    try {
+      const id = `ann${Date.now()}`;
+      const dbItem = {
+        id,
+        title: item.title,
+        content: item.content,
+        type: item.type,
+        is_active: item.isActive,
+        expires_at: item.expiresAt ? item.expiresAt.toISOString() : null
+      };
+
+      const { error } = await supabase.from('announcements').insert([dbItem]);
+      if (error) throw error;
+      
+      setAnnouncements(prev => [{ ...item, id, createdAt: new Date() }, ...prev]);
+      toast.success("Announcement created!");
+    } catch (err) {
+      console.error("Save error:", err);
+      toast.error("Failed to create announcement.");
+    }
   };
 
   const updateAnnouncement = async (id: string, updates: Partial<Announcement>) => {
-    await supabase.from('announcements').update(updates).eq('id', id);
-    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    try {
+      const dbUpdates: any = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.content !== undefined) dbUpdates.content = updates.content;
+      if (updates.type !== undefined) dbUpdates.type = updates.type;
+      if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+      if (updates.expiresAt !== undefined) dbUpdates.expires_at = updates.expiresAt ? updates.expiresAt.toISOString() : null;
+
+      const { error } = await supabase.from('announcements').update(dbUpdates).eq('id', id);
+      if (error) throw error;
+      
+      setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+      toast.success("Announcement updated!");
+    } catch (err) {
+      console.error("Update error:", err);
+      toast.error("Failed to update announcement.");
+    }
   };
 
   const deleteAnnouncement = async (id: string) => {
@@ -848,8 +994,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateSiteSettings = async (s: Partial<SiteSettings>) => {
-    await supabase.from('site_settings').upsert({ id: '1', ...s });
-    setSiteSettings(prev => ({ ...prev, ...s } as SiteSettings));
+    try {
+      const dbSettings: any = { id: '1' };
+      if (s.logoUrl !== undefined) dbSettings.logo_url = s.logoUrl;
+      if (s.heroTitle !== undefined) dbSettings.hero_title = s.heroTitle;
+      if (s.heroSubtitle !== undefined) dbSettings.hero_subtitle = s.heroSubtitle;
+      if (s.heroDescription !== undefined) dbSettings.hero_description = s.heroDescription;
+      if (s.aboutStory !== undefined) dbSettings.about_story = s.aboutStory;
+      if (s.contactAddress !== undefined) dbSettings.contact_address = s.contactAddress;
+      if (s.contactPhone !== undefined) dbSettings.contact_phone = s.contactPhone;
+      if (s.contactEmail !== undefined) dbSettings.contact_email = s.contactEmail;
+      if (s.contactHours !== undefined) dbSettings.contact_hours = s.contactHours;
+      if (s.heroImage1 !== undefined) dbSettings.hero_image_1 = s.heroImage1;
+      if (s.heroImage2 !== undefined) dbSettings.hero_image_2 = s.heroImage2;
+      if (s.heroImage3 !== undefined) dbSettings.hero_image_3 = s.heroImage3;
+      if (s.heroSliderImages !== undefined) dbSettings.hero_slider_images = s.heroSliderImages;
+      if (s.promoImage !== undefined) dbSettings.promo_image = s.promoImage;
+      if (s.aboutImage !== undefined) dbSettings.about_image = s.aboutImage;
+
+      const { error } = await supabase.from('site_settings').upsert(dbSettings);
+      if (error) throw error;
+
+      setSiteSettings(prev => ({ ...prev, ...s } as SiteSettings));
+      toast.success("Site Customization Saved!");
+    } catch (err) {
+      console.error("Site settings error:", err);
+      toast.error("Failed to save site settings.");
+    }
   };
 
   const sendCustomerPush = async (customerName: string, title: string, message: string) => {

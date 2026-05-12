@@ -3,7 +3,8 @@ import { router } from './routes';
 import OneSignal from 'react-onesignal';
 import { useEffect } from 'react';
 
-let isOneSignalInit = false; 
+
+let isOneSignalInit = false;
 
 export default function App() {
   
