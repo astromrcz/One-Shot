@@ -845,9 +845,25 @@ export function HomePage() {
                 <h2 className="text-center text-2xl font-bold text-white mb-10">Why Choose One Shot?</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {[
-                    { icon: Award, title: 'Premium Tables', desc: '10 tournament-grade billiard tables maintained to the highest standard.', color: 'emerald' },
-                    { icon: Clock, title: 'Extended Hours', desc: 'Mon–Sat 12:00 PM – 3:00 AM · Sun 5:00 PM – 3:00 AM. Game night starts here!', color: 'amber' },
-                    { icon: Shield, title: 'Safe & Secure', desc: 'Clean, safe, and well-lit environment for players of all skill levels.', color: 'sky' },
+                    // 🚨 FIXED: Dynamically count active tables instead of hardcoding "10" (Falls back to 9 while loading)
+                    { 
+                      icon: Award, 
+                      title: 'Premium Tables', 
+                      desc: `${tables.length > 0 ? tables.filter(t => t.isActive).length : 9} tournament-grade billiard tables maintained to the highest standard.`, 
+                      color: 'emerald' 
+                    },
+                    { 
+                      icon: Clock, 
+                      title: 'Extended Hours', 
+                      desc: 'Mon–Sat 12:00 PM – 3:00 AM · Sun 5:00 PM – 3:00 AM. Game night starts here!', 
+                      color: 'amber' 
+                    },
+                    { 
+                      icon: Shield, 
+                      title: 'Safe & Secure', 
+                      desc: 'Clean, safe, and well-lit environment for players of all skill levels.', 
+                      color: 'sky' 
+                    },
                   ].map(({ icon: Icon, title, desc, color }) => (
                     <div key={title} className={`bg-neutral-900 border border-neutral-800 rounded-2xl p-6 hover:border-${color}-600/40 transition-all group`}>
                       <div className={`w-10 h-10 rounded-xl bg-${color}-600/15 border border-${color}-600/25 flex items-center justify-center mb-4 group-hover:bg-${color}-600/25 transition-colors`}>
