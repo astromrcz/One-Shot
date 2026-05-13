@@ -5,8 +5,18 @@ import { format, isToday, isThisWeek, isThisMonth, isThisYear } from 'date-fns';
 
 type DateFilter = 'today' | 'week' | 'month' | 'year' | 'all';
 
+// 🚨 FIXED: Added the missing formatTimeSlot helper function
+const formatTimeSlot = (time24: string) => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 || 12;
+  return `${formattedHour}:${m} ${ampm}`;
+};
+
 export function HistoryPage() {
-  // 🚨 FIXED: Pulling both Billiards and Tattoo reservations to combine them into one master log
+  // Pulling both Billiards and Tattoo reservations to combine them into one master log
   const { reservations, tattooReservations } = useAppContext(); 
   const [filter, setFilter] = useState<DateFilter>('today');
   const [search, setSearch] = useState('');
@@ -18,7 +28,7 @@ export function HistoryPage() {
     return () => clearTimeout(timer);
   }, [filter]);
 
-  // 🚨 FIXED: Combine both databases into one unified array
+  // Combine both databases into one unified array
   const combinedHistory = [
     ...(reservations || []).map(r => ({ 
       ...r, 
@@ -55,7 +65,8 @@ export function HistoryPage() {
   const exportCSV = () => {
     const headers = "ID,Type,Customer,Contact,Date,Time,Status,Total Amount\n";
     const rows = historyData.map(r => {
-      return `${r.id},${r.historyType},"${r.customerName}",${r.contactNumber},${format(new Date(r.date || r.createdAt), 'yyyy-MM-dd')},${r.timeSlot || format(new Date(r.date || r.createdAt), 'hh:mm a')},${r.status},${r.totalAmount || 0}`;
+      const timeString = r.timeSlot ? formatTimeSlot(r.timeSlot) : format(new Date(r.date || r.createdAt), 'hh:mm a');
+      return `${r.id},${r.historyType},"${r.customerName}",${r.contactNumber},${format(new Date(r.date || r.createdAt), 'yyyy-MM-dd')},${timeString},${r.status},${r.totalAmount || 0}`;
     }).join("\n");
     
     const blob = new Blob([headers + rows], { type: 'text/csv' });

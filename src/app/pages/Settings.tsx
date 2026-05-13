@@ -12,7 +12,8 @@ import { supabase } from '../../utils/supabase/client';
 type Section = 'profile' | 'security';
 
 export function SettingsPage() {
-  const { staffProfile, updateStaffProfile, staffLogout } = useAppContext();
+  // 🚨 FIXED: Added staffUsers and updateStaffUser to interact with the database directly
+  const { staffProfile, updateStaffProfile, staffLogout, staffUsers, updateStaffUser } = useAppContext();
   const navigate = useNavigate();
 
   const [activeSection, setActiveSection] = useState<Section>('profile');
@@ -58,7 +59,7 @@ export function SettingsPage() {
   const handleSaveSecurity = async () => {
     setSecError('');
     
-    // 🚨 1. Check if current password is provided
+    // 1. Check if current password is provided
     if (!secForm.currentPassword) {
       setSecError('Current password is required to verify changes.');
       return;
@@ -74,26 +75,33 @@ export function SettingsPage() {
     }
     
     try {
-      // 🚨 2. Verify current password via database RPC
-      const { data: verifiedUser, error: verifyError } = await supabase.rpc('verify_staff_login', {
-        p_username: staffProfile.username, // check against their active username
-        p_password: secForm.currentPassword
-      });
+      // 🚨 2. Verify current password directly against the staff_users table
+      const { data: verifiedUser, error: verifyError } = await supabase
+        .from('staff_users')
+        .select('id')
+        .eq('username', staffProfile.username)
+        .eq('password', secForm.currentPassword)
+        .maybeSingle();
 
-      if (verifyError || !verifiedUser || verifiedUser.length === 0) {
+      if (verifyError || !verifiedUser) {
         setSecError('Incorrect current password.');
         return;
       }
 
-      // 🚨 3. If verified, save new username and/or new password
-      updateStaffProfile({
+      // 🚨 3. Use updateStaffUser to actually change the password in the database!
+      await updateStaffUser(verifiedUser.id, {
         username: secForm.username || staffProfile.username,
-        ...(secForm.newPassword ? { password: secForm.newPassword } : {}) // Safely inject new password to staff_users table
+        ...(secForm.newPassword ? { password: secForm.newPassword } : {})
       });
 
-      // Update Supabase Auth in the background (if applicable for your setup)
+      // 4. Update the local session profile (UI state)
+      updateStaffProfile({
+        username: secForm.username || staffProfile.username,
+      });
+
+      // (Optional) Update Supabase standard Auth in the background
       if (secForm.newPassword) {
-        await supabase.auth.updateUser({ password: secForm.newPassword });
+        await supabase.auth.updateUser({ password: secForm.newPassword }).catch(() => {});
       }
       
       setSecEdit(false);

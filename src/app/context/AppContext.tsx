@@ -585,24 +585,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
     try {
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/verify_staff_login`;
-      const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}` }, body: JSON.stringify({ p_username: username, p_password: password }) });
-      if (!res.ok) {
-        console.error("RPC Error! Have you run the verify_staff_login SQL script?");
+      // Query the staff_users table directly instead of using a custom SQL RPC function
+      const { data: users, error } = await supabase
+        .from('staff_users')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error("Login error:", error.message);
         return false;
       }
-      const users = await res.json();
-      if (users && Array.isArray(users) && users.length > 0) {
+
+      if (users && users.length > 0) {
         const user = users[0];
         setStaffLoggedIn(true); 
-        if (user.is_admin || user.role === 'admin') setAdminLoggedIn(true);
-        if (user.role === 'tattoo-artist') { setArtistLoggedIn(true); setCurrentArtistId(user.artist_id || null); }
-        saveStaffSession({ username: user.username, fullName: user.full_name, email: user.email, role: user.role, phone: user.phone, joinedDate: user.created_at, artistId: user.artist_id, isAdmin: user.is_admin || user.role === 'admin' });
+        
+        // Grant admin privileges if they are marked as an admin or are a manager
+        const isUserAdmin = user.is_admin === true || user.role === 'admin';
+        if (isUserAdmin) setAdminLoggedIn(true);
+        if (user.role === 'tattoo-artist') { 
+          setArtistLoggedIn(true); 
+          setCurrentArtistId(user.artist_id || null); 
+        }
+        
+        saveStaffSession({ 
+          username: user.username, 
+          fullName: user.full_name, 
+          email: user.email, 
+          role: user.role, 
+          phone: user.phone, 
+          joinedDate: user.created_at, 
+          artistId: user.artist_id, 
+          isAdmin: isUserAdmin 
+        });
+        
         return true; 
       }
       return false;
-    } catch { return false; }
+    } catch (err) { 
+      console.error("System error during login", err);
+      return false; 
+    }
   };
 
   const staffLogout = async () => clearStaffSession();

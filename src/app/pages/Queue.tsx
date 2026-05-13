@@ -5,24 +5,51 @@ import { formatDistanceToNow, format, isToday, isTomorrow, differenceInMinutes }
 import { useNavigate } from 'react-router';
 
 export function Queue() {
-  const { queue, addToQueue, removeFromQueue, callQueueItem, tables, reservations, cancelReservation } = useAppContext() as any;
+  const { queue, addToQueue, removeFromQueue, callQueueItem, tables, reservations, cancelReservation, reservationTerms } = useAppContext() as any;
   const navigate = useNavigate();
 
   const [now, setNow] = useState(new Date());
+
+  // 🚨 FIXED: We track exactly when the bell was clicked so the 15m timer doesn't start at arrival
+  const [calledTimes, setCalledTimes] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('oneshot_called_times');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  // Cleanup local storage so it doesn't store old queue IDs forever
+  useEffect(() => {
+    const activeIds = new Set(queue.map((q: any) => q.id));
+    let changed = false;
+    const cleaned: Record<string, number> = {};
+    
+    for (const id in calledTimes) {
+      if (activeIds.has(id)) {
+        cleaned[id] = calledTimes[id];
+      } else {
+        changed = true;
+      }
+    }
+    
+    if (changed) {
+      setCalledTimes(cleaned);
+      localStorage.setItem('oneshot_called_times', JSON.stringify(cleaned));
+    }
+  }, [queue, calledTimes]);
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [partySize, setPartySize] = useState(2);
   const [notes, setNotes] = useState('');
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
 
   const waiting = queue.filter((q: any) => q.status === 'waiting');
   const called = queue.filter((q: any) => q.status === 'called');
@@ -33,7 +60,8 @@ export function Queue() {
     .sort((a: any, b: any) => a.date.getTime() - b.date.getTime())
     .slice(0, 10);
 
-  const getGraceTime = (calledAt: Date | string) => {
+  // 🚨 FIXED: Now calculates based on the exact click time, not arrival time
+  const getGraceTime = (calledAt: Date | string | number) => {
     const start = new Date(calledAt).getTime();
     const elapsed = now.getTime() - start;
     const remaining = Math.max(0, (15 * 60 * 1000) - elapsed);
@@ -52,6 +80,18 @@ export function Queue() {
     addToQueue({ customerName: name, contactNumber: contact, partySize, notes });
     setName(''); setContact(''); setPartySize(2); setNotes('');
     setShowAddForm(false);
+  };
+
+  const handleCallCustomer = (item: any) => {
+    // Record the exact time the bell was clicked
+    const nowMs = Date.now();
+    const newTimes = { ...calledTimes, [item.id]: nowMs };
+    setCalledTimes(newTimes);
+    localStorage.setItem('oneshot_called_times', JSON.stringify(newTimes));
+    
+    const utterance = new SpeechSynthesisUtterance(`Calling customer ${item.customerName}. Please proceed to the counter.`);
+    window.speechSynthesis.speak(utterance);
+    callQueueItem(item.id); 
   };
 
   return (
@@ -92,9 +132,9 @@ export function Queue() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Party Size</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5, 6].map(n => (
-                  <button key={n} type="button" onClick={() => setPartySize(n)} className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${partySize === n ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:border-neutral-700'}`}>{n}</button>
+              <div className="flex gap-2 flex-wrap">
+                {Array.from({ length: (reservationTerms?.maxPartySize || 6) - (reservationTerms?.minPartySize || 1) + 1 }, (_, i) => (reservationTerms?.minPartySize || 1) + i).map(n => (
+                  <button key={n} type="button" onClick={() => setPartySize(n)} className={`flex-1 py-2 min-w-[36px] rounded-lg border text-xs font-bold transition-all ${partySize === n ? 'bg-emerald-600/15 border-emerald-600 text-emerald-400' : 'bg-neutral-900 border-neutral-800 text-neutral-500 hover:border-neutral-700'}`}>{n}</button>
                 ))}
               </div>
             </div>
@@ -137,11 +177,7 @@ export function Queue() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => { 
-                      const utterance = new SpeechSynthesisUtterance(`Calling customer ${item.customerName}. Please proceed to the counter.`);
-                      window.speechSynthesis.speak(utterance);
-                      callQueueItem(item.id); 
-                    }} className="p-2 bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 rounded-lg border border-amber-700/30"><Bell size={14} /></button>
+                    <button onClick={() => handleCallCustomer(item)} className="p-2 bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 rounded-lg border border-amber-700/30"><Bell size={14} /></button>
                     <button onClick={() => removeFromQueue(item.id)} className="p-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-400 rounded-lg border border-rose-700/30"><X size={14} /></button>
                   </div>
                 </div>
@@ -156,7 +192,8 @@ export function Queue() {
                 <span className="w-2 h-2 rounded-full bg-blue-400" /> Called ({called.length})
               </h2>
               {called.map((item: any) => {
-                const grace = getGraceTime(item.arrivalTime); 
+                // 🚨 FIXED: Retrieves the exact saved click time, falling back to arrival time if missing
+                const grace = getGraceTime(calledTimes[item.id] || item.arrivalTime); 
                 return (
                   <div key={item.id} className={`bg-neutral-950 border rounded-xl p-3 flex items-center gap-3 transition-all ${grace.isUrgent ? 'border-rose-500/50 bg-rose-500/5' : 'border-blue-900/30'}`}>
                     <div className="flex-1">
@@ -170,7 +207,6 @@ export function Queue() {
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {/* 🚨 RE-CALL BELL BUTTON */}
                       <button 
                         onClick={() => {
                           const utterance = new SpeechSynthesisUtterance(`Re-calling customer ${item.customerName}. Your table is ready, please proceed to the counter.`);
