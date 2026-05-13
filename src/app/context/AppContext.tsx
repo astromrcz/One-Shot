@@ -585,7 +585,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const staffLogin = async (username: string, password: string): Promise<boolean> => {
     try {
-      // Query the staff_users table directly instead of using a custom SQL RPC function
+      // 🚨 STRICT FIX: Query the staff_users table directly. 
+      // Do NOT use supabase.auth.signInWithPassword here, as it will crash with a 400 error if not using an email.
       const { data: users, error } = await supabase
         .from('staff_users')
         .select('*')
@@ -594,22 +595,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .eq('is_active', true);
 
       if (error) {
-        console.error("Login error:", error.message);
+        console.error("Login database error:", error.message);
         return false;
       }
 
+      // If a matching user is found
       if (users && users.length > 0) {
         const user = users[0];
         setStaffLoggedIn(true); 
         
-        // Grant admin privileges if they are marked as an admin or are a manager
+        // Grant admin privileges if they are officially an admin
         const isUserAdmin = user.is_admin === true || user.role === 'admin';
         if (isUserAdmin) setAdminLoggedIn(true);
+        
+        // Grant artist privileges if they are a tattoo artist
         if (user.role === 'tattoo-artist') { 
           setArtistLoggedIn(true); 
           setCurrentArtistId(user.artist_id || null); 
         }
         
+        // Save session locally
         saveStaffSession({ 
           username: user.username, 
           fullName: user.full_name, 
@@ -623,7 +628,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         
         return true; 
       }
-      return false;
+      return false; // No user matched
     } catch (err) { 
       console.error("System error during login", err);
       return false; 
